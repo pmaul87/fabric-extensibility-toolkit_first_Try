@@ -20,6 +20,65 @@
     "HelloWorldItemEditor_Title": "Hello World Item Editor",
     "HelloWorldItemEditor_Definition_Message_Label": "Item Definition",
     "HelloWorldItemEditorEmpty_Message": "Let's say hello to {{itemName}}!",
-    "HelloWorldItemEditorEmpty_Button": "Save item"
+    "HelloWorldItemEditorEmpty_Button": "Save item",
+
+    "InsightWorkbenchItemEditor_Loading": "Loading Insight Workbench...",
+
+    "InsightWorkbenchItemEmptyView_Title": "Welcome to Insight Workbench",
+    "InsightWorkbenchItemEmptyView_Description": "Insight Workbench gives you a unified view of your Fabric environment. Explore metadata, analyze semantic models, trace data lineage, and manage requirements — all linked together.",
+    "InsightWorkbenchItemEmptyView_StartButton": "Open Insight Workbench",
+    "InsightWorkbenchItemEmptyView_StartButton_Description": "Explore Fabric metadata, semantic models, lineage, and requirements — all in one place.",
+
+    "InsightWorkbench_Hub_Title": "Insight Workbench",
+    "InsightWorkbench_Hub_Description": "Select a capability below to get started. Your work is automatically saved across sessions.",
+
+    "InsightWorkbench_MetadataExplorer_Label": "Metadata Explorer",
+    "InsightWorkbench_MetadataExplorer_Description": "Browse, search, and filter all Fabric artifacts across workspaces.",
+    "InsightWorkbench_MetadataExplorer_PhaseNote": "Metadata Explorer is implemented in Phase 2.",
+    "InsightWorkbench_MetadataExplorer_Intro": "Browse artifacts across workspaces. Search, filter, group, and review access level summary.",
+    "InsightWorkbench_MetadataExplorer_Search_Label": "Search",
+    "InsightWorkbench_MetadataExplorer_Search_Placeholder": "Search by name, type, or workspace",
+    "InsightWorkbench_MetadataExplorer_FilterType_Label": "Type filter",
+    "InsightWorkbench_MetadataExplorer_FilterWorkspace_Label": "Workspace filter",
+    "InsightWorkbench_MetadataExplorer_Filter_AllTypes": "All types",
+    "InsightWorkbench_MetadataExplorer_Filter_AllWorkspaces": "All workspaces",
+    "InsightWorkbench_MetadataExplorer_GroupBy_Label": "Group by",
+    "InsightWorkbench_MetadataExplorer_Group_None": "None",
+    "InsightWorkbench_MetadataExplorer_Group_Type": "Type",
+    "InsightWorkbench_MetadataExplorer_Group_Workspace": "Workspace",
+    "InsightWorkbench_MetadataExplorer_SortBy_Label": "Sort by",
+    "InsightWorkbench_MetadataExplorer_Sort_Category": "Category",
+    "InsightWorkbench_MetadataExplorer_Sort_Workspace": "Workspace",
+    "InsightWorkbench_MetadataExplorer_Group_All": "All artifacts",
+    "InsightWorkbench_MetadataExplorer_ClearFilters": "Clear filters",
+    "InsightWorkbench_MetadataExplorer_Loading": "Loading artifacts...",
+    "InsightWorkbench_MetadataExplorer_LoadError": "Failed to load artifacts. Verify workspace access and try again.",
+    "InsightWorkbench_MetadataExplorer_LoadEmpty": "No visible artifacts were returned for the current user in the accessible workspaces.",
+    "InsightWorkbench_MetadataExplorer_Retry": "Retry",
+    "InsightWorkbench_MetadataExplorer_Artifacts": "artifacts",
+    "InsightWorkbench_MetadataExplorer_Workspaces": "workspaces",
+    "InsightWorkbench_MetadataExplorer_Column_Name": "Name",
+    "InsightWorkbench_MetadataExplorer_Column_Type": "Type",
+    "InsightWorkbench_MetadataExplorer_Column_Workspace": "Workspace",
+    "InsightWorkbench_MetadataExplorer_Column_Access": "Access",
+    "InsightWorkbench_MetadataExplorer_ApiCalls_Title": "API calls made",
+    "InsightWorkbench_MetadataExplorer_ApiCalls_Empty": "No calls recorded yet.",
+    "InsightWorkbench_MetadataExplorer_AccessUnsupported": "Unsupported",
+    "InsightWorkbench_MetadataExplorer_AccessUnknown": "Unknown",
+    "InsightWorkbench_MetadataExplorer_Empty": "No artifacts match the current filters.",
+
+    "InsightWorkbench_SemanticAnalyzer_Label": "Semantic Model Analyzer",
+    "InsightWorkbench_SemanticAnalyzer_Description": "Explore tables, measures, columns, and dependencies inside semantic models.",
+    "InsightWorkbench_SemanticAnalyzer_PhaseNote": "Semantic Model Analyzer is implemented in Phase 3.",
+
+    "InsightWorkbench_LineageGraph_Label": "Lineage & Dependency Graph",
+    "InsightWorkbench_LineageGraph_Description": "Trace cross-workspace data lineage and report usage — upstream and downstream.",
+    "InsightWorkbench_LineageGraph_PhaseNote": "Lineage Graph is implemented in Phase 4.",
+
+    "InsightWorkbench_RequirementsBoard_Label": "Requirements Board",
+    "InsightWorkbench_RequirementsBoard_Description": "Manage requirements as Kanban cards linked to Fabric metadata and insights.",
+    "InsightWorkbench_RequirementsBoard_PhaseNote": "Requirements Board is implemented in Phase 5.",
+
+    "InsightWorkbench_BackToHub": "← Back to Hub"
 }
   

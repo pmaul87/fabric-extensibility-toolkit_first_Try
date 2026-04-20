@@ -9,5 +9,8 @@
     "Workload_Hub_GetStarted_1_Description": "Card1 description",
     "HelloWorldItem_DisplayName": "Hello World",
     "HelloWorldItem_DisplayName_Plural": "Hello Worlds",
-    "HelloWorldItem_Description": "A Hello World Item to start your Dev Experience"
+    "HelloWorldItem_Description": "A Hello World Item to start your Dev Experience",
+    "InsightWorkbenchItem_DisplayName": "Insight Workbench",
+    "InsightWorkbenchItem_DisplayName_Plural": "Insight Workbenches",
+    "InsightWorkbenchItem_Description": "Explore Fabric metadata, semantic models, data lineage, and manage requirements — all in one place."
 }

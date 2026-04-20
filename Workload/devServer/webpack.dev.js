@@ -3,6 +3,7 @@ const baseConfig = require('../webpack.config.js');
 const express = require("express");
 const Webpack = require("webpack");
 const { registerDevServerApis, registerDevServerComponents } = require('.'); // Import our dev server functions
+const { createDevFabricPlatformClient } = require('./services/FabricPlatformApiClientFactory');
 
 
 // making sure the dev configuration is set correctly!
@@ -93,8 +94,9 @@ module.exports = merge(baseConfig, {
                 }
             });
             
-            // Register the manifest API from our extracted implementation
-            registerDevServerApis(devServer.app);
+            // Register manifest + metadata API and initialize metadata service
+            const fabricPlatformApiClient = createDevFabricPlatformClient();
+            registerDevServerApis(devServer.app, fabricPlatformApiClient);
             
             // Register dev server components and log playground availability
             registerDevServerComponents();

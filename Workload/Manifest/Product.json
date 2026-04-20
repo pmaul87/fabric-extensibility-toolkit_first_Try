@@ -22,7 +22,8 @@
         "customActions": [
         ]},
         "recommendedItemTypes": [
-          "HelloWorld"
+          "HelloWorld",
+          "InsightWorkbench"
         ]
     },
     "createExperience": {
@@ -44,6 +45,27 @@
             "workspace-plus-new-teams"
           ],
           "itemType": "HelloWorld",
+          "createItemDialogConfig": {
+            "onCreationFailure": { "action": "item.onCreationFailure" },
+            "onCreationSuccess": { "action": "item.onCreationSuccess" }
+          }
+        },
+        {
+          "title": "InsightWorkbenchItem_DisplayName",
+          "description": "InsightWorkbenchItem_Description",
+          "icon": {
+            "name": "assets/images/InsightWorkbenchItem_Icon.png"
+          },
+          "icon_small": {
+            "name": "assets/images/InsightWorkbenchItem_Icon.png"
+          },
+          "availableIn": [
+            "home",
+            "create-hub",
+            "workspace-plus-new",
+            "workspace-plus-new-teams"
+          ],
+          "itemType": "InsightWorkbench",
           "createItemDialogConfig": {
             "onCreationFailure": { "action": "item.onCreationFailure" },
             "onCreationSuccess": { "action": "item.onCreationSuccess" }

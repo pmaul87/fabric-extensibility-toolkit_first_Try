@@ -1,0 +1,217 @@
+/**
+ * InsightWorkbenchItem.scss
+ * Scoped styles for the Insight Workbench item.
+ * RULES:
+ *  - Prefix all class names with .insight-workbench-
+ *  - Do NOT modify any files in components/
+ *  - All panels use height: auto for natural growth (ItemEditor handles scrolling)
+ *  - Use design tokens: var(--colorBrand*, --spacing*, --fontSize*)
+ */
+
+// ─── Hub / navigation landing ────────────────────────────────────────────────
+
+.insight-workbench-hub {
+  padding: var(--spacingVerticalL) var(--spacingHorizontalL);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalM);
+  height: auto;
+}
+
+.insight-workbench-hub-title {
+  font-size: var(--fontSizeHero700);
+  font-weight: var(--fontWeightSemibold);
+  color: var(--colorNeutralForeground1);
+  margin: 0 0 var(--spacingVerticalS) 0;
+}
+
+.insight-workbench-hub-description {
+  font-size: var(--fontSizeBase300);
+  color: var(--colorNeutralForeground2);
+  margin: 0 0 var(--spacingVerticalL) 0;
+}
+
+.insight-workbench-hub-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--spacingVerticalM);
+}
+
+.insight-workbench-hub-card {
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: var(--borderRadiusMedium);
+  padding: var(--spacingVerticalL) var(--spacingHorizontalL);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background: var(--colorNeutralBackground1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalS);
+
+  &:hover {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.insight-workbench-hub-card-icon {
+  font-size: 28px;
+  color: var(--colorBrandForeground1);
+}
+
+.insight-workbench-hub-card-title {
+  font-size: var(--fontSizeBase400);
+  font-weight: var(--fontWeightSemibold);
+  color: var(--colorNeutralForeground1);
+}
+
+.insight-workbench-hub-card-description {
+  font-size: var(--fontSizeBase200);
+  color: var(--colorNeutralForeground3);
+}
+
+// ─── Shared view shell ───────────────────────────────────────────────────────
+
+.insight-workbench-view {
+  padding: var(--spacingVerticalM) var(--spacingHorizontalM);
+  height: auto;
+}
+
+.insight-workbench-section-title {
+  font-size: var(--fontSizeBase500);
+  font-weight: var(--fontWeightSemibold);
+  color: var(--colorNeutralForeground1);
+  margin: 0 0 var(--spacingVerticalS) 0;
+}
+
+.insight-workbench-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacingVerticalXXXL) var(--spacingHorizontalL);
+  color: var(--colorNeutralForeground3);
+  gap: var(--spacingVerticalM);
+  text-align: center;
+
+  .insight-workbench-placeholder-icon {
+    font-size: 48px;
+    opacity: 0.5;
+  }
+
+  .insight-workbench-placeholder-text {
+    font-size: var(--fontSizeBase300);
+  }
+}
+
+.insight-workbench-metadata-explorer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalM);
+}
+
+.insight-workbench-metadata-explorer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacingHorizontalM);
+}
+
+.insight-workbench-metadata-explorer-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacingVerticalS) var(--spacingHorizontalM);
+  align-items: end;
+}
+
+.insight-workbench-metadata-explorer-loading,
+.insight-workbench-metadata-explorer-error,
+.insight-workbench-metadata-explorer-empty {
+  padding: var(--spacingVerticalXL) var(--spacingHorizontalM);
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: var(--borderRadiusMedium);
+  background: var(--colorNeutralBackground1);
+}
+
+.insight-workbench-metadata-explorer-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalS);
+  align-items: flex-start;
+}
+
+.insight-workbench-metadata-explorer-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacingHorizontalS);
+}
+
+.insight-workbench-metadata-explorer-column-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalXS);
+  min-width: 220px;
+  padding: var(--spacingVerticalXS) var(--spacingHorizontalXS);
+}
+
+.insight-workbench-metadata-explorer-api-calls {
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: var(--borderRadiusMedium);
+  background: var(--colorNeutralBackground1);
+  padding: var(--spacingVerticalS) var(--spacingHorizontalM);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalXS);
+}
+
+.insight-workbench-metadata-explorer-api-calls-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalXXS);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.insight-workbench-metadata-explorer-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalL);
+}
+
+.insight-workbench-metadata-explorer-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalS);
+}
+
+.insight-workbench-metadata-explorer-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.insight-workbench-metadata-explorer-table {
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: var(--borderRadiusMedium);
+  overflow: hidden;
+}
+
+.insight-workbench-metadata-explorer-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 2fr) minmax(140px, 1fr) minmax(180px, 1.2fr) minmax(120px, 0.8fr);
+  gap: var(--spacingHorizontalM);
+  align-items: center;
+  padding: var(--spacingVerticalS) var(--spacingHorizontalM);
+  border-bottom: 1px solid var(--colorNeutralStroke2);
+  font-size: var(--fontSizeBase200);
+}
+
+.insight-workbench-metadata-explorer-row:last-child {
+  border-bottom: 0;
+}
+
+.insight-workbench-metadata-explorer-row--header {
+  background: var(--colorNeutralBackground2);
+  font-weight: var(--fontWeightSemibold);
+  color: var(--colorNeutralForeground2);
+}

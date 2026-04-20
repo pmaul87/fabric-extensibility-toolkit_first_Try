@@ -1,0 +1,1 @@
+export { InsightWorkbenchItemEditor } from './InsightWorkbenchItemEditor';

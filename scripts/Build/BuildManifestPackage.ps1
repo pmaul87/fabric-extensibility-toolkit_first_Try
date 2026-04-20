@@ -161,7 +161,8 @@ if($ValidateFiles -eq $true) {
 ################################################
 # Build the current nuget package
 ################################################
-$nugetPath = Join-Path $PSScriptRoot "..\..\Workload\node_modules\nuget-bin\nuget.exe"
+$nugetDir = Join-Path $PSScriptRoot "..\..\tools\NuGet"
+$nugetPath = Join-Path $nugetDir "nuget.exe"
 $nuspecPath = Join-Path $tempPath "\ManifestPackage.nuspec"
 
 
@@ -169,13 +170,14 @@ $nuspecPath = Join-Path $tempPath "\ManifestPackage.nuspec"
 Write-Host "Using configuration in $outputDir"
 
 if (-not (Test-Path $nugetPath)) {
-    Write-Host "Nuget executable not found at $nugetPath will run npm install to get it."
-    $workloadDir = Join-Path $PSScriptRoot "..\..\Workload"
+    Write-Host "NuGet executable not found at $nugetPath. Downloading latest official nuget.exe..."
+    New-Item -ItemType Directory -Path $nugetDir -Force | Out-Null
+    $downloadUrl = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
     try {
-        Push-Location $workloadDir
-        npm install
-    } finally {
-        Pop-Location
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $nugetPath -UseBasicParsing
+    } catch {
+        Write-Host "Failed to download nuget.exe from $downloadUrl" -ForegroundColor Red
+        throw
     }
 }
 

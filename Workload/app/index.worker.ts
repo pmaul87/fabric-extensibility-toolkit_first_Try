@@ -36,22 +36,17 @@ interface ItemCreationSuccessData {
 
 
 export async function initialize(params: InitParams) {
-    console.log('🚀 Worker initialization started with params:', params);
-
     const workloadClient = createWorkloadClient();
-    console.log('✅ WorkloadClient created successfully');
 
     const sampleWorkloadName = process.env.WORKLOAD_NAME;
 
     workloadClient.action.onAction(async function ({ action, data }) {
-        console.log(`🧭 Started action ${action} with data:`, data);
         switch (action) {
             case 'item.onCreationSuccess':
                 const { item: createdItem } = data as ItemCreationSuccessData;
                 var path = "/item-editor";
                 const itemTypeName = createdItem.itemType.substring(createdItem.itemType.lastIndexOf('.') + 1);
                 path = `/${itemTypeName}Item-editor`;
-                console.log(`Item created successfully, redirecting to ${path}/${createdItem.objectId}`);
                 await callPageOpen(workloadClient, sampleWorkloadName, `${path}/${createdItem.objectId}`);
                 return Promise.resolve({ succeeded: true });
 

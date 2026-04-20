@@ -10,16 +10,11 @@ import { App } from "./App";
 import { callGetItem } from "./controller/ItemCRUDController"
 
 export async function initialize(params: InitParams) {
-    console.log('🚀 UI initialization started with params:', params);
-    
     const workloadClient = createWorkloadClient();
-    console.log('✅ WorkloadClient created successfully');
 
     const history = createBrowserHistory();
-    console.log('✅ Browser history created successfully');
     
     workloadClient.navigation.onNavigate((route) => {
-        console.log('🧭 Navigation event:', route);
         history.replace(route.targetUrl);
     });
     workloadClient.action.onAction(async function ({ action, data }) {
@@ -58,29 +53,23 @@ export async function initialize(params: InitParams) {
     
     const rootElement = document.getElementById('root');
     if (!rootElement) {
-        console.error('❌ Root element not found!');
-        document.body.innerHTML = '<div style="padding: 20px; color: red;">❌ Error: Root element not found</div>';
+        document.body.innerHTML = '<div style="padding: 20px; color: red;">Error: Root element not found</div>';
         return;
     }
     
     try {
         const root = createRoot(rootElement);
-        console.log('✅ React root created successfully');
-        
-        console.log('🎨 Rendering App component...');
         root.render(
             <FluentProvider theme={fabricLightTheme}>
                 <App history={history} workloadClient={workloadClient} />
             </FluentProvider>
         );
-        console.log('✅ App component rendered successfully');
     } catch (error) {
         console.error('❌ Error during React rendering:', error);
         rootElement.innerHTML = `
             <div style="padding: 20px; color: red; font-family: monospace;">
-                <h2>❌ React Rendering Error</h2>
-                <p>Error: ${error.message}</p>
-                <pre>${error.stack}</pre>
+                <h2>Application initialization error</h2>
+                <p>Please check browser console logs for details.</p>
             </div>
         `;
     }

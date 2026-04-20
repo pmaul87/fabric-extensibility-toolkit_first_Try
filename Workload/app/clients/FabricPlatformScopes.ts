@@ -5,6 +5,9 @@
 
 // Base Fabric API scopes
 export const FABRIC_BASE_SCOPES = {
+  SQL_DATABASE_USER: "https://database.windows.net/user_impersonation",
+  SQL_DATABASE: "https://database.windows.net/.default",
+
   // Item operations
   ITEM_READ: "https://api.fabric.microsoft.com/Item.Read.All",
   ITEM_READWRITE: "https://api.fabric.microsoft.com/Item.ReadWrite.All",

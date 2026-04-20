@@ -1,0 +1,74 @@
+
+> fabric-developer-sample@2.0.0 start
+> npm run start:devServer
+
+
+> fabric-developer-sample@2.0.0 start:devServer
+> cross-env NODE_OPTIONS=--max-old-space-size=8192 env-cmd -f .env.dev webpack serve --open --config ./devServer/webpack.dev.js
+
+*******************     Workload Configuration    *******************
+process.env.WORKLOAD_NAME: Org.InsightWorkbench
+process.env.ITEM_NAMES: HelloWorld,InsightWorkbenchItem
+process.env.WORKLOAD_VERSION: 1.0.0
+process.env.LOG_LEVEL: debug
+*********************************************************************
+********************   Development Configuration   *******************
+process.env.DEV_AAD_CONFIG_FE_APPID: 67394c01-eb42-44dc-b371-7a34ad0424af
+process.env.DEV_AAD_CONFIG_BE_APPID: 
+process.env.DEV_AAD_CONFIG_BE_AUDIENCE: 
+*********************************************************************
+*********************************************************************
+****             DevServer is listening on port 60006            ****
+*********************************************************************
+­ƒôè Memory monitoring disabled. Set ENABLE_MEMORY_MONITORING=true to enable
+[FabricPlatformApiClientFactory] Initializing dev app-client {
+  hasTenantId: false,
+  hasClientId: false,
+  hasClientSecret: false,
+  tenantId: '',
+  clientId: ''
+}
+[FabricPlatformApiClientFactory] Creating unavailable client {
+  reason: 'Missing service principal credentials',
+  hasTenantId: false,
+  hasBackendAppId: false,
+  hasBackendClientSecret: false
+}
+*** Mounting Manifest API ***
+*** Mounting Metadata API ***
+*** Mounting Semantic API ***
+*** Mounting Lakehouse Analyzer API ***
+[Metadata API] Initialized with Fabric Platform API client
+[Semantic API] Initialized with Fabric Platform API client
+[Lakehouse API] Initialized with Fabric Platform API client
+Ôä╣´©Å  Metadata API initialized in fallback mode (set TENANT_ID, BACKEND_APPID, BACKEND_CLIENT_SECRET for live Fabric data)
+­ƒùä´©Å  Initializing Report Scanner database persistence...
+[ReportScannerPersistence] Configuration initialized {
+  server: 'e23bihhxygau5oihy3pjdwvgku-jncr2k5bmg5uvfwdfndw3fc2sy.database.fabric.microsoft.com',
+  database: 'InsightWorkbenchMetadata'
+}
+[Metadata API] Report scanner persistence initialized successfully
+Ô£à Report Scanner persistence ready (uses delegated tokens per request)
+*********************************************************************
+***                Mounting Dev Server Components                ***
+[32m­ƒÄ« Following playgrounds are enabled in development mode:[0m
+[32m­ƒîÉ Client-SDK Playground:[0m [34mhttps://app.fabric.microsoft.com/workloads/Org.InsightWorkbench/playground-client-sdk[0m
+[32m­ƒîÉ Data Playground:[0m [34mhttps://app.fabric.microsoft.com/workloads/Org.InsightWorkbench/playground-data[0m
+*********************************************************************
+C:\Users\patri\OneDrive\Documents\FabricExtension\fabric-extensibility-toolkit\Workload\node_modules\webpack-dev-server\lib\Server.js:2654
+        throw error;
+        ^
+
+Error: listen EADDRINUSE: address already in use 127.0.0.1:60006
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '127.0.0.1',
+  port: 60006
+}
+
+Node.js v24.13.1

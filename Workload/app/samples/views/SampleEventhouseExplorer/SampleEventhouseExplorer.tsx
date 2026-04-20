@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { PageProps } from "../../../App";
 import { Stack } from "@fluentui/react";
 import {
@@ -29,11 +29,28 @@ export function EventhouseExplorerComponent({ workloadClient }: PageProps) {
     const [queryClientRequestId, setQueryClientRequestId] = useState<string | undefined>(undefined);
     const [queryResult, setQueryResult] = useState<string>("");
 
-    useEffect(() => {
-    if (selectedEventhouse) {
-        loadKqlDatabasesWhenEventhouseSelected();
-    }
-    }, [selectedEventhouse]);
+        const loadKqlDatabasesWhenEventhouseSelected = useCallback(async () => {
+            console.log(`loadKqlDatabasesWhenEventhouseSelected: ${selectedEventhouse}`);
+            if (selectedEventhouse) {
+                    const result = await getEventhouseItem(
+                            workloadClient,
+                            selectedEventhouse.workspaceId,
+                            selectedEventhouse.id,              
+                    );
+    
+                    if (result) {
+                            setSelectedEventhouseItemMetadata(result);
+                            setSelectedDatabaseForQuery(result.properties.databasesItemIds[0])
+                            setDirtyEventhouse(true);
+                    }
+            }
+        }, [selectedEventhouse, workloadClient]);
+
+        useEffect(() => {
+            if (selectedEventhouse) {
+                void loadKqlDatabasesWhenEventhouseSelected();
+            }
+        }, [selectedEventhouse, loadKqlDatabasesWhenEventhouseSelected]);
 
     async function onLoadDatahubForEventhouse() {
         const result = await callDatahubOpen(
@@ -45,23 +62,6 @@ export function EventhouseExplorerComponent({ workloadClient }: PageProps) {
             if (result) {
             setSelectedEventhouse(result);
         }
-    }
-
-    async function loadKqlDatabasesWhenEventhouseSelected() {
-      console.log(`loadKqlDatabasesWhenEventhouseSelected: ${selectedEventhouse}`);
-      if (selectedEventhouse) {
-          const result = await getEventhouseItem(
-              workloadClient,
-              selectedEventhouse.workspaceId,
-              selectedEventhouse.id,              
-          );
-    
-          if (result) {
-              setSelectedEventhouseItemMetadata(result);
-              setSelectedDatabaseForQuery(result.properties.databasesItemIds[0])
-              setDirtyEventhouse(true);
-          }
-      }
     }
 
     function isDisabledExecuteQueryButton(): boolean {

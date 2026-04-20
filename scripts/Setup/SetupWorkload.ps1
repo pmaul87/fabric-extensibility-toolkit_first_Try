@@ -244,24 +244,21 @@ Write-Host "Commit these files to your repository to share configuration with yo
 
 
 ###############################################################################
-# Download Workload dependencies to have nuget executables available
+# Download NuGet executable for manifest packaging
 ###############################################################################
 Write-Host ""
-Write-Output "Downloading Workload dependencies..."
-$workloadDir = Join-Path $PSScriptRoot "..\..\Workload\"
-$nugetDir = Join-Path $workloadDir "node_modules\nuget-bin"
-# Ensure the frontend directory exists
-if (-not (Test-Path $nugetDir)) {
-    Write-Host ""
-    Write-Host "Running npm install to get the nuget executables..."
-    try{
-        Push-Location $workloadDir
-        npm install
-    } finally {
-        Pop-Location
-    }
+Write-Output "Ensuring NuGet executable is available..."
+$nugetDir = Join-Path $PSScriptRoot "..\..\tools\NuGet"
+$nugetExe = Join-Path $nugetDir "nuget.exe"
+
+if (-not (Test-Path $nugetExe)) {
+    Write-Host "NuGet executable not found. Downloading latest official nuget.exe..."
+    New-Item -ItemType Directory -Path $nugetDir -Force | Out-Null
+    $downloadUrl = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $nugetExe -UseBasicParsing
+    Write-Host "NuGet executable downloaded to $nugetExe" -ForegroundColor Green
 } else {
-    Write-Host "nuget executable already exists."
+    Write-Host "NuGet executable already exists at $nugetExe"
 }
 
 

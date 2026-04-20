@@ -40,13 +40,15 @@ export function UIComponentsExample(props: TabContentProps) {
   const labelId = useId("label");
   const inputId = useId("input");
 
-  document.body.dir = i18n.dir();
-
   useEffect(() => {
     callLanguageGet(workloadClient).then((lang) => setLang(lang));
     // register Settings.onChange
     callSettingsOnChange(workloadClient, i18n.changeLanguage);
-  }, []);
+  }, [i18n, workloadClient]);
+
+  useEffect(() => {
+    document.body.dir = i18n.dir();
+  }, [i18n]);
 
   return (
     <span>

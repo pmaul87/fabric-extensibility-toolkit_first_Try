@@ -419,6 +419,7 @@ scripts/Setup/My*
 # Fabric Workload files
 Workload/node_modules/*
 Workload/package-lock.json
+!Workload/package-lock.json
 Workload/dist/*
 
 # Fabric environment files

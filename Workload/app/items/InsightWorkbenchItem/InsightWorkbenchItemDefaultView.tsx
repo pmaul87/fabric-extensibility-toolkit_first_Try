@@ -1,15 +1,18 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
+import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Field, Input, Option, Text } from "@fluentui/react-components";
 import { ItemWithDefinition } from "../../controller/ItemCRUDController";
 import { ItemEditorDefaultView } from "../../components/ItemEditor";
 import { useViewNavigation } from "../../components/ItemEditor";
-import { InsightWorkbenchItemDefinition } from "./InsightWorkbenchItemDefinition";
+import { InsightWorkbenchItemDefinition, RequirementsBoardStorageSettings } from "./InsightWorkbenchItemDefinition";
 import "./InsightWorkbenchItem.scss";
 
 interface InsightWorkbenchItemDefaultViewProps {
   workloadClient: WorkloadClientAPI;
   item?: ItemWithDefinition<InsightWorkbenchItemDefinition>;
+  storageSettings?: RequirementsBoardStorageSettings;
+  onStorageSettingsChange?: (nextStorageSettings: RequirementsBoardStorageSettings) => void;
 }
 
 /**
@@ -51,6 +54,14 @@ const CAPABILITY_CARDS: CapabilityCard[] = [
     defaultDescription: 'Trace cross-workspace data lineage and report usage — upstream and downstream.',
   },
   {
+    viewName: 'report-scanner',
+    emoji: '📑',
+    titleKey: 'InsightWorkbench_ReportScanner_Label',
+    defaultTitle: 'Report Scanner',
+    descriptionKey: 'InsightWorkbench_ReportScanner_Description',
+    defaultDescription: 'Scan one selected report on demand and inspect report, page, visual, and visual-element usage.',
+  },
+  {
     viewName: 'requirements-board',
     emoji: '📋',
     titleKey: 'InsightWorkbench_RequirementsBoard_Label',
@@ -58,15 +69,48 @@ const CAPABILITY_CARDS: CapabilityCard[] = [
     descriptionKey: 'InsightWorkbench_RequirementsBoard_Description',
     defaultDescription: 'Manage requirements as Kanban cards linked to Fabric metadata and insights.',
   },
+  {
+    viewName: 'lakehouse-analyzer',
+    emoji: '🏠',
+    titleKey: 'InsightWorkbench_Lakehouse_Label',
+    defaultTitle: 'Lakehouse / Warehouse Analyzer',
+    descriptionKey: 'InsightWorkbench_Lakehouse_Description',
+    defaultDescription: 'Inspect tables, views, stored procedures, and delta tables inside Lakehouse and Warehouse artifacts.',
+  },
 ];
 
 /**
  * Capability navigation hub — shown as the default landing view.
  * Clicking a card navigates to the capability's registered view.
  */
-function HubContent({ item }: { item?: ItemWithDefinition<InsightWorkbenchItemDefinition> }) {
+function HubContent({
+  item,
+  storageSettings,
+  onStorageSettingsChange,
+}: {
+  item?: ItemWithDefinition<InsightWorkbenchItemDefinition>;
+  storageSettings?: RequirementsBoardStorageSettings;
+  onStorageSettingsChange?: (nextStorageSettings: RequirementsBoardStorageSettings) => void;
+}) {
   const { t } = useTranslation();
   const { setCurrentView } = useViewNavigation();
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const [modeDraft, setModeDraft] = React.useState<"default" | "custom">(storageSettings?.mode ?? "default");
+  const [pathDraft, setPathDraft] = React.useState(storageSettings?.oneLakeFilePath ?? "Files/requirements-board.tickets.v1.json");
+
+  React.useEffect(() => {
+    setModeDraft(storageSettings?.mode ?? "default");
+    setPathDraft(storageSettings?.oneLakeFilePath ?? "Files/requirements-board.tickets.v1.json");
+  }, [storageSettings?.mode, storageSettings?.oneLakeFilePath]);
+
+  const saveSettings = () => {
+    const nextPath = pathDraft.trim();
+    onStorageSettingsChange?.({
+      mode: modeDraft,
+      oneLakeFilePath: modeDraft === "custom" ? nextPath : "Files/requirements-board.tickets.v1.json",
+    });
+    setIsSettingsOpen(false);
+  };
 
   return (
     <div className="insight-workbench-hub">
@@ -79,6 +123,16 @@ function HubContent({ item }: { item?: ItemWithDefinition<InsightWorkbenchItemDe
           'Select a capability below to get started. Your work is automatically saved across sessions.'
         )}
       </p>
+      <div className="insight-workbench-requirements-filterbar-quick-actions">
+        <Button appearance="secondary" onClick={() => setIsSettingsOpen(true)}>
+          {t('InsightWorkbench_Hub_Settings_Button', 'Storage settings')}
+        </Button>
+        <Text size={200}>
+          {t('InsightWorkbench_Hub_Settings_Current', 'Current ticket storage: {{mode}}', {
+            mode: storageSettings?.mode === 'custom' ? (storageSettings.oneLakeFilePath || 'Custom') : 'Default OneLake file',
+          })}
+        </Text>
+      </div>
       <div className="insight-workbench-hub-cards">
         {CAPABILITY_CARDS.map((card) => (
           <div
@@ -102,6 +156,46 @@ function HubContent({ item }: { item?: ItemWithDefinition<InsightWorkbenchItemDe
           </div>
         ))}
       </div>
+
+      <Dialog open={isSettingsOpen} onOpenChange={(_, data) => setIsSettingsOpen(data.open)}>
+        <DialogSurface className="insight-workbench-requirements-dialog-surface">
+          <DialogBody>
+            <DialogTitle>{t('InsightWorkbench_Hub_Settings_Title', 'Workbench storage settings')}</DialogTitle>
+            <DialogContent>
+              <Field label={t('InsightWorkbench_Hub_Settings_Mode', 'Ticket storage mode')}>
+                <Dropdown
+                  inlinePopup
+                  selectedOptions={[modeDraft]}
+                  value={modeDraft === 'custom'
+                    ? t('InsightWorkbench_Hub_Settings_Mode_Custom', 'Custom OneLake path')
+                    : t('InsightWorkbench_Hub_Settings_Mode_Default', 'Default path')}
+                  onOptionSelect={(_, data) => setModeDraft(((data.optionValue as string) === 'custom' ? 'custom' : 'default'))}
+                >
+                  <Option value="default">{t('InsightWorkbench_Hub_Settings_Mode_Default', 'Default path')}</Option>
+                  <Option value="custom">{t('InsightWorkbench_Hub_Settings_Mode_Custom', 'Custom OneLake path')}</Option>
+                </Dropdown>
+              </Field>
+
+              <Field label={t('InsightWorkbench_Hub_Settings_Path', 'OneLake file path')}>
+                <Input
+                  value={pathDraft}
+                  onChange={(_, data) => setPathDraft(data.value)}
+                  disabled={modeDraft !== 'custom'}
+                  placeholder="Files/requirements-board.tickets.v1.json"
+                />
+              </Field>
+
+              <Text size={200}>
+                {t('InsightWorkbench_Hub_Settings_Hint', 'Use a path under Files/, for example Files/requirements-board.tickets.v1.json')}
+              </Text>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" onClick={saveSettings}>{t('InsightWorkbench_Save', 'Save')}</Button>
+              <Button appearance="secondary" onClick={() => setIsSettingsOpen(false)}>{t('InsightWorkbench_Cancel', 'Cancel')}</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 }
@@ -114,11 +208,13 @@ function HubContent({ item }: { item?: ItemWithDefinition<InsightWorkbenchItemDe
 export function InsightWorkbenchItemDefaultView({
   workloadClient,
   item,
+  storageSettings,
+  onStorageSettingsChange,
 }: InsightWorkbenchItemDefaultViewProps) {
   return (
     <ItemEditorDefaultView
       center={{
-        content: <HubContent item={item} />,
+        content: <HubContent item={item} storageSettings={storageSettings} onStorageSettingsChange={onStorageSettingsChange} />,
       }}
     />
   );

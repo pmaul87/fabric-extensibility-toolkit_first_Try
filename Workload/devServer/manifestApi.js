@@ -61,7 +61,7 @@ router.get('/manifests_new/metadata', rateLimit, (req, res) => {
  
   const devParameters = {
     name: process.env.WORKLOAD_NAME,
-    url: "http://127.0.0.1:60006",
+    url: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace('localhost', '127.0.0.1').replace(/\/$/, '') : "http://127.0.0.1:60006",
     devAADFEAppConfig: {
       appId: process.env.DEV_AAD_CONFIG_FE_APPID,
     },

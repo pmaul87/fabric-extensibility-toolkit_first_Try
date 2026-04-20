@@ -253,18 +253,21 @@ export function ItemEditorDetailView({
   const detailViewActionsContext = React.useContext(DetailViewActionsContext);
 
   // Create the back action for the detail view actions (separate from Ribbon's back button)
-  const backAction: DetailViewAction = {
+  const backAction = React.useMemo<DetailViewAction>(() => ({
     key: 'back',
-    label: backLabel, // Allow undefined - will be handled at display level
+    label: backLabel,
     icon: ArrowLeft20Regular,
     onClick: onBack || (() => {}),
     appearance: 'subtle',
     disabled: !onBack,
-    tooltip: backTooltip // Allow undefined - will be handled at display level
-  };
+    tooltip: backTooltip
+  }), [backLabel, onBack, backTooltip]);
 
   // Combine back action with additional actions (only if onBack is provided)
-  const allActions = onBack ? [backAction, ...toolbarActions] : toolbarActions;
+  const allActions = React.useMemo(
+    () => (onBack ? [backAction, ...toolbarActions] : toolbarActions),
+    [onBack, backAction, toolbarActions]
+  );
 
   // Register actions with ItemEditor through context
   React.useEffect(() => {

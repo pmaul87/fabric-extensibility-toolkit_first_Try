@@ -309,35 +309,47 @@ export type ItemEditorProps = ItemEditorPropsWithViews;
  * @component
  */
 export function ItemEditor(props: ItemEditorProps) {
-  const { className = "", contentClassName = "", isLoading = false, loadingMessage } = props;
+  const {
+    className = "",
+    contentClassName = "",
+    isLoading = false,
+    loadingMessage,
+    initialView,
+    getInitialView,
+    onViewChange,
+    viewSetter,
+    ribbon,
+    messageBar,
+    views,
+  } = props;
 
   // Internal state for view management - Initialize with the initial view directly
-  const [currentView, setCurrentViewInternal] = React.useState<string | null>(props.initialView || null);
+  const [currentView, setCurrentViewInternal] = React.useState<string | null>(initialView || null);
   // View history for back navigation in detail views - Initialize with initial view
   const [viewHistory, setViewHistory] = React.useState<string[]>(() => 
-    props.initialView ? [props.initialView] : []
+    initialView ? [initialView] : []
   );
   // Detail view actions from current view
   const [detailViewActions, setDetailViewActions] = React.useState<RibbonAction[]>([]);
 
   // Update view when initialView prop changes (but avoid setState during render)
   React.useEffect(() => {
-    if (props.initialView && props.initialView !== currentView) {
-      setCurrentViewInternal(props.initialView);
-      setViewHistory([props.initialView]);
+    if (initialView && initialView !== currentView) {
+      setCurrentViewInternal(initialView);
+      setViewHistory([initialView]);
     }
-  }, [props.initialView]); // Only depend on initialView, not currentView to avoid loops
+  }, [initialView, currentView]);
 
   // Call getInitialView when loading completes (alternative to static initialView)
   React.useEffect(() => {
-    if (!isLoading && props.getInitialView && !currentView) {
-      const determinedView = props.getInitialView();
+    if (!isLoading && getInitialView && !currentView) {
+      const determinedView = getInitialView();
       if (determinedView) {
         setCurrentViewInternal(determinedView);
         setViewHistory([determinedView]);
       }
     }
-  }, [isLoading, props.getInitialView, currentView]);
+  }, [isLoading, getInitialView, currentView]);
 
   // Wrapped setCurrentView that manages history and calls the optional callback
   const setCurrentView = React.useCallback((view: string) => {
@@ -345,8 +357,8 @@ export function ItemEditor(props: ItemEditorProps) {
     setCurrentViewInternal(view);
     // Clear detail view actions when changing views
     setDetailViewActions([]);
-    props.onViewChange?.(view);
-  }, [props]);
+    onViewChange?.(view);
+  }, [onViewChange]);
 
   // Go back to previous view (for detail views)
   const goBack = React.useCallback(() => {
@@ -361,9 +373,9 @@ export function ItemEditor(props: ItemEditorProps) {
       // Clear detail view actions when going back
       setDetailViewActions([]);
       
-      props.onViewChange?.(previousView);
+      onViewChange?.(previousView);
     }
-  }, [viewHistory, props]);
+  }, [viewHistory, onViewChange]);
 
   // Callback for detail views to set their actions
   const handleSetDetailViewActions = React.useCallback((actions: RibbonAction[]) => {
@@ -372,8 +384,8 @@ export function ItemEditor(props: ItemEditorProps) {
 
   // Views are now always an array - no function pattern support
   const resolvedViews = React.useMemo((): RegisteredView[] => {
-    return props.views;
-  }, [props.views]);
+    return views;
+  }, [views]);
 
   // Check if current view is a detail view
   const isDetailView = React.useMemo(() => {
@@ -401,23 +413,22 @@ export function ItemEditor(props: ItemEditorProps) {
 
   // Call viewSetter prop to provide the setCurrentView function to the parent
   React.useEffect(() => {
-    if (props.viewSetter) {
-      props.viewSetter(setCurrentView);
+    if (viewSetter) {
+      viewSetter(setCurrentView);
     }
-  }, [props.viewSetter, setCurrentView]);
+  }, [viewSetter, setCurrentView]);
 
   // Resolve ribbon (either ReactNode or render function with ViewContext)
   const ribbonContent = React.useMemo(() => {
-    const ribbon = props.ribbon;
     if (typeof ribbon === 'function') {
       return ribbon(viewContext);
     }
     return ribbon;
-  }, [props, viewContext]);
+  }, [ribbon, viewContext]);
 
   // Resolve notification (static registration or legacy function)
   const notificationContent = React.useMemo(() => {
-    const notifications = props.messageBar;
+    const notifications = messageBar;
     
     if (!notifications) {
       return null;
@@ -445,7 +456,7 @@ export function ItemEditor(props: ItemEditorProps) {
     }
     
     return null;
-  }, [props.messageBar, currentView]);
+  }, [messageBar, currentView]);
 
   // Determine content from view registration
   const content = React.useMemo(() => {

@@ -5,6 +5,7 @@
  */
 
 import { WorkspaceRole } from "../clients/FabricPlatformTypes";
+import { SemanticDependency, SemanticEntity, SemanticModel } from "./SemanticAnalyzerService";
 
 /**
  * Core artifact model - persistence-ready structure
@@ -56,6 +57,138 @@ export interface LoadArtifactsResponse {
 export interface LoadArtifactsRequest {
   includeTrace?: boolean;
   maxArtifacts?: number;
+}
+
+export type LineageRelationshipType =
+  | "report-uses-dataset"
+  | "dataset-uses-lakehouse"
+  | "dataflow-uses-lakehouse"
+  | "dataflow-uses-warehouse"
+  | "notebook-uses-lakehouse"
+  | "notebook-uses-warehouse"
+  | "pipeline-uses-dataflow"
+  | "pipeline-uses-notebook"
+  | "pipeline-uses-lakehouse"
+  | "pipeline-uses-warehouse";
+
+export type LineageBlockReason =
+  | "NoAccess"
+  | "CrossWorkspacePermissionGap"
+  | "InsufficientRole"
+  | "Unknown";
+
+export interface LineagePermissionSummary {
+  accessiblePathCount: number;
+  partiallyBlockedPathCount: number;
+  blockedPathCount: number;
+}
+
+export interface LineagePermissionFlags {
+  sourceAccessLevel?: WorkspaceRole;
+  targetAccessLevel?: WorkspaceRole;
+  traversalBlocked?: boolean;
+  blockReason?: LineageBlockReason;
+}
+
+export interface LineageLink {
+  sourceWorkspaceId: string;
+  sourceArtifactId: string;
+  targetWorkspaceId: string;
+  targetArtifactId: string;
+  relationshipType: LineageRelationshipType;
+  confidence?: "exact" | "inferred";
+  confidenceNote?: string;
+  permission?: LineagePermissionFlags;
+}
+
+export interface LoadLineageLinksRequest {
+  artifacts: ExplorerArtifact[];
+}
+
+export interface LoadLineageLinksResponse {
+  links: LineageLink[];
+}
+
+export interface LoadLineageLinksWithPermissionsResponse {
+  links: LineageLink[];
+  permissionSummary: LineagePermissionSummary;
+  graph?: LineageGraphPayload;
+}
+
+export interface LineageGraphNode {
+  id: string;
+  artifact: ExplorerArtifact;
+}
+
+export interface LineageGraphEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  relationshipType: LineageRelationshipType;
+}
+
+export interface LineageGraphPayload {
+  nodes: LineageGraphNode[];
+  edges: LineageGraphEdge[];
+  selectableRootNodeIds: string[];
+}
+
+export type SemanticEntityUsageKind = "direct" | "dependency" | "table";
+
+export interface SemanticEntityReportUsageReference {
+  reportId: string;
+  reportName: string;
+  workspaceId: string;
+  workspaceName: string;
+  usageKind: SemanticEntityUsageKind;
+}
+
+export interface SemanticEntityReportUsageSummary {
+  entityId: string;
+  reportCount: number;
+  directReportCount: number;
+  reports: SemanticEntityReportUsageReference[];
+}
+
+export interface LoadSemanticModelReportUsageRequest {
+  model: SemanticModel;
+  entities: SemanticEntity[];
+  dependencies: SemanticDependency[];
+  artifacts: ExplorerArtifact[];
+  lineageLinks: LineageLink[];
+}
+
+export interface LoadSemanticModelReportUsageResponse {
+  entityUsageById: Record<string, SemanticEntityReportUsageSummary>;
+  reports: unknown[];
+  reportsUsingModel: ExplorerArtifact[];
+  scanErrors: string[];
+  cacheSource?: "memory-cache" | "live-calculation";
+}
+
+export interface ReportDefinitionPart {
+  path: string;
+  payload: string;
+  payloadType: string;
+}
+
+export interface ReportDefinition {
+  format?: string;
+  parts: ReportDefinitionPart[];
+}
+
+export interface LoadReportDefinitionRequest {
+  workspaceId: string;
+  reportId: string;
+}
+
+export interface LoadReportDefinitionResponse {
+  definition: ReportDefinition;
+  source?: string;
+  operationStatus?: string;
+  attempts?: number;
+  fetchedAt?: string;
+  rawResponse?: unknown;
 }
 
 /**

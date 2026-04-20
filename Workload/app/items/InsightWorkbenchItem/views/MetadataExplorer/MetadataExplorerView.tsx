@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useHistory, useLocation } from "react-router-dom";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import jwt_decode from "jwt-decode";
 import {
@@ -21,10 +22,12 @@ import {
 } from "@fluentui/react-components";
 import { ItemEditorDefaultView } from "../../../../components/ItemEditor";
 import { useViewNavigation } from "../../../../components/ItemEditor";
-import { VIEW } from "../../InsightWorkbenchItemEditor";
-import { InsightWorkbenchItemDefinition } from "../../InsightWorkbenchItemDefinition";
+import { useSemanticAnalyzerContext } from "../SemanticAnalyzer/SemanticAnalyzerView";
+import { VIEW } from "../../InsightWorkbenchViewNames";
+import { InsightWorkbenchItemDefinition, MetadataArtifactCatalogState, MetadataExplorerState } from "../../InsightWorkbenchItemDefinition";
 import { ItemWithDefinition } from "../../../../controller/ItemCRUDController";
 import { navigateToItem } from "../../../../controller/NavigationController";
+import { NAV_JUMP_LAKEHOUSE_ANALYZER, NAV_JUMP_REPORT_SCANNER } from "../../InsightWorkbenchNavKeys";
 import {
   ExplorerArtifact,
   compareArtifactsBy,
@@ -34,11 +37,14 @@ import {
 } from "../../../../services/MetadataService";
 import { MetadataExplorerClient } from "../../../../clients/MetadataExplorerClient";
 import { Item } from "../../../../clients/FabricPlatformTypes";
+import { deserializeArtifactCatalog, serializeArtifactCatalog } from "../../services/MetadataArtifactCatalogStorage";
 import "../../InsightWorkbenchItem.scss";
 
 interface MetadataExplorerViewProps {
   workloadClient: WorkloadClientAPI;
   item?: ItemWithDefinition<InsightWorkbenchItemDefinition>;
+  metadataState?: MetadataExplorerState;
+  onArtifactCatalogChange?: (nextCatalog: MetadataArtifactCatalogState) => void;
 }
 
 type MetadataColumnKey =
@@ -104,6 +110,11 @@ const METADATA_COLUMNS: MetadataColumnDefinition[] = [
 
 const DEFAULT_VISIBLE_COLUMNS: MetadataColumnKey[] = ["name", "type", "workspace", "contact"];
 const USER_COLUMN_PREF_STORAGE_PREFIX = "insightWorkbench.metadataExplorer.visibleColumns";
+const QUERY_PARAM_METADATA_SEARCH = "metadataSearch";
+const QUERY_PARAM_METADATA_TYPE = "metadataType";
+const QUERY_PARAM_METADATA_WORKSPACE_ID = "metadataWorkspaceId";
+const QUERY_PARAM_METADATA_GROUP_BY = "metadataGroupBy";
+const QUERY_PARAM_METADATA_SORT_BY = "metadataSortBy";
 
 interface JwtIdentityClaims {
   oid?: string;
@@ -114,9 +125,22 @@ interface JwtIdentityClaims {
   unique_name?: string;
 }
 
-function MetadataExplorerContent({ workloadClient, item }: { workloadClient: WorkloadClientAPI; item?: ItemWithDefinition<InsightWorkbenchItemDefinition> }) {
+function MetadataExplorerContent({
+  workloadClient,
+  item,
+  metadataState,
+  onArtifactCatalogChange,
+}: {
+  workloadClient: WorkloadClientAPI;
+  item?: ItemWithDefinition<InsightWorkbenchItemDefinition>;
+  metadataState?: MetadataExplorerState;
+  onArtifactCatalogChange?: (nextCatalog: MetadataArtifactCatalogState) => void;
+}) {
   const { t } = useTranslation();
+  const history = useHistory();
+  const location = useLocation();
   const { goBack, setCurrentView } = useViewNavigation();
+  const { setSelectedModelFromExplorer } = useSemanticAnalyzerContext();
   
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -130,10 +154,93 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
   const [visibleColumns, setVisibleColumns] = useState<MetadataColumnKey[]>(DEFAULT_VISIBLE_COLUMNS);
   const [userColumnPreferenceKey, setUserColumnPreferenceKey] = useState<string | null>(null);
 
+  const deepLinkState = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const requestedGroupBy = params.get(QUERY_PARAM_METADATA_GROUP_BY);
+    const requestedSortBy = params.get(QUERY_PARAM_METADATA_SORT_BY);
+
+    const parsedGroupBy: GroupBy =
+      requestedGroupBy === "type" || requestedGroupBy === "workspace" || requestedGroupBy === "none"
+        ? requestedGroupBy
+        : "none";
+
+    const parsedSortBy: SortBy =
+      requestedSortBy === "alphabetical" || requestedSortBy === "workspace" || requestedSortBy === "category"
+        ? requestedSortBy
+        : "alphabetical";
+
+    return {
+      searchQuery: params.get(QUERY_PARAM_METADATA_SEARCH) ?? "",
+      selectedType: params.get(QUERY_PARAM_METADATA_TYPE) ?? "all",
+      selectedWorkspaceId: params.get(QUERY_PARAM_METADATA_WORKSPACE_ID) ?? "all",
+      groupBy: parsedGroupBy,
+      sortBy: parsedSortBy,
+    };
+  }, [location.search]);
+
+  const syncMetadataExplorerDeepLink = useCallback((next: {
+    searchQuery: string;
+    selectedType: string;
+    selectedWorkspaceId: string;
+    groupBy: GroupBy;
+    sortBy: SortBy;
+  }) => {
+    const params = new URLSearchParams(location.search);
+
+    if (next.searchQuery.trim().length > 0) {
+      params.set(QUERY_PARAM_METADATA_SEARCH, next.searchQuery);
+    } else {
+      params.delete(QUERY_PARAM_METADATA_SEARCH);
+    }
+
+    if (next.selectedType !== "all") {
+      params.set(QUERY_PARAM_METADATA_TYPE, next.selectedType);
+    } else {
+      params.delete(QUERY_PARAM_METADATA_TYPE);
+    }
+
+    if (next.selectedWorkspaceId !== "all") {
+      params.set(QUERY_PARAM_METADATA_WORKSPACE_ID, next.selectedWorkspaceId);
+    } else {
+      params.delete(QUERY_PARAM_METADATA_WORKSPACE_ID);
+    }
+
+    if (next.groupBy !== "none") {
+      params.set(QUERY_PARAM_METADATA_GROUP_BY, next.groupBy);
+    } else {
+      params.delete(QUERY_PARAM_METADATA_GROUP_BY);
+    }
+
+    if (next.sortBy !== "alphabetical") {
+      params.set(QUERY_PARAM_METADATA_SORT_BY, next.sortBy);
+    } else {
+      params.delete(QUERY_PARAM_METADATA_SORT_BY);
+    }
+
+    const nextSearch = params.toString();
+    const currentSearch = location.search.startsWith("?")
+      ? location.search.slice(1)
+      : location.search;
+
+    if (nextSearch === currentSearch) {
+      return;
+    }
+
+    history.replace({
+      pathname: location.pathname,
+      search: nextSearch.length > 0 ? `?${nextSearch}` : "",
+    });
+  }, [history, location.pathname, location.search]);
+
+  const cachedArtifacts = useMemo(
+    () => deserializeArtifactCatalog(metadataState?.artifactCatalog),
+    [metadataState?.artifactCatalog]
+  );
+
   // Create API client instance (only once)
   const apiClient = useMemo(() => new MetadataExplorerClient(workloadClient), [workloadClient]);
 
-  const loadArtifacts = useCallback(async () => {
+  const loadArtifacts = useCallback(async (source: MetadataArtifactCatalogState["source"] = "manual-refresh") => {
     const startedAt = Date.now();
     setIsLoading(true);
     setErrorText(null);
@@ -155,6 +262,7 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
       });
 
       setArtifacts(response.artifacts);
+      onArtifactCatalogChange?.(serializeArtifactCatalog(response.artifacts, source));
 
       if (response.totalCount === 0) {
         console.warn("[MetadataExplorer] Metadata response returned zero artifacts", {
@@ -185,11 +293,67 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
     } finally {
       setIsLoading(false);
     }
-  }, [apiClient, t]);
+  }, [apiClient, onArtifactCatalogChange, t]);
 
   useEffect(() => {
-    loadArtifacts();
-  }, [loadArtifacts]);
+    if (cachedArtifacts.length > 0) {
+      setArtifacts(cachedArtifacts);
+      setIsLoading(false);
+      return;
+    }
+
+    void loadArtifacts("view-load");
+  }, [cachedArtifacts, loadArtifacts]);
+
+  useEffect(() => {
+    if (searchQuery !== deepLinkState.searchQuery) {
+      setSearchQuery(deepLinkState.searchQuery);
+    }
+
+    if (selectedType !== deepLinkState.selectedType) {
+      setSelectedType(deepLinkState.selectedType);
+    }
+
+    if (selectedWorkspaceId !== deepLinkState.selectedWorkspaceId) {
+      setSelectedWorkspaceId(deepLinkState.selectedWorkspaceId);
+    }
+
+    if (groupBy !== deepLinkState.groupBy) {
+      setGroupBy(deepLinkState.groupBy);
+    }
+
+    if (sortBy !== deepLinkState.sortBy) {
+      setSortBy(deepLinkState.sortBy);
+    }
+  }, [
+    deepLinkState.groupBy,
+    deepLinkState.searchQuery,
+    deepLinkState.selectedType,
+    deepLinkState.selectedWorkspaceId,
+    deepLinkState.sortBy,
+    groupBy,
+    searchQuery,
+    selectedType,
+    selectedWorkspaceId,
+    sortBy,
+  ]);
+
+  useEffect(() => {
+    syncMetadataExplorerDeepLink({
+      searchQuery,
+      selectedType,
+      selectedWorkspaceId,
+      groupBy,
+      sortBy,
+    });
+  }, [
+    groupBy,
+    searchQuery,
+    selectedType,
+    selectedWorkspaceId,
+    sortBy,
+    syncMetadataExplorerDeepLink,
+  ]);
 
   useEffect(() => {
     const resolveUserPreferenceKey = async () => {
@@ -332,6 +496,40 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
 
   const handleOpenArtifact = useCallback(
     async (artifact: ExplorerArtifact) => {
+      const normalizedType = artifact.type.trim().toLowerCase();
+
+      if (normalizedType === "semanticmodel" || normalizedType === "dataset") {
+        setSelectedModelFromExplorer({
+          id: artifact.id,
+          workspaceId: artifact.workspaceId,
+          displayName: artifact.displayName,
+          workspaceName: artifact.workspaceName,
+          type: artifact.type,
+        });
+        setCurrentView(VIEW.SEMANTIC_ANALYZER);
+        return;
+      }
+
+      if (normalizedType === "report") {
+        try {
+          window.sessionStorage.setItem(NAV_JUMP_REPORT_SCANNER, `${artifact.workspaceId}:${artifact.id}`);
+        } catch {
+          // Ignore storage failures and still navigate.
+        }
+        setCurrentView(VIEW.REPORT_SCANNER);
+        return;
+      }
+
+      if (normalizedType === "lakehouse" || normalizedType === "warehouse") {
+        try {
+          window.sessionStorage.setItem(NAV_JUMP_LAKEHOUSE_ANALYZER, `${artifact.workspaceId}:${artifact.id}`);
+        } catch {
+          // Ignore storage failures and still navigate.
+        }
+        setCurrentView(VIEW.LAKEHOUSE_ANALYZER);
+        return;
+      }
+
       try {
         const itemToOpen: Item = {
           id: artifact.id,
@@ -351,14 +549,32 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
         });
       }
     },
-    [workloadClient]
+    [setCurrentView, setSelectedModelFromExplorer, workloadClient]
   );
 
   const handleJumpToView = useCallback(
-    (viewName: string) => {
+    (viewName: string, artifact?: ExplorerArtifact) => {
+      const isSemanticModelArtifact = artifact?.type.toLowerCase() === "semanticmodel";
+
+      if (
+        viewName === VIEW.SEMANTIC_ANALYZER &&
+        artifact &&
+        isSemanticModelArtifact
+      ) {
+        setSelectedModelFromExplorer({
+          id: artifact.id,
+          workspaceId: artifact.workspaceId,
+          displayName: artifact.displayName,
+          workspaceName: artifact.workspaceName,
+          type: artifact.type,
+        });
+      } else if (viewName === VIEW.SEMANTIC_ANALYZER) {
+        setSelectedModelFromExplorer(undefined);
+      }
+
       setCurrentView(viewName);
     },
-    [setCurrentView]
+    [setCurrentView, setSelectedModelFromExplorer]
   );
 
   const displayedColumns = useMemo(
@@ -397,7 +613,7 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
                 </MenuTrigger>
                 <MenuPopover>
                   <MenuList>
-                    <MenuItem onClick={() => handleJumpToView(VIEW.SEMANTIC_ANALYZER)}>
+                    <MenuItem onClick={() => handleJumpToView(VIEW.SEMANTIC_ANALYZER, artifact)}>
                       {t("InsightWorkbench_SemanticAnalyzer_Label", "Semantic Model Analyzer")}
                     </MenuItem>
                     <MenuItem onClick={() => handleJumpToView(VIEW.LINEAGE_GRAPH)}>
@@ -453,9 +669,16 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
             )}
           </Text>
         </div>
-        <Button appearance="subtle" onClick={goBack}>
-          {t("InsightWorkbench_BackToHub", "← Back to Hub")}
-        </Button>
+        <div className="insight-workbench-requirements-header-actions">
+          <Button appearance="secondary" onClick={(): void => {
+            void loadArtifacts("manual-refresh");
+          }}>
+            {t("InsightWorkbench_MetadataExplorer_Refresh", "Refresh")}
+          </Button>
+          <Button appearance="subtle" onClick={goBack}>
+            {t("InsightWorkbench_BackToHub", "← Back to Hub")}
+          </Button>
+        </div>
       </div>
 
       <div className="insight-workbench-metadata-explorer-filters">
@@ -596,7 +819,9 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
         <>
           <div className="insight-workbench-metadata-explorer-error">
             <Text>{errorText}</Text>
-            <Button appearance="primary" onClick={loadArtifacts}>
+            <Button appearance="primary" onClick={(): void => {
+              void loadArtifacts();
+            }}>
               {t("InsightWorkbench_MetadataExplorer_Retry", "Retry")}
             </Button>
           </div>
@@ -606,6 +831,13 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
           <div className="insight-workbench-metadata-explorer-summary">
             <Badge appearance="filled">{`${filteredArtifacts.length} ${t("InsightWorkbench_MetadataExplorer_Artifacts", "artifacts")}`}</Badge>
             <Badge appearance="ghost">{`${availableWorkspaces.length} ${t("InsightWorkbench_MetadataExplorer_Workspaces", "workspaces")}`}</Badge>
+            {metadataState?.artifactCatalog?.lastRefreshedAtUtc ? (
+              <Badge appearance="outline">
+                {t("InsightWorkbench_MetadataExplorer_LastRefreshed", "Refreshed {{time}}", {
+                  time: new Date(metadataState.artifactCatalog.lastRefreshedAtUtc).toLocaleString(),
+                })}
+              </Badge>
+            ) : null}
           </div>
 
           {filteredArtifacts.length === 0 ? (
@@ -673,10 +905,10 @@ function MetadataExplorerContent({ workloadClient, item }: { workloadClient: Wor
   );
 }
 
-export function MetadataExplorerView({ workloadClient, item }: MetadataExplorerViewProps) {
+export function MetadataExplorerView({ workloadClient, item, metadataState, onArtifactCatalogChange }: MetadataExplorerViewProps) {
   return (
     <ItemEditorDefaultView
-      center={{ content: <MetadataExplorerContent workloadClient={workloadClient} item={item} /> }}
+      center={{ content: <MetadataExplorerContent workloadClient={workloadClient} item={item} metadataState={metadataState} onArtifactCatalogChange={onArtifactCatalogChange} /> }}
     />
   );
 }

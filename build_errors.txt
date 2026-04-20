@@ -1,0 +1,24 @@
+*******************     Workload Configuration    *******************
+process.env.WORKLOAD_NAME: undefined
+process.env.ITEM_NAMES: undefined
+process.env.WORKLOAD_VERSION: undefined
+process.env.LOG_LEVEL: undefined
+*********************************************************************
+assets by path [1m[32massets/[39m[22m 108 KiB
+  assets by path [1m[32massets/items/HelloWorldItem/[39m[22m 50.7 KiB
+    assets by path [1m[32massets/items/HelloWorldItem/*.svg[39m[22m 33.4 KiB 4 assets
+    assets by path [1m[32massets/items/HelloWorldItem/*.png[39m[22m 17.3 KiB 3 assets
+  asset [1m[32massets/fabric-icon.png[39m[22m 34.7 KiB [1m[32m[emitted][39m[22m [from: app/assets/fabric-icon.png] [1m[32m[copied][39m[22m
+  asset [1m[32massets/locales/en-US/translation.json[39m[22m 21.5 KiB [1m[32m[emitted][39m[22m [from: app/assets/locales/en-US/translation.json] [1m[32m[copied][39m[22m
+  asset [1m[32massets/components/OneLakeView/EmptyIcon.svg[39m[22m 702 bytes [1m[32m[emitted][39m[22m [from: app/assets/components/OneLakeView/EmptyIcon.svg] [1m[32m[copied][39m[22m
+assets by path [1m[32m*.js[39m[22m 20.1 MiB
+  asset [1m[32mvendors-node_modules_fluentui_react-badge_lib_components_Badge_Badge_js-node_modules_fluentui-62080d.bundle.ceb90999db7b3e5e0e00.js[39m[22m 18.4 MiB [1m[32m[emitted][39m[22m [1m[32m[immutable][39m[22m (id hint: vendors)
+  asset [1m[32mapp_index_ui_tsx.bundle.ceb90999db7b3e5e0e00.js[39m[22m 1.13 MiB [1m[32m[emitted][39m[22m [1m[32m[immutable][39m[22m
+  asset [1m[32mbundle.ceb90999db7b3e5e0e00.js[39m[22m 575 KiB [1m[32m[emitted][39m[22m [1m[32m[immutable][39m[22m (name: main)
+  asset [1m[32mapp_index_worker_ts.bundle.ceb90999db7b3e5e0e00.js[39m[22m 11.9 KiB [1m[32m[emitted][39m[22m [1m[32m[immutable][39m[22m
+asset [1m[32mweb.config[39m[22m 1.5 KiB [1m[32m[emitted][39m[22m [from: app/web.config] [1m[32m[copied][39m[22m
+asset [1m[32mindex.html[39m[22m 234 bytes [1m[32m[emitted][39m[22m
+orphan modules 404 MiB [1m[33m[orphan][39m[22m 4206 modules
+runtime modules 7.51 KiB 14 modules
+cacheable modules 15.6 MiB 937 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 38172 ms

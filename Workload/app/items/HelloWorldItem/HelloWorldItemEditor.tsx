@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -54,7 +54,7 @@ export function HelloWorldItemEditor(props: PageProps) {
 
   const { pathname } = useLocation();
 
-  async function loadDataFromUrl(pageContext: ContextProps, pathname: string): Promise<void> {
+  const loadDataFromUrl = useCallback(async (pageContext: ContextProps, pathname: string): Promise<void> => {
     // Prevent unnecessary reload if the same item is already loaded
     if (pageContext.itemObjectId && item && item.id === pageContext.itemObjectId) {
       console.log(`Item ${pageContext.itemObjectId} is already loaded, skipping reload`);
@@ -99,12 +99,12 @@ export function HelloWorldItemEditor(props: PageProps) {
       console.log(`non-editor context. Current Path: ${pathname}`);
     }
     setIsLoading(false);
-  }
+  }, [item, workloadClient]);
 
 
   useEffect(() => {
     loadDataFromUrl(pageContext, pathname);
-  }, [pageContext, pathname]);
+  }, [loadDataFromUrl, pageContext, pathname]);
 
   const handleOpenSettings = async () => {
     if (item) {

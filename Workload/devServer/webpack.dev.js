@@ -36,18 +36,32 @@ module.exports = merge(baseConfig, {
         }),
     ],
     devServer: {
-        port: 60006,
+        port: Number(process.env.DEVSERVER_PORT || 60006),
         host: '127.0.0.1',
         open: false,
+        client: {
+            overlay: {
+                errors: true,
+                warnings: false,
+                runtimeErrors: (error) => {
+                    const message = error?.message ?? '';
+                    return !(
+                        message.includes('ResizeObserver loop completed with undelivered notifications') ||
+                        message.includes('ResizeObserver loop limit exceeded')
+                    );
+                },
+            },
+        },
         historyApiFallback: true,
         headers: {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET,OPTIONS",
-            "Access-Control-Allow-Headers": "*"
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Sql-Authorization"
         },
         setupMiddlewares: function (middlewares, devServer) {
+            const devServerPort = Number(process.env.DEVSERVER_PORT || 60006);
             console.log('*********************************************************************');
-            console.log('****             DevServer is listening on port 60006            ****');
+            console.log(`****             DevServer is listening on port ${devServerPort}            ****`);
             console.log('*********************************************************************');
 
             // Memory monitoring setup
@@ -84,7 +98,7 @@ module.exports = merge(baseConfig, {
             devServer.app.use((req, res, next) => {
                 res.header('Access-Control-Allow-Origin', '*');
                 res.header('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS');
-                res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
+                res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Sql-Authorization, Content-Length, X-Requested-With');
                 
                 // Handle preflight requests
                 if (req.method === 'OPTIONS') {

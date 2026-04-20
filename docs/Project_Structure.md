@@ -8,9 +8,10 @@ This document explains the structure of this repository and which files are used
 
 ```text
 Workload/
-├── .env.dev                  # Development configuration (COMMITTED)
-├── .env.test                 # Staging configuration (COMMITTED)
-├── .env.prod                 # Production configuration (COMMITTED)
+├── .env.dev                  # Development configuration (LOCAL)
+├── .env.test                 # Staging configuration (LOCAL)
+├── .env.prod                 # Production configuration (LOCAL)
+├── .env.template             # Template committed to source control
 ├── app/                      # Application code
 └── Manifest/                 # Workload and item configuration templates (COMMITTED)
     ├── Product.json          # General workload configuration and metadata
@@ -49,7 +50,7 @@ Every project normally only needs to be set up once at the beginning. All necess
 
 - Prompts for workload name and frontend app ID
 - Generates .env.dev, .env.test, .env.prod files
-- These files are committed to the repository
+- These files are intended for local/private environment configuration
 - No shared config files needed after this
 
 ### 2. Developer Environment Setup (Each developer)
@@ -105,6 +106,8 @@ Each build target uses the appropriate `.env.*` file:
 - **Test/Staging**: Uses `.env.test` → `build/` outputs for staging deployment  
 - **Production**: Uses `.env.prod` → `build/` outputs for production deployment
 
+If a requested env file is missing, workload build scripts fall back to `.env.dev` and then `.env.template` to keep local validation pipelines runnable.
+
 ### Build Dependencies
 
 - **Source**: `Workload/app/` and `Workload/Manifest/` templates
@@ -115,9 +118,6 @@ Each build target uses the appropriate `.env.*` file:
 
 ### What Gets Committed
 
-- ✅ `Workload/.env.dev` - All team members use this for development
-- ✅ `Workload/.env.test` - Staging environment configuration
-- ✅ `Workload/.env.prod` - Production environment configuration
 - ✅ `Workload/.env.template` - Setup template for project initialization
 - ✅ `Workload/Manifest/` - All manifest templates and item configurations
 - ✅ `Workload/app/` - Application source code
@@ -168,6 +168,7 @@ The workload has general configuration files:
 - ❌ `build/DevGateway/` - Generated DevGateway configuration and runtime files
 - ❌ `build/Manifest/` - Processed manifest files and NuGet packages
 - ❌ `build/Manifest/[WorkloadName].[Version].nupkg` - Final deployment package
+- ❌ `Workload/.env.dev`, `Workload/.env.test`, `Workload/.env.prod` - environment-specific local configuration
 
 All files in the `build/` directory are generated on-demand from templates and should not be committed to version control.
 

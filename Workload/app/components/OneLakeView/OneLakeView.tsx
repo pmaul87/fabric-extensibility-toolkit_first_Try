@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Stack } from "@fluentui/react";
 import {
   Tree,
@@ -69,52 +69,7 @@ export function OneLakeView(props: OneLakeViewProps) {
   const [openFilesMenu, setOpenFilesMenu] = useState<boolean>(false);
   const [openTablesMenu, setOpenTablesMenu] = useState<boolean>(false);
 
-  const loadItemData = async (): Promise<void> => {
-    setLoadingStatus("loading");
-    let success = false;
-    try {
-      success = await setTablesAndFiles(null);
-    } catch (exception) {
-      try {
-        success = await setTablesAndFiles(".default");
-      } catch (secondException) {
-        console.error("OneLakeView: Failed to load data for item:", selectedItem, secondException);
-        success = false;
-      }
-    }
-    setLoadingStatus(success ? "idle" : "error");
-  };
-
-  // Initialize selectedItem from props.config.initialItem
-  useEffect(() => {
-    if (props.config.initialItem && 
-        props.config.initialItem.id && 
-        props.config.initialItem.workspaceId) {
-        setSelectedItem(props.config.initialItem);
-    } else {
-      // No initial item provided, show empty state
-      setLoadingStatus("idle");
-    }
-  }, [props.config.initialItem]);
-
-  useEffect(() => {
-    if (selectedItem && selectedItem.id && selectedItem.workspaceId) {
-      loadItemData();
-    } else if (selectedItem) {
-      // selectedItem exists but is missing required properties
-      console.error("OneLakeView: selectedItem is missing required properties:", selectedItem);
-      setLoadingStatus("error");
-    }
-  }, [selectedItem]);
-
-  // Watch for refresh trigger changes to re-fetch data
-  useEffect(() => {
-    if (props.config.refreshTrigger && selectedItem && selectedItem.id && selectedItem.workspaceId) {
-      loadItemData();
-    }
-  }, [props.config.refreshTrigger, selectedItem]);
-
-  async function setTablesAndFiles(additionalScopesToConsent: string): Promise<boolean> {
+  const setTablesAndFiles = useCallback(async (additionalScopesToConsent: string): Promise<boolean> => {
     try {
       if (!selectedItem || !selectedItem.workspaceId || !selectedItem.id) {
         console.error("OneLakeView: Cannot fetch data - selectedItem is invalid:", selectedItem);
@@ -139,7 +94,52 @@ export function OneLakeView(props: OneLakeViewProps) {
       console.error("OneLakeView: Error fetching tables and files:", error);
     }
     return false;
-  }
+  }, [props.workloadClient, selectedItem]);
+
+  const loadItemData = useCallback(async (): Promise<void> => {
+    setLoadingStatus("loading");
+    let success = false;
+    try {
+      success = await setTablesAndFiles(null);
+    } catch (exception) {
+      try {
+        success = await setTablesAndFiles(".default");
+      } catch (secondException) {
+        console.error("OneLakeView: Failed to load data for item:", selectedItem, secondException);
+        success = false;
+      }
+    }
+    setLoadingStatus(success ? "idle" : "error");
+  }, [selectedItem, setTablesAndFiles]);
+
+  // Initialize selectedItem from props.config.initialItem
+  useEffect(() => {
+    if (props.config.initialItem && 
+        props.config.initialItem.id && 
+        props.config.initialItem.workspaceId) {
+        setSelectedItem(props.config.initialItem);
+    } else {
+      // No initial item provided, show empty state
+      setLoadingStatus("idle");
+    }
+  }, [props.config.initialItem]);
+
+  useEffect(() => {
+    if (selectedItem && selectedItem.id && selectedItem.workspaceId) {
+      loadItemData();
+    } else if (selectedItem) {
+      // selectedItem exists but is missing required properties
+      console.error("OneLakeView: selectedItem is missing required properties:", selectedItem);
+      setLoadingStatus("error");
+    }
+  }, [selectedItem, loadItemData]);
+
+  // Watch for refresh trigger changes to re-fetch data
+  useEffect(() => {
+    if (props.config.refreshTrigger && selectedItem && selectedItem.id && selectedItem.workspaceId) {
+      loadItemData();
+    }
+  }, [props.config.refreshTrigger, selectedItem, loadItemData]);
 
   function tableSelectedCallback(tableSelected: TableMetadata) {
     const tableFilePath = OneLakeStorageClient.getPath(selectedItem.workspaceId, selectedItem.id, tableSelected.relativePath);

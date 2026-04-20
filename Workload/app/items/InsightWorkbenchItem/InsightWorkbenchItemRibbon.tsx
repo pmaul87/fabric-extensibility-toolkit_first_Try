@@ -8,6 +8,8 @@ import {
   createSettingsAction,
 } from '../../components/ItemEditor';
 import { ViewContext } from '../../components';
+import { DatabaseRegular } from "@fluentui/react-icons";
+import { VIEW } from './InsightWorkbenchViewNames';
 
 export interface InsightWorkbenchItemRibbonProps extends PageProps {
   isSaveButtonEnabled?: boolean;
@@ -37,6 +39,12 @@ export function InsightWorkbenchItemRibbon(props: InsightWorkbenchItemRibbonProp
   const homeToolbarActions: RibbonAction[] = [
     saveAction,
     settingsAction,
+    {
+      key: 'storage-settings',
+      label: 'OneLake Storage',
+      icon: DatabaseRegular,
+      onClick: () => props.viewContext.setCurrentView(VIEW.STORAGE_SETTINGS),
+    },
   ];
 
   // No right action buttons in Phase 1

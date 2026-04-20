@@ -74,7 +74,7 @@
       ]
     },
     "productDetail": {
-      "publisher": "Name of publisher",
+      "publisher": "Microsoft",
       "slogan": "Workload_Hub_Slogan",
       "description": "Workload_Hub_Description",
       "image": {
@@ -92,11 +92,11 @@
         }
       ],
         "supportLink": {
-          "documentation": {"url": "https://example.com/documentation"},
-          "certification": {"url": "https://example.com/certification"},
-          "help": {"url": "https://example.com/help"},
-          "privacy": {"url": "https://example.com/privacy"},
-          "terms": {"url": "https://example.com/terms"},
+          "documentation": {"url": "https://learn.microsoft.com/fabric/extensibility-toolkit"},
+          "certification": {"url": "https://learn.microsoft.com/en-us/fabric/workload-development-kit/publish-workload-requirements"},
+          "help": {"url": "https://github.com/microsoft/fabric-extensibility-toolkit/issues"},
+          "privacy": {"url": "https://privacy.microsoft.com/privacystatement"},
+          "terms": {"url": "https://learn.microsoft.com/en-us/legal/termsofuse"},
           "license": {"url": "https://azuremarketplace.microsoft.com"} 
       }
     },

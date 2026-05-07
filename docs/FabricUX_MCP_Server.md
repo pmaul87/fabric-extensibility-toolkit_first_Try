@@ -101,11 +101,67 @@ This will:
 npm run build
 ```
 
-### 7. Configure in Cursor/GitHub Copilot
+### 7. Configure Your MCP Client
 
-Add the following to your MCP configuration file:
+Use the setup that matches your client.
 
-**For Cursor:** `C:\Users\<username>\.cursor\mcp.json`
+#### Option A: VS Code with GitHub Copilot
+
+The simplest path in VS Code is the built-in add flow:
+
+1. Open the Command Palette with `Ctrl+Shift+P`
+2. Run `MCP: Add Server`
+3. Select `Command (stdio)`
+4. Enter `npm` as the command
+5. Enter the arguments below:
+
+```text
+run start:stdio --prefix C:\Users\YOUR_USERNAME\mcp-servers\mcp-fabric-ux-system
+```
+
+6. Enter `mcp_fabricux` as the server ID
+7. Save it to either `Workspace` or `Global`, depending on whether you want the server available only in this repo or in every VS Code workspace
+
+If you prefer to edit the file manually, use `.vscode/mcp.json` for workspace scope. Add:
+
+```json
+{
+  "servers": {
+    "mcp_fabricux": {
+      "type": "stdio",
+      "command": "npm",
+      "args": [
+        "run",
+        "start:stdio",
+        "--prefix",
+        "C:\\Users\\YOUR_USERNAME\\mcp-servers\\mcp-fabric-ux-system"
+      ]
+    }
+  }
+}
+```
+
+#### Option B: GitHub Copilot CLI
+
+If you are using GitHub Copilot CLI, start an interactive session and run:
+
+```text
+/mcp add
+```
+
+Use these values in the form:
+
+- `Name`: `mcp_fabricux`
+- `Type`: `stdio`
+- `Command`: `npm`
+- `Arguments`: `run start:stdio --prefix C:\Users\YOUR_USERNAME\mcp-servers\mcp-fabric-ux-system`
+- `Tools`: `*`
+
+This writes the configuration to `~/.copilot/mcp-config.json`.
+
+#### Option C: Cursor
+
+Add the following to `C:\Users\<username>\.cursor\mcp.json`:
 
 ```json
 {
@@ -129,11 +185,11 @@ Add the following to your MCP configuration file:
 }
 ```
 
-**Important:** Replace `YOUR_USERNAME` with your actual Windows username. Use double backslashes (`\\`) in paths.
+**Important:** Replace `YOUR_USERNAME` with your actual Windows username. Use double backslashes (`\\`) in JSON paths.
 
-### 8. Restart Your Editor
+### 8. Restart Your Editor or CLI
 
-Restart Cursor or VS Code to activate the MCP server.
+Restart VS Code, Cursor, or Copilot CLI after saving the configuration.
 
 ## Using the MCP Server
 
@@ -203,9 +259,12 @@ docker rm chroma_server
 ### MCP Server Not Appearing in Copilot
 
 1. Verify ChromaDB is running: `docker ps`
-2. Check the MCP configuration file path
-3. Ensure paths use double backslashes on Windows
-4. Restart your editor
+2. Check that you edited the correct config for your client:
+  - VS Code: `.vscode/mcp.json` or global MCP config created by `MCP: Add Server`
+  - Copilot CLI: `~/.copilot/mcp-config.json`
+  - Cursor: `~/.cursor/mcp.json`
+3. Ensure paths use double backslashes on Windows where JSON requires them
+4. Restart your editor or CLI session
 5. Check the Output panel in VS Code for MCP errors
 
 ### Indexing Fails

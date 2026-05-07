@@ -1,9 +1,6 @@
-const { exec } = require("child_process");
-const util = require("util");
+const { spawn } = require("child_process");
 const os = require("os");
 const path = require("path");
-
-const execAsync = util.promisify(exec);
 
 // Update path to point to scripts from project root
 const startDevGatewayScript = path.resolve(__dirname, "../../scripts/Run/StartDevGateway.ps1");
@@ -16,21 +13,21 @@ const startDevGatewayScript = path.resolve(__dirname, "../../scripts/Run/StartDe
 async function startDevGateway(interactiveLogin = true) {
   try {
     console.log("🚀 Starting Fabric Dev Gateway...");
-    
-    // Follow the same pattern as build-manifest.js
-    var startDevGatewayCmd = "";
-    const operatingSystem = os.platform();
-    if (operatingSystem === 'win32') {
-      startDevGatewayCmd = startDevGatewayScript;
-    } else {
-      startDevGatewayCmd = `pwsh ${startDevGatewayScript}`;
+
+    const powershellExecutable = os.platform() === "win32" ? "pwsh" : "pwsh";
+    const powershellArgs = ["-File", startDevGatewayScript];
+    if (!interactiveLogin) {
+      powershellArgs.push("-InteractiveLogin:$false");
     }
 
-    console.log(`🔧 Executing: pwsh ${startDevGatewayScript}`);
-    
-    // Execute the PowerShell script using pwsh (like build-manifest.js does)
-    // Note: We don't use execAsync here because the Dev Gateway is a long-running process
-    const childProcess = exec(`pwsh ${startDevGatewayScript}`);
+    console.log(`🔧 Executing: ${powershellExecutable} ${powershellArgs.join(" ")}`);
+
+    // Keep this as a long-running child process
+    const childProcess = spawn(powershellExecutable, powershellArgs, {
+      stdio: ["inherit", "pipe", "pipe"],
+      windowsHide: false,
+      shell: false,
+    });
     
     // Pipe the output to console in real-time
     childProcess.stdout.on('data', (data) => {

@@ -24,7 +24,8 @@
         "recommendedItemTypes": [
           "HelloWorld",
           "InsightWorkbench",
-          "LineageExtractor"
+          "LineageExtractor",
+          "LineageViewer"
         ]
     },
     "createExperience": {
@@ -88,6 +89,27 @@
             "workspace-plus-new-teams"
           ],
           "itemType": "LineageExtractor",
+          "createItemDialogConfig": {
+            "onCreationFailure": { "action": "item.onCreationFailure" },
+            "onCreationSuccess": { "action": "item.onCreationSuccess" }
+          }
+        },
+        {
+          "title": "LineageViewerItem_DisplayName",
+          "description": "LineageViewerItem_Description",
+          "icon": {
+            "name": "assets/images/Workload_Icon.png"
+          },
+          "icon_small": {
+            "name": "assets/images/Workload_Icon.png"
+          },
+          "availableIn": [
+            "home",
+            "create-hub",
+            "workspace-plus-new",
+            "workspace-plus-new-teams"
+          ],
+          "itemType": "LineageViewer",
           "createItemDialogConfig": {
             "onCreationFailure": { "action": "item.onCreationFailure" },
             "onCreationSuccess": { "action": "item.onCreationSuccess" }

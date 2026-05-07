@@ -11,6 +11,7 @@ The LineageExtractor item enables users to extract and store lineage metadata fr
 - **Extract**: Gather granular metadata from Fabric workspaces (columns, measures, visuals, tables, etc.)
 - **Store**: Save lineage data in OneLake lakehouse for analysis
 - **Trace**: Build lineage graphs showing dependencies between artifacts
+- **Visualize**: Make impact and dependency paths understandable for both developers and business users
 
 ## Key Features (Phase 1)
 
@@ -19,6 +20,45 @@ The LineageExtractor item enables users to extract and store lineage metadata fr
 - Spark Livy integration for programmatic notebook execution
 - OneLake storage with organized folder structure
 - Progress tracking and error handling
+
+## New Phase: Dependency Graph and Impact View (Phase 2)
+
+The project now includes processing logic to create a dependency graph from extracted Delta tables.
+
+### What can be visualized
+
+- **Report visual -> semantic model dependencies**
+  - Which visuals consume which semantic model objects
+  - Which reports contain those visuals
+- **Semantic model internal dependencies**
+  - Table -> column and table -> measure containment
+  - Relationship links between columns
+  - DAX-based dependencies (measure -> column, measure -> measure, calculated column -> column)
+
+### Why this helps
+
+- **Developers** can run impact checks before changing a table/column/measure.
+- **Business users** can discuss requirements with clear upstream/downstream context.
+
+### Dependency graph outputs
+
+The processing notebook builds managed Delta tables:
+
+- `lineage_graph_nodes`
+- `lineage_graph_edges`
+- `lineage_graph_lineage_paths` (summary)
+
+These outputs are produced by:
+
+- `Workload/notebooks/processing/build_lineage_graph.ipynb`
+
+### Quick usage
+
+1. Run extraction notebooks first:
+   - `01_extract_semantic_models.ipynb`
+   - `02_extract_reports.ipynb`
+2. Run `build_lineage_graph.ipynb` to rebuild graph tables.
+3. Use the impact tracing helper (`_trace_impacted_nodes`) in the notebook to inspect downstream dependencies from a starting node.
 
 ## Architecture
 

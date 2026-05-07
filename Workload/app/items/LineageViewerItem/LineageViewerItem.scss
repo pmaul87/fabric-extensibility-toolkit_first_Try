@@ -1,0 +1,99 @@
+.lineage-viewer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalM, 12px);
+  padding: var(--spacingVerticalM, 12px);
+  box-sizing: border-box;
+}
+
+.lineage-viewer-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalM, 12px);
+  padding: var(--spacingVerticalM, 12px);
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.lineage-viewer-card {
+  padding: var(--spacingVerticalM, 12px);
+  border-radius: var(--borderRadiusLarge, 8px);
+  background: var(--colorNeutralBackground1, #ffffff);
+  border: 1px solid var(--colorNeutralStroke2, #e0e0e0);
+}
+
+.lineage-viewer-muted {
+  color: var(--colorNeutralForeground3, #616161);
+}
+
+.lineage-viewer-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacingHorizontalS, 8px);
+  margin-top: var(--spacingVerticalS, 8px);
+}
+
+/* ── Graph canvas ─────────────────────────────────────────────────────────── */
+
+.lineage-graph-canvas {
+  width: 100%;
+  height: 540px;
+  border-radius: var(--borderRadiusLarge, 8px);
+  overflow: hidden;
+  border: 1px solid var(--colorNeutralStroke2, #e0e0e0);
+  background: var(--colorNeutralBackground2, #fafafa);
+  flex-shrink: 0;
+
+  /* Ensure ReactFlow controls use Fabric font */
+  font-family: var(--fontFamilyBase, 'Segoe UI', sans-serif);
+
+  /* Style the built-in ReactFlow controls to match Fabric */
+  .react-flow__controls-button {
+    background: var(--colorNeutralBackground1, #fff);
+    border: 1px solid var(--colorNeutralStroke2, #e0e0e0);
+    color: var(--colorNeutralForeground1, #1a1a1a);
+
+    &:hover {
+      background: var(--colorNeutralBackground1Hover, #f5f5f5);
+    }
+  }
+}
+
+/* ── Details section below graph ─────────────────────────────────────────── */
+
+.lineage-viewer-details-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacingVerticalXS, 4px) 0;
+}
+
+/* ── Legend ───────────────────────────────────────────────────────────────── */
+
+.lineage-viewer-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacingVerticalXS, 4px);
+  margin-top: var(--spacingVerticalXS, 4px);
+}
+
+.lineage-viewer-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacingHorizontalXS, 6px);
+}
+
+.lineage-viewer-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px solid currentColor;
+}
+
+.lineage-viewer-legend--report  .lineage-viewer-legend-dot { color: var(--colorBrandStroke1, #0078d4); background: var(--colorBrandBackground2, #cce4f6); }
+.lineage-viewer-legend--visual   .lineage-viewer-legend-dot { color: #7c3aed; background: #ede8f8; }
+.lineage-viewer-legend--measure  .lineage-viewer-legend-dot { color: #2d7d32; background: #e6f4ea; }
+.lineage-viewer-legend--column   .lineage-viewer-legend-dot { color: #00796b; background: #e0f2f1; }
+.lineage-viewer-legend--table    .lineage-viewer-legend-dot { color: #c67a00; background: #fff3cd; }
+

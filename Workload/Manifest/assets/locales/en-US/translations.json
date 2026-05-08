@@ -17,5 +17,8 @@
     "LineageExtractorItem_Description": "Extract and store lineage metadata from Fabric artifacts",
     "LineageViewerItem_DisplayName": "Lineage Viewer",
     "LineageViewerItem_DisplayName_Plural": "Lineage Viewers",
-    "LineageViewerItem_Description": "Visualize lineage and dependency relationships across reports and semantic model entities"
+    "LineageViewerItem_Description": "Visualize lineage and dependency relationships across reports and semantic model entities",
+    "RequirementBoardItem_DisplayName": "Requirement Board",
+    "RequirementBoardItem_DisplayName_Plural": "Requirement Boards",
+    "RequirementBoardItem_Description": "Track requirements with a Kanban board and link them to lineage nodes"
 }

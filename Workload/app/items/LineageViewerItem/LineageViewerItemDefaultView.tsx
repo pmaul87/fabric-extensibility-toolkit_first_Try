@@ -32,9 +32,14 @@ import {
   FolderOpen20Regular,
   Globe20Regular,
   Search20Regular,
+  Link24Regular,
+  Open24Regular,
 } from "@fluentui/react-icons";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { ItemEditorDefaultView } from "../../components/ItemEditor";
+import { getWorkloadItem } from "../../controller/ItemCRUDController";
+import type { Requirement, RequirementBoardItemDefinition } from "../RequirementBoardItem";
+import { KANBAN_COLUMNS, PRIORITY_CONFIG } from "../RequirementBoardItem";
 import { ItemWithDefinition } from "../../controller/ItemCRUDController";
 import {
   LineageEdgeDirection,
@@ -486,7 +491,7 @@ function collectReachableNodeIds(seedNodeIds: string[], edges: LineageViewerEdge
 
 export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultViewProps) {
   const { t } = useTranslation();
-  const { definition, onDefinitionChange } = props;
+  const { definition, onDefinitionChange, workloadClient } = props;
 
   const resetFilters = () => {
     onDefinitionChange({
@@ -528,6 +533,42 @@ export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultView
   const [scopeDraftWorkspaceId, setScopeDraftWorkspaceId] = useState("all");
   const [itemSearchText, setItemSearchText] = useState("");
   const [activeRelatedObjectKey, setActiveRelatedObjectKey] = useState<RelatedObjectKey | null>(null);
+
+  // ── Requirements board integration ────────────────────────────────────────
+  const [loadedRequirements, setLoadedRequirements] = useState<Requirement[]>([]);
+  const [connectBoardDialogOpen, setConnectBoardDialogOpen] = useState(false);
+  const [boardIdInput, setBoardIdInput] = useState(definition.connectedRequirementsBoardId ?? "");
+
+  useEffect(() => {
+    const boardId = definition.connectedRequirementsBoardId;
+    if (!boardId) {
+      setLoadedRequirements([]);
+      return undefined;
+    }
+    let cancelled = false;
+    getWorkloadItem<RequirementBoardItemDefinition>(workloadClient, boardId)
+      .then((loaded) => {
+        if (!cancelled) {
+          setLoadedRequirements(loaded.definition?.requirements ?? []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoadedRequirements([]);
+      });
+    return () => { cancelled = true; };
+  }, [definition.connectedRequirementsBoardId, workloadClient]);
+
+  // Handle #focus=nodeId hash when navigated from RequirementBoard "Show in Lineage"
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith("#focus=")) {
+      const nodeId = decodeURIComponent(hash.slice(7));
+      if (nodeId) {
+        onDefinitionChange({ ...definition, focusNodeId: nodeId });
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const modelCards = useMemo(() => {
     const modelMap = new Map<string, { id: string; displayName: string; nodeCount: number }>();
@@ -1017,6 +1058,37 @@ export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultView
                 ))}
               </div>
             </Card>
+
+            {/* ── Requirement Board connection ── */}
+            <Card className="lineage-viewer-card">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div>
+                  <Text weight="semibold" size={300}>{t("LineageViewer_RequirementBoard", "Requirement Board")}</Text>
+                  {definition.connectedRequirementsBoardId ? (
+                    <Text size={100} className="lineage-viewer-muted" block>
+                      {t("LineageViewer_BoardConnected", "Connected")}
+                    </Text>
+                  ) : (
+                    <Text size={100} className="lineage-viewer-muted" block>
+                      {t("LineageViewer_BoardNotConnected", "Not connected")}
+                    </Text>
+                  )}
+                </div>
+                <Button
+                  icon={<Link24Regular />}
+                  size="small"
+                  appearance={definition.connectedRequirementsBoardId ? "primary" : "subtle"}
+                  onClick={() => {
+                    setBoardIdInput(definition.connectedRequirementsBoardId ?? "");
+                    setConnectBoardDialogOpen(true);
+                  }}
+                >
+                  {definition.connectedRequirementsBoardId
+                    ? t("LineageViewer_BoardManage", "Manage")
+                    : t("LineageViewer_BoardConnect", "Connect")}
+                </Button>
+              </div>
+            </Card>
           </div>
         ),
       }}
@@ -1233,6 +1305,76 @@ export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultView
                     </div>
                   </div>
                 )}
+
+                {/* ── Requirements panel ── */}
+                {(() => {
+                  if (!selectedNode) return null;
+                  const nodeRequirements = loadedRequirements.filter((r) =>
+                    r.linkedNodeIds.includes(selectedNode.nodeId)
+                  );
+                  return (
+                    <div className="req-lineage-panel">
+                      <div className="req-lineage-panel-header">
+                        <span>{t("LineageViewer_Requirements", "Requirements")}</span>
+                        <Badge appearance="tint" size="small">{nodeRequirements.length}</Badge>
+                        <Button
+                          icon={<Link24Regular />}
+                          size="small"
+                          appearance="subtle"
+                          title={
+                            definition.connectedRequirementsBoardId
+                              ? t("LineageViewer_ConnectedBoard", "Connected board: {{id}}", {
+                                  id: definition.connectedRequirementsBoardId,
+                                })
+                              : t("LineageViewer_ConnectBoard", "Connect a Requirement Board")
+                          }
+                          onClick={() => {
+                            setBoardIdInput(definition.connectedRequirementsBoardId ?? "");
+                            setConnectBoardDialogOpen(true);
+                          }}
+                        />
+                      </div>
+                      {nodeRequirements.length === 0 ? (
+                        <Text size={200} className="req-lineage-empty">
+                          {definition.connectedRequirementsBoardId
+                            ? t("LineageViewer_NoRequirementsForNode", "No requirements linked to this node.")
+                            : t("LineageViewer_NoBoardConnected", "Connect a Requirement Board to see linked requirements.")}
+                        </Text>
+                      ) : (
+                        nodeRequirements.map((req) => (
+                          <div key={req.id} className="req-lineage-card">
+                            <div className="req-lineage-card-row">
+                              <span className="req-lineage-card-title">{req.title}</span>
+                              <Badge color={PRIORITY_CONFIG[req.priority].color} appearance="tint" size="small">
+                                {PRIORITY_CONFIG[req.priority].label}
+                              </Badge>
+                            </div>
+                            <div className="req-lineage-card-row">
+                              <Badge appearance="outline" size="small">
+                                {KANBAN_COLUMNS.find((c) => c.id === req.status)?.label ?? req.status}
+                              </Badge>
+                              {definition.connectedRequirementsBoardId && (
+                                <Button
+                                  icon={<Open24Regular />}
+                                  size="small"
+                                  appearance="subtle"
+                                  title={t("LineageViewer_OpenBoard", "Open in Requirement Board")}
+                                  onClick={async () => {
+                                    try {
+                                      await workloadClient.navigation.navigate("workload", {
+                                        path: `/RequirementBoardItem-editor/${definition.connectedRequirementsBoardId}`,
+                                      });
+                                    } catch { /* ignore */ }
+                                  }}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  );
+                })()}
               </Card>
             )}
 
@@ -1244,6 +1386,60 @@ export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultView
         ),
       }}
       />
+
+      {/* ── Connect Requirements Board Dialog ── */}
+      <Dialog open={connectBoardDialogOpen}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{t("LineageViewer_ConnectBoardDialog_Title", "Connect Requirement Board")}</DialogTitle>
+            <DialogContent>
+              <Field
+                label={t("LineageViewer_ConnectBoardDialog_Field", "Requirement Board Item ID")}
+                hint={t(
+                  "LineageViewer_ConnectBoardDialog_Hint",
+                  "Paste the Fabric item GUID of a Requirement Board. Requirements linked to nodes in that board will appear in the details panel."
+                )}
+              >
+                <Input
+                  value={boardIdInput}
+                  onChange={(_, d) => setBoardIdInput(d.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+              </Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setConnectBoardDialogOpen(false)}>
+                {t("LineageViewer_Cancel", "Cancel")}
+              </Button>
+              {definition.connectedRequirementsBoardId && (
+                <Button
+                  appearance="subtle"
+                  onClick={() => {
+                    onDefinitionChange({ ...definition, connectedRequirementsBoardId: undefined });
+                    setLoadedRequirements([]);
+                    setConnectBoardDialogOpen(false);
+                  }}
+                >
+                  {t("LineageViewer_DisconnectBoard", "Disconnect board")}
+                </Button>
+              )}
+              <Button
+                appearance="primary"
+                onClick={() => {
+                  onDefinitionChange({
+                    ...definition,
+                    connectedRequirementsBoardId: boardIdInput.trim() || undefined,
+                  });
+                  setConnectBoardDialogOpen(false);
+                }}
+              >
+                {t("LineageViewer_Apply", "Apply")}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
       <Dialog
         open={scopeDialogOpen}
         onOpenChange={(_, data) => {

@@ -6,6 +6,7 @@ import { HelloWorldItemEditor} from "./items/HelloWorldItem";
 import { InsightWorkbenchItemEditor } from "./items/InsightWorkbenchItem";
 import { LineageExtractorItemEditor } from "./items/LineageExtractorItem";
 import { LineageViewerItemEditor } from "./items/LineageViewerItem";
+import { RequirementBoardItemEditor } from "./items/RequirementBoardItem";
 import { ConditionalPlaygroundRoutes } from "./playground/ConditionalPlaygroundRoutes";
 
 /*
@@ -57,6 +58,12 @@ export function App({ history, workloadClient }: AppProps) {
             <Route path="/LineageViewerItem-editor/:itemObjectId">
                 <LineageViewerItemEditor
                     workloadClient={workloadClient} data-testid="LineageViewerItem-editor" />
+            </Route>
+
+            {/* Routings for the RequirementBoard Item Editor */}
+            <Route path="/RequirementBoardItem-editor/:itemObjectId">
+                <RequirementBoardItemEditor
+                    workloadClient={workloadClient} data-testid="RequirementBoardItem-editor" />
             </Route>
 
             {/* Conditionally loaded playground routes (only in development) */}

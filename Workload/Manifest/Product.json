@@ -25,7 +25,8 @@
           "HelloWorld",
           "InsightWorkbench",
           "LineageExtractor",
-          "LineageViewer"
+          "LineageViewer",
+          "RequirementBoard"
         ]
     },
     "createExperience": {

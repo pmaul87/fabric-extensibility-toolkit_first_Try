@@ -46,4 +46,6 @@ export interface LineageViewerItemDefinition {
   selectedEntityTypes?: LineageViewerNode["entityType"][];
   maxDepth?: number;
   direction?: LineageEdgeDirection;
+  /** Fabric item GUID of a connected RequirementBoard item */
+  connectedRequirementsBoardId?: string;
 }

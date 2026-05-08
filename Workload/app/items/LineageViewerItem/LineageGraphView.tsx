@@ -51,6 +51,26 @@ const PALETTE: Record<string, EntityPalette> = {
     border: "var(--colorPaletteMarigoldBorderActive, #c67a00)",
     typeLabel: "Table",
   },
+  dataflow: {
+    bg: "var(--colorPaletteBerryBackground2, #fbe5ef)",
+    border: "var(--colorPaletteBerryBorderActive, #a4262c)",
+    typeLabel: "Dataflow",
+  },
+  notebook: {
+    bg: "var(--colorPaletteCornflowerBackground2, #e8efff)",
+    border: "var(--colorPaletteCornflowerBorderActive, #4f6bed)",
+    typeLabel: "Notebook",
+  },
+  lakehouse: {
+    bg: "var(--colorPaletteSeafoamBackground2, #e2f3ef)",
+    border: "var(--colorPaletteSeafoamBorderActive, #0f766e)",
+    typeLabel: "Lakehouse",
+  },
+  warehouse: {
+    bg: "var(--colorPaletteDarkOrangeBackground2, #ffe8d1)",
+    border: "var(--colorPaletteDarkOrangeBorderActive, #b75d00)",
+    typeLabel: "Warehouse",
+  },
   semantic_object: {
     bg: "var(--colorPalettePeachBackground2, #fdf0e8)",
     border: "var(--colorPalettePeachBorderActive, #d4662a)",
@@ -77,6 +97,7 @@ export interface LineageNodeData extends Record<string, unknown> {
   subLabel?: string;
   entityType: string;
   isFocus: boolean;
+  isRelated: boolean;
   depth: number;
 }
 
@@ -87,12 +108,18 @@ type LineageFlowNode = Node<LineageNodeData, "lineageNode">;
 function LineageNodeComponent({ data }: NodeProps<LineageFlowNode>) {
   const pal = palette(data.entityType);
   const isFocus = data.isFocus;
+  const isRelated = data.isRelated;
+  const relatedBg = "var(--colorPaletteLavenderBackground2, #f0e8ff)";
+  const relatedBorder = "var(--colorPaletteLavenderBorderActive, #6b4eff)";
+  const nodeBg = isFocus ? "var(--colorBrandBackground, #0078d4)" : isRelated ? relatedBg : pal.bg;
+  const nodeBorder = isFocus ? "var(--colorBrandBackground, #0078d4)" : isRelated ? relatedBorder : pal.border;
+  const accentColor = isFocus ? "#fff" : isRelated ? relatedBorder : pal.border;
 
   return (
     <div
       style={{
-        background: isFocus ? "var(--colorBrandBackground, #0078d4)" : pal.bg,
-        border: `2px solid ${isFocus ? "var(--colorBrandBackground, #0078d4)" : pal.border}`,
+        background: nodeBg,
+        border: `2px solid ${nodeBorder}`,
         borderRadius: "var(--borderRadiusMedium, 6px)",
         padding: "8px 12px",
         width: NODE_W,
@@ -104,7 +131,7 @@ function LineageNodeComponent({ data }: NodeProps<LineageFlowNode>) {
         userSelect: "none",
       }}
     >
-      <Handle type="target" position={Position.Left} style={{ background: isFocus ? "#fff" : pal.border, border: "none" }} />
+      <Handle type="target" position={Position.Left} style={{ background: accentColor, border: "none" }} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {/* entity-type pill */}
@@ -114,7 +141,7 @@ function LineageNodeComponent({ data }: NodeProps<LineageFlowNode>) {
             fontWeight: 700,
             textTransform: "uppercase",
             letterSpacing: "0.08em",
-            color: isFocus ? "rgba(255,255,255,0.75)" : pal.border,
+            color: isFocus ? "rgba(255,255,255,0.75)" : accentColor,
           }}
         >
           {pal.typeLabel}
@@ -153,7 +180,7 @@ function LineageNodeComponent({ data }: NodeProps<LineageFlowNode>) {
         )}
       </div>
 
-      <Handle type="source" position={Position.Right} style={{ background: isFocus ? "#fff" : pal.border, border: "none" }} />
+      <Handle type="source" position={Position.Right} style={{ background: accentColor, border: "none" }} />
     </div>
   );
 }
@@ -165,8 +192,10 @@ const NODE_TYPES = { lineageNode: LineageNodeComponent };
 function buildLayout(
   lvNodes: LineageViewerNode[],
   lvEdges: LineageViewerEdge[],
-  focusNodeId: string,
-  depthByNodeId: Map<string, number>
+  focusNodeId: string | undefined,
+  depthByNodeId: Map<string, number>,
+  highlightedNodeIds: Set<string>,
+  highlightedEdgeIds: Set<string>
 ): { nodes: LineageFlowNode[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
@@ -191,25 +220,33 @@ function buildLayout(
         subLabel: n.tableName ?? undefined,
         entityType: n.entityType,
         isFocus: n.nodeId === focusNodeId,
+        isRelated: highlightedNodeIds.has(n.nodeId) && n.nodeId !== focusNodeId,
         depth: depthByNodeId.get(n.nodeId) ?? 0,
       },
     };
   });
 
-  const edges: Edge[] = lvEdges.map((e) => ({
-    id: e.edgeId,
-    source: e.fromNodeId,
-    target: e.toNodeId,
-    type: "smoothstep",
-    animated: false,
-    markerEnd: { type: MarkerType.ArrowClosed, color: "var(--colorNeutralStroke1, #9e9e9e)" },
-    style: { stroke: "var(--colorNeutralStroke1, #9e9e9e)", strokeWidth: 1.5 },
-    label: e.edgeType.replace(/_/g, " "),
-    labelStyle: { fontSize: 9, fill: "var(--colorNeutralForeground3, #757575)" },
-    labelBgStyle: { fill: "var(--colorNeutralBackground1, #fff)", fillOpacity: 0.85 },
-    labelBgPadding: [4, 2] as [number, number],
-    labelBgBorderRadius: 3,
-  }));
+  const edges: Edge[] = lvEdges.map((e) => {
+    const isHighlighted = highlightedEdgeIds.has(e.edgeId);
+    const edgeColor = isHighlighted
+      ? "var(--colorPaletteLavenderBorderActive, #6b4eff)"
+      : "var(--colorNeutralStroke1, #9e9e9e)";
+
+    return {
+      id: e.edgeId,
+      source: e.fromNodeId,
+      target: e.toNodeId,
+      type: "smoothstep",
+      animated: false,
+      markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
+      style: { stroke: edgeColor, strokeWidth: isHighlighted ? 2.2 : 1.5 },
+      label: e.edgeType.replace(/_/g, " "),
+      labelStyle: { fontSize: 9, fill: isHighlighted ? edgeColor : "var(--colorNeutralForeground3, #757575)" },
+      labelBgStyle: { fill: "var(--colorNeutralBackground1, #fff)", fillOpacity: 0.85 },
+      labelBgPadding: [4, 2] as [number, number],
+      labelBgBorderRadius: 3,
+    };
+  });
 
   return { nodes, edges };
 }
@@ -219,26 +256,39 @@ function buildLayout(
 interface LineageGraphViewProps {
   nodes: LineageViewerNode[];
   edges: LineageViewerEdge[];
-  focusNodeId: string;
+  focusNodeId?: string;
   depthByNodeId: Map<string, number>;
+  highlightedNodeIds?: Set<string>;
+  highlightedEdgeIds?: Set<string>;
   onNodeClick?: (nodeId: string) => void;
 }
 
-function LineageGraphInner({ nodes: lvNodes, edges: lvEdges, focusNodeId, depthByNodeId, onNodeClick }: LineageGraphViewProps) {
+function LineageGraphInner({
+  nodes: lvNodes,
+  edges: lvEdges,
+  focusNodeId,
+  depthByNodeId,
+  highlightedNodeIds,
+  highlightedEdgeIds,
+  onNodeClick,
+}: LineageGraphViewProps) {
+  const effectiveHighlightedNodeIds = highlightedNodeIds ?? new Set<string>();
+  const effectiveHighlightedEdgeIds = highlightedEdgeIds ?? new Set<string>();
+
   const layout = useMemo(
-    () => buildLayout(lvNodes, lvEdges, focusNodeId, depthByNodeId),
+    () => buildLayout(lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lvNodes, lvEdges, focusNodeId, depthByNodeId]
+    [lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
 
   useEffect(() => {
-    const { nodes: n, edges: e } = buildLayout(lvNodes, lvEdges, focusNodeId, depthByNodeId);
+    const { nodes: n, edges: e } = buildLayout(lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds);
     setNodes(n);
     setEdges(e);
-  }, [lvNodes, lvEdges, focusNodeId, depthByNodeId, setNodes, setEdges]);
+  }, [lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, setNodes, setEdges]);
 
   const handleNodeClick = useCallback(
     (_evt: React.MouseEvent, node: Node) => {
@@ -297,6 +347,7 @@ function LineageGraphInner({ nodes: lvNodes, edges: lvEdges, focusNodeId, depthB
         nodeColor={(node) => {
           const d = node.data as LineageNodeData;
           if (d.isFocus) return "var(--colorBrandBackground, #0078d4)";
+          if (d.isRelated) return "var(--colorPaletteLavenderBorderActive, #6b4eff)";
           return palette(d.entityType).border;
         }}
         maskColor="rgba(255,255,255,0.55)"

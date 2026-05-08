@@ -8,7 +8,6 @@ import { callOpenSettings } from "../../controller/SettingsController";
 import { callNotificationOpen } from "../../controller/NotificationController";
 import { ItemEditor } from "../../components/ItemEditor";
 import { LineageViewerItemDefinition } from "./LineageViewerItemDefinition";
-import { LineageViewerItemEmptyView } from "./LineageViewerItemEmptyView";
 import { LineageViewerItemDefaultView } from "./LineageViewerItemDefaultView";
 import { LineageViewerItemRibbon } from "./LineageViewerItemRibbon";
 import "./LineageViewerItem.scss";
@@ -20,7 +19,7 @@ export const EDITOR_VIEW_TYPES = {
 
 const INITIAL_DEFINITION: LineageViewerItemDefinition = {
   direction: "both",
-  maxDepth: 2,
+  maxDepth: 4,
 };
 
 const enum SaveStatus {
@@ -38,7 +37,6 @@ export function LineageViewerItemEditor(props: PageProps) {
   const [item, setItem] = useState<ItemWithDefinition<LineageViewerItemDefinition>>();
   const [definition, setDefinition] = useState<LineageViewerItemDefinition>(INITIAL_DEFINITION);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>(SaveStatus.NotSaved);
-  const [viewSetter, setViewSetter] = useState<((view: string) => void) | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -60,13 +58,6 @@ export function LineageViewerItemEditor(props: PageProps) {
 
     loadData();
   }, [pageContext.itemObjectId, workloadClient]);
-
-  useEffect(() => {
-    if (!isLoading && item && viewSetter) {
-      const hasGraphData = Boolean(definition.graphSnapshot?.nodes?.length);
-      viewSetter(hasGraphData ? EDITOR_VIEW_TYPES.DEFAULT : EDITOR_VIEW_TYPES.EMPTY);
-    }
-  }, [definition.graphSnapshot, isLoading, item, viewSetter]);
 
   const handleDefinitionChange = (next: LineageViewerItemDefinition) => {
     setDefinition(next);
@@ -132,18 +123,6 @@ export function LineageViewerItemEditor(props: PageProps) {
 
   const views = [
     {
-      name: EDITOR_VIEW_TYPES.EMPTY,
-      component: (
-        <LineageViewerItemEmptyView
-          onGetStarted={() => {
-            if (viewSetter) {
-              viewSetter(EDITOR_VIEW_TYPES.DEFAULT);
-            }
-          }}
-        />
-      ),
-    },
-    {
       name: EDITOR_VIEW_TYPES.DEFAULT,
       component: (
         <LineageViewerItemDefaultView
@@ -159,6 +138,7 @@ export function LineageViewerItemEditor(props: PageProps) {
   return (
     <ItemEditor
       isLoading={isLoading}
+      getInitialView={() => EDITOR_VIEW_TYPES.DEFAULT}
       loadingMessage={t("LineageViewer_Loading", "Loading lineage viewer...")}
       ribbon={(context) => (
         <LineageViewerItemRibbon
@@ -171,11 +151,6 @@ export function LineageViewerItemEditor(props: PageProps) {
         />
       )}
       views={views}
-      viewSetter={(setCurrentView) => {
-        if (!viewSetter) {
-          setViewSetter(() => setCurrentView);
-        }
-      }}
     />
   );
 }

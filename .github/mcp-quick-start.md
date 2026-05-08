@@ -46,8 +46,8 @@
 
    Run `MCP: Add Server` from the Command Palette, choose `Command (stdio)`, then enter:
 
-   - Command: `npm`
-   - Arguments: `run start:stdio --prefix C:\Users\<YourUsername>\mcp-servers\mcp-fabric-ux-system`
+   - Command: `node`
+   - Arguments: `C:\Users\<YourUsername>\mcp-servers\mcp-fabric-ux-system\dist\src\index.js --stdio`
    - Server ID: `mcp_fabricux`
 
    Or add this to `.vscode/mcp.json`:
@@ -57,17 +57,20 @@
      "servers": {
        "mcp_fabricux": {
          "type": "stdio",
-         "command": "npm",
+          "command": "node",
          "args": [
-           "run",
-           "start:stdio",
-           "--prefix",
-           "C:\\Users\\<YourUsername>\\mcp-servers\\mcp-fabric-ux-system"
-         ]
+            "C:\\Users\\<YourUsername>\\mcp-servers\\mcp-fabric-ux-system\\dist\\src\\index.js",
+            "--stdio"
+          ],
+          "env": {
+            "MCP_LOG_LEVEL": "warn"
+          }
        }
      }
    }
    ```
+
+   This avoids npm banner output being interpreted as MCP protocol messages and reduces startup noise.
 
    **GitHub Copilot CLI**
 

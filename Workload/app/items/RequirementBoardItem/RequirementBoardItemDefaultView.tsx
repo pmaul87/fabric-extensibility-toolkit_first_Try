@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Badge,
@@ -41,6 +41,8 @@ import { PageProps } from "../../App";
 interface RequirementBoardItemDefaultViewProps extends PageProps {
   definition: RequirementBoardItemDefinition;
   onDefinitionChange: (def: RequirementBoardItemDefinition) => void;
+  createRequestToken?: number;
+  createRequestNodeId?: string;
 }
 
 function makeId(): string {
@@ -50,6 +52,8 @@ function makeId(): string {
 function now(): string {
   return new Date().toISOString();
 }
+
+const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // ─── Requirement Edit Dialog ─────────────────────────────────────────────────
 
@@ -424,16 +428,21 @@ export function RequirementBoardItemDefaultView({
   workloadClient,
   definition,
   onDefinitionChange,
+  createRequestToken,
+  createRequestNodeId,
 }: RequirementBoardItemDefaultViewProps) {
   const { t } = useTranslation();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editingReq, setEditingReq] = useState<Requirement | null>(null);
+  const [editingReq, setEditingReq] = useState<Partial<Requirement> | null>(null);
   const [editingDefaultStatus, setEditingDefaultStatus] = useState<RequirementStatus>("backlog");
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [lineageItemIdInput, setLineageItemIdInput] = useState(
     definition.linkedLineageViewerItemId ?? ""
   );
   const draggingIdRef = useRef<string | null>(null);
+
+  const trimmedLineageIdInput = lineageItemIdInput.trim();
+  const lineageIdInvalid = Boolean(trimmedLineageIdInput) && !GUID_PATTERN.test(trimmedLineageIdInput);
 
   const requirements = definition.requirements ?? [];
 
@@ -446,8 +455,8 @@ export function RequirementBoardItemDefaultView({
 
   // ── Dialog handlers ──────────────────────────────────────────────────────
 
-  const openAddDialog = (status: RequirementStatus) => {
-    setEditingReq(null);
+  const openAddDialog = (status: RequirementStatus, initialDraft?: Partial<Requirement>) => {
+    setEditingReq(initialDraft ?? null);
     setEditingDefaultStatus(status);
     setEditDialogOpen(true);
   };
@@ -520,12 +529,32 @@ export function RequirementBoardItemDefaultView({
   // ── Link lineage viewer ──────────────────────────────────────────────────
 
   const saveLinkage = () => {
+    if (lineageIdInvalid) {
+      return;
+    }
+
     onDefinitionChange({
       ...definition,
-      linkedLineageViewerItemId: lineageItemIdInput.trim() || undefined,
+      linkedLineageViewerItemId: trimmedLineageIdInput || undefined,
     });
     setLinkDialogOpen(false);
   };
+
+  // UI Change: deep-link driven prefilled requirement creation.
+  // MCP Verification: fabricux MCP verified as running on 2026-05-08.
+  // Guidance: shared patterns for item creation flows and validation feedback.
+  useEffect(() => {
+    if (!createRequestToken) {
+      return;
+    }
+
+    openAddDialog("backlog", createRequestNodeId
+      ? {
+          title: t("RequirementBoard_New_FromNode_Title", "Investigate {{nodeId}}", { nodeId: createRequestNodeId }),
+          linkedNodeIds: [createRequestNodeId],
+        }
+      : undefined);
+  }, [createRequestNodeId, createRequestToken, t]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -608,6 +637,10 @@ export function RequirementBoardItemDefaultView({
                   "RequirementBoard_LinkDialog_Hint",
                   "Paste the Fabric item GUID of the Lineage Viewer you want to connect. Requirements linked to nodes in that viewer will show a 'Show in Lineage' button."
                 )}
+                validationState={lineageIdInvalid ? "error" : undefined}
+                validationMessage={lineageIdInvalid
+                  ? t("RequirementBoard_LinkDialog_InvalidGuid", "Enter a valid Fabric item GUID.")
+                  : undefined}
               >
                 <Input
                   value={lineageItemIdInput}
@@ -632,7 +665,7 @@ export function RequirementBoardItemDefaultView({
                   {t("RequirementBoard_Unlink", "Remove link")}
                 </Button>
               )}
-              <Button appearance="primary" onClick={saveLinkage}>
+              <Button appearance="primary" onClick={saveLinkage} disabled={lineageIdInvalid}>
                 {t("Common_Save", "Save")}
               </Button>
             </DialogActions>

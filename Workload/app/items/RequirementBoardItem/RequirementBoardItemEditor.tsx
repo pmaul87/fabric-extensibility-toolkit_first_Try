@@ -37,6 +37,18 @@ export function RequirementBoardItemEditor(props: PageProps) {
   const [item, setItem] = useState<ItemWithDefinition<RequirementBoardItemDefinition>>();
   const [definition, setDefinition] = useState<RequirementBoardItemDefinition>(INITIAL_DEFINITION);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>(SaveStatus.NotSaved);
+  const [createRequestToken, setCreateRequestToken] = useState(0);
+  const [createRequestNodeId, setCreateRequestNodeId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith("#create=")) {
+      const nodeId = decodeURIComponent(hash.slice("#create=".length));
+      setCreateRequestNodeId(nodeId || undefined);
+      setCreateRequestToken((prev) => prev + 1);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -121,6 +133,8 @@ export function RequirementBoardItemEditor(props: PageProps) {
           workloadClient={workloadClient}
           definition={definition}
           onDefinitionChange={handleDefinitionChange}
+          createRequestToken={createRequestToken}
+          createRequestNodeId={createRequestNodeId}
         />
       ),
     },
@@ -138,7 +152,10 @@ export function RequirementBoardItemEditor(props: PageProps) {
           isSaveButtonEnabled={saveStatus !== SaveStatus.Saving}
           saveItemCallback={handleSave}
           openSettingsCallback={handleOpenSettings}
-          onAddRequirement={() => {/* TODO: wire add from ribbon */}}
+          onAddRequirement={() => {
+            setCreateRequestNodeId(undefined);
+            setCreateRequestToken((prev) => prev + 1);
+          }}
         />
       )}
       views={views}

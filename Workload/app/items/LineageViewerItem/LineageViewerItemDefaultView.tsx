@@ -34,6 +34,7 @@ import {
   Search20Regular,
   Link24Regular,
   Open24Regular,
+  Add24Regular,
 } from "@fluentui/react-icons";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { ItemEditorDefaultView } from "../../components/ItemEditor";
@@ -326,6 +327,7 @@ const FILTERABLE_ENTITY_TYPES: Array<{ value: LineageViewerNode["entityType"]; l
 
 const DEFAULT_ENTITY_TYPES: LineageViewerNode["entityType"][] = FILTERABLE_ENTITY_TYPES.map((item) => item.value);
 const MAX_DEPTH_OPTION = 4;
+const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const LEGACY_DEFAULT_ENTITY_TYPES: LineageViewerNode["entityType"][] = [
   "report",
@@ -538,6 +540,9 @@ export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultView
   const [loadedRequirements, setLoadedRequirements] = useState<Requirement[]>([]);
   const [connectBoardDialogOpen, setConnectBoardDialogOpen] = useState(false);
   const [boardIdInput, setBoardIdInput] = useState(definition.connectedRequirementsBoardId ?? "");
+
+  const trimmedBoardIdInput = boardIdInput.trim();
+  const boardIdInvalid = Boolean(trimmedBoardIdInput) && !GUID_PATTERN.test(trimmedBoardIdInput);
 
   useEffect(() => {
     const boardId = definition.connectedRequirementsBoardId;
@@ -1333,6 +1338,26 @@ export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultView
                             setConnectBoardDialogOpen(true);
                           }}
                         />
+                        {definition.connectedRequirementsBoardId && (
+                          // UI Change: direct create-from-node action to reduce context switching.
+                          // MCP Verification: fabricux MCP verified as running on 2026-05-08.
+                          // Guidance: item creation pattern + clear task-oriented actions near context.
+                          <Button
+                            icon={<Add24Regular />}
+                            size="small"
+                            appearance="subtle"
+                            title={t("LineageViewer_CreateRequirementForNode", "Create requirement for this node")}
+                            onClick={async () => {
+                              try {
+                                await workloadClient.navigation.navigate("workload", {
+                                  path: `/RequirementBoardItem-editor/${definition.connectedRequirementsBoardId}#create=${encodeURIComponent(selectedNode.nodeId)}`,
+                                });
+                              } catch {
+                                // ignore navigation failures
+                              }
+                            }}
+                          />
+                        )}
                       </div>
                       {nodeRequirements.length === 0 ? (
                         <Text size={200} className="req-lineage-empty">
@@ -1399,6 +1424,10 @@ export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultView
                   "LineageViewer_ConnectBoardDialog_Hint",
                   "Paste the Fabric item GUID of a Requirement Board. Requirements linked to nodes in that board will appear in the details panel."
                 )}
+                validationState={boardIdInvalid ? "error" : undefined}
+                validationMessage={boardIdInvalid
+                  ? t("LineageViewer_ConnectBoardDialog_InvalidGuid", "Enter a valid Fabric item GUID.")
+                  : undefined}
               >
                 <Input
                   value={boardIdInput}
@@ -1425,10 +1454,15 @@ export function LineageViewerItemDefaultView(props: LineageViewerItemDefaultView
               )}
               <Button
                 appearance="primary"
+                disabled={boardIdInvalid}
                 onClick={() => {
+                  if (boardIdInvalid) {
+                    return;
+                  }
+
                   onDefinitionChange({
                     ...definition,
-                    connectedRequirementsBoardId: boardIdInput.trim() || undefined,
+                    connectedRequirementsBoardId: trimmedBoardIdInput || undefined,
                   });
                   setConnectBoardDialogOpen(false);
                 }}

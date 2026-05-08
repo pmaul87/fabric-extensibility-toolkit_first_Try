@@ -40,11 +40,52 @@
    npm run build
    ```
 
-5. **Configure Cursor/VS Code**:
-   
-   Edit: `C:\Users\<YourUsername>\.cursor\mcp.json`
-   
-   Add this (replace `<YourUsername>`):
+5. **Configure your client**:
+
+   **VS Code with GitHub Copilot**
+
+   Run `MCP: Add Server` from the Command Palette, choose `Command (stdio)`, then enter:
+
+   - Command: `node`
+   - Arguments: `C:\Users\<YourUsername>\mcp-servers\mcp-fabric-ux-system\dist\src\index.js --stdio`
+   - Server ID: `mcp_fabricux`
+
+   Or add this to `.vscode/mcp.json`:
+
+   ```json
+   {
+     "servers": {
+       "mcp_fabricux": {
+         "type": "stdio",
+          "command": "node",
+         "args": [
+            "C:\\Users\\<YourUsername>\\mcp-servers\\mcp-fabric-ux-system\\dist\\src\\index.js",
+            "--stdio"
+          ],
+          "env": {
+            "MCP_LOG_LEVEL": "warn"
+          }
+       }
+     }
+   }
+   ```
+
+   This avoids npm banner output being interpreted as MCP protocol messages and reduces startup noise.
+
+   **GitHub Copilot CLI**
+
+   Start `copilot`, run `/mcp add`, and use:
+
+   - Name: `mcp_fabricux`
+   - Type: `stdio`
+   - Command: `npm`
+   - Arguments: `run start:stdio --prefix C:\Users\<YourUsername>\mcp-servers\mcp-fabric-ux-system`
+   - Tools: `*`
+
+   **Cursor**
+
+   Edit `C:\Users\<YourUsername>\.cursor\mcp.json` and add:
+
    ```json
    {
      "mcpServers": {
@@ -67,7 +108,7 @@
    }
    ```
 
-6. **Restart Cursor/VS Code** ♻️
+6. **Restart VS Code, Cursor, or Copilot CLI** ♻️
 
 ## 💬 How to Use
 
@@ -99,7 +140,7 @@ docker stop chroma_server
 
 | Issue | Solution |
 |-------|----------|
-| MCP not showing in Copilot | 1. Verify ChromaDB is running: `docker ps`<br>2. Restart editor<br>3. Check `.cursor\mcp.json` paths |
+| MCP not showing in Copilot | 1. Verify ChromaDB is running: `docker ps`<br>2. Restart the client you configured<br>3. Check the correct config file for your client: `.vscode/mcp.json`, `~/.copilot/mcp-config.json`, or `.cursor\mcp.json` |
 | "Cannot connect to ChromaDB" | Run: `docker start chroma_server` |
 | Slow first response | Normal - models are loading |
 | Indexing fails | Ensure ChromaDB is running first |

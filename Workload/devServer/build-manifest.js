@@ -1,10 +1,10 @@
 const fs = require("fs").promises;
-const { exec } = require("child_process");
+const { execFile } = require("child_process");
 const util = require("util");
 const os = require("os");
 const path = require("path");
 
-const execAsync = util.promisify(exec);
+const execFileAsync = util.promisify(execFile);
 
 // Update path to point to scripts from project root
 const buildManifestPackageScript = path.resolve(__dirname, "../../scripts/Build/BuildManifestPackage.ps1");
@@ -15,16 +15,13 @@ const buildManifestPackageScript = path.resolve(__dirname, "../../scripts/Build/
  */
 async function buildManifestPackage() {
   try {
-    var buildManifestPackageCmd = "";
-    const operatingSystem = os.platform();
-    if (operatingSystem === 'win32') {
-      buildManifestPackageCmd = buildManifestPackageScript;
-    } else {
-      buildManifestPackageCmd = `pwsh ${buildManifestPackageScript}`;
-    }
-
     // Run the PowerShell script to build the package manifest
-    const { stdout, stderr } = await execAsync(`pwsh ${buildManifestPackageScript}`);
+    const powershellExecutable = os.platform() === "win32" ? "pwsh" : "pwsh";
+    const { stdout, stderr } = await execFileAsync(
+      powershellExecutable,
+      ["-File", buildManifestPackageScript],
+      { windowsHide: true }
+    );
     if (stderr) {
         console.error(`⚠️ BuildManifestPackage error: ${stderr}`);
     } else {

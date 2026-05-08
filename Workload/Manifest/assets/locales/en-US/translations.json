@@ -11,9 +11,11 @@
     "HelloWorldItem_DisplayName_Plural": "Hello Worlds",
     "HelloWorldItem_Description": "A Hello World Item to start your Dev Experience",
     "InsightWorkbenchItem_DisplayName": "Insight Workbench",
-    "InsightWorkbenchItem_DisplayName_Plural": "Insight Workbenches",
     "InsightWorkbenchItem_Description": "Explore Fabric metadata, semantic models, data lineage, and manage requirements — all in one place.",
     "LineageExtractorItem_DisplayName": "Lineage Extractor",
     "LineageExtractorItem_DisplayName_Plural": "Lineage Extractors",
-    "LineageExtractorItem_Description": "Extract and store lineage metadata from Fabric artifacts"
+    "LineageExtractorItem_Description": "Extract and store lineage metadata from Fabric artifacts",
+    "LineageViewerItem_DisplayName": "Lineage Viewer",
+    "LineageViewerItem_DisplayName_Plural": "Lineage Viewers",
+    "LineageViewerItem_Description": "Visualize lineage and dependency relationships across reports and semantic model entities"
 }

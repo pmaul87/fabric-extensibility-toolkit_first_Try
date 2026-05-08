@@ -22,79 +22,14 @@
         "customActions": [
         ]},
         "recommendedItemTypes": [
-          "HelloWorld",
-          "InsightWorkbench",
-          "LineageExtractor",
           "LineageViewer",
-          "RequirementBoard"
+          "RequirementBoard",
+          "LineageWorkbench"
         ]
     },
     "createExperience": {
       "description": "Workload_Description",
       "cards": [
-        {
-          "title": "HelloWorldItem_DisplayName",
-          "description": "HelloWorldItem_Description",
-          "icon": {
-            "name": "assets/images/HelloWorldItem_Icon.png"
-          },
-          "icon_small": {
-            "name": "assets/images/HelloWorldItem_Icon.png"
-          },
-          "availableIn": [
-            "home",
-            "create-hub",
-            "workspace-plus-new",
-            "workspace-plus-new-teams"
-          ],
-          "itemType": "HelloWorld",
-          "createItemDialogConfig": {
-            "onCreationFailure": { "action": "item.onCreationFailure" },
-            "onCreationSuccess": { "action": "item.onCreationSuccess" }
-          }
-        },
-        {
-          "title": "InsightWorkbenchItem_DisplayName",
-          "description": "InsightWorkbenchItem_Description",
-          "icon": {
-            "name": "assets/images/InsightWorkbenchItem_Icon.png"
-          },
-          "icon_small": {
-            "name": "assets/images/InsightWorkbenchItem_Icon.png"
-          },
-          "availableIn": [
-            "home",
-            "create-hub",
-            "workspace-plus-new",
-            "workspace-plus-new-teams"
-          ],
-          "itemType": "InsightWorkbench",
-          "createItemDialogConfig": {
-            "onCreationFailure": { "action": "item.onCreationFailure" },
-            "onCreationSuccess": { "action": "item.onCreationSuccess" }
-          }
-        },
-        {
-          "title": "LineageExtractorItem_DisplayName",
-          "description": "LineageExtractorItem_Description",
-          "icon": {
-            "name": "assets/images/LineageExtractorItem_Icon.png"
-          },
-          "icon_small": {
-            "name": "assets/images/LineageExtractorItem_Icon.png"
-          },
-          "availableIn": [
-            "home",
-            "create-hub",
-            "workspace-plus-new",
-            "workspace-plus-new-teams"
-          ],
-          "itemType": "LineageExtractor",
-          "createItemDialogConfig": {
-            "onCreationFailure": { "action": "item.onCreationFailure" },
-            "onCreationSuccess": { "action": "item.onCreationSuccess" }
-          }
-        },
         {
           "title": "LineageViewerItem_DisplayName",
           "description": "LineageViewerItem_Description",
@@ -111,6 +46,48 @@
             "workspace-plus-new-teams"
           ],
           "itemType": "LineageViewer",
+          "createItemDialogConfig": {
+            "onCreationFailure": { "action": "item.onCreationFailure" },
+            "onCreationSuccess": { "action": "item.onCreationSuccess" }
+          }
+        },
+        {
+          "title": "RequirementBoardItem_DisplayName",
+          "description": "RequirementBoardItem_Description",
+          "icon": {
+            "name": "assets/images/Workload_Icon.png"
+          },
+          "icon_small": {
+            "name": "assets/images/Workload_Icon.png"
+          },
+          "availableIn": [
+            "home",
+            "create-hub",
+            "workspace-plus-new",
+            "workspace-plus-new-teams"
+          ],
+          "itemType": "RequirementBoard",
+          "createItemDialogConfig": {
+            "onCreationFailure": { "action": "item.onCreationFailure" },
+            "onCreationSuccess": { "action": "item.onCreationSuccess" }
+          }
+        },
+        {
+          "title": "LineageWorkbenchItem_DisplayName",
+          "description": "LineageWorkbenchItem_Description",
+          "icon": {
+            "name": "assets/images/Workload_Icon.png"
+          },
+          "icon_small": {
+            "name": "assets/images/Workload_Icon.png"
+          },
+          "availableIn": [
+            "home",
+            "create-hub",
+            "workspace-plus-new",
+            "workspace-plus-new-teams"
+          ],
+          "itemType": "LineageWorkbench",
           "createItemDialogConfig": {
             "onCreationFailure": { "action": "item.onCreationFailure" },
             "onCreationSuccess": { "action": "item.onCreationSuccess" }

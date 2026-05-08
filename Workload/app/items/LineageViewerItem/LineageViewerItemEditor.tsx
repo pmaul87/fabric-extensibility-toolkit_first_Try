@@ -20,6 +20,7 @@ export const EDITOR_VIEW_TYPES = {
 const INITIAL_DEFINITION: LineageViewerItemDefinition = {
   direction: "both",
   maxDepth: 4,
+  requirements: [],
 };
 
 const enum SaveStatus {
@@ -44,7 +45,11 @@ export function LineageViewerItemEditor(props: PageProps) {
       try {
         if (pageContext.itemObjectId) {
           const loadedItem = await getWorkloadItem<LineageViewerItemDefinition>(workloadClient, pageContext.itemObjectId);
-          const loadedDefinition = loadedItem.definition ?? INITIAL_DEFINITION;
+          const loadedDefinition: LineageViewerItemDefinition = {
+            ...INITIAL_DEFINITION,
+            ...(loadedItem.definition ?? {}),
+            requirements: loadedItem.definition?.requirements ?? [],
+          };
           setItem(loadedItem);
           setDefinition(loadedDefinition);
           setSaveStatus(loadedItem.definition ? SaveStatus.Saved : SaveStatus.NotSaved);

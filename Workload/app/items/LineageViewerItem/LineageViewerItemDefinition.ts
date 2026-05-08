@@ -1,5 +1,7 @@
 export type LineageEdgeDirection = "upstream" | "downstream" | "both";
 
+import type { Requirement } from "../RequirementBoardItem";
+
 export interface LineageViewerNode {
   nodeId: string;
   displayName: string;
@@ -46,6 +48,6 @@ export interface LineageViewerItemDefinition {
   selectedEntityTypes?: LineageViewerNode["entityType"][];
   maxDepth?: number;
   direction?: LineageEdgeDirection;
-  /** Fabric item GUID of a connected RequirementBoard item */
-  connectedRequirementsBoardId?: string;
+  /** Requirements managed inside the same LineageViewer item */
+  requirements?: Requirement[];
 }

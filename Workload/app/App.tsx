@@ -2,11 +2,9 @@ import React from "react";
 import { Route, Router, Switch } from "react-router-dom";
 import { History } from "history";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
-import { HelloWorldItemEditor} from "./items/HelloWorldItem";
-import { InsightWorkbenchItemEditor } from "./items/InsightWorkbenchItem";
-import { LineageExtractorItemEditor } from "./items/LineageExtractorItem";
 import { LineageViewerItemEditor } from "./items/LineageViewerItem";
 import { RequirementBoardItemEditor } from "./items/RequirementBoardItem";
+import { LineageWorkbenchItemEditor } from "./items/LineageWorkbenchItem";
 import { ConditionalPlaygroundRoutes } from "./playground/ConditionalPlaygroundRoutes";
 
 /*
@@ -36,24 +34,6 @@ export interface SharedState {
 export function App({ history, workloadClient }: AppProps) {
     return <Router history={history}>
         <Switch>
-            {/* Routings for the Hello World Item Editor */}
-            <Route path="/HelloWorldItem-editor/:itemObjectId">
-                <HelloWorldItemEditor
-                    workloadClient={workloadClient} data-testid="HelloWorldItem-editor" />
-            </Route>
-
-            {/* Routings for the Insight Workbench Item Editor */}
-            <Route path="/InsightWorkbenchItem-editor/:itemObjectId">
-                <InsightWorkbenchItemEditor
-                    workloadClient={workloadClient} data-testid="InsightWorkbenchItem-editor" />
-            </Route>
-
-            {/* Routings for the LineageExtractor Item Editor */}
-            <Route path="/LineageExtractorItem-editor/:itemObjectId">
-                <LineageExtractorItemEditor
-                    workloadClient={workloadClient} data-testid="LineageExtractorItem-editor" />
-            </Route>
-
             {/* Routings for the LineageViewer Item Editor */}
             <Route path="/LineageViewerItem-editor/:itemObjectId">
                 <LineageViewerItemEditor
@@ -64,6 +44,12 @@ export function App({ history, workloadClient }: AppProps) {
             <Route path="/RequirementBoardItem-editor/:itemObjectId">
                 <RequirementBoardItemEditor
                     workloadClient={workloadClient} data-testid="RequirementBoardItem-editor" />
+            </Route>
+
+            {/* Routings for the LineageWorkbench Item Editor */}
+            <Route path="/LineageWorkbenchItem-editor/:itemObjectId">
+                <LineageWorkbenchItemEditor
+                    workloadClient={workloadClient} data-testid="LineageWorkbenchItem-editor" />
             </Route>
 
             {/* Conditionally loaded playground routes (only in development) */}

@@ -11,7 +11,7 @@ import type {
   SemanticModelData,
   SemanticTableStats,
 } from "../services/SemanticAnalyzerService";
-import type { EntityReportUsageSummary } from "../items/InsightWorkbenchItem/models/ReportUsageModel";
+import type { SemanticEntityReportUsageSummary as EntityReportUsageSummary } from "../services/MetadataService";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { FABRIC_BASE_SCOPES } from "./FabricPlatformScopes";
 

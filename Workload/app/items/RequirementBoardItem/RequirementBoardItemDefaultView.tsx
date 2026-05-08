@@ -111,6 +111,7 @@ function EditDialog({ open, initial, defaultStatus, onSave, onCancel }: EditDial
       tags: initial?.tags ?? [],
       createdAt: initial?.createdAt ?? ts,
       updatedAt: ts,
+      createdBy: initial?.createdBy ?? { displayName: "Current User" },
     });
   };
 

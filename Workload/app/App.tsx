@@ -2,7 +2,7 @@ import React from "react";
 import { Route, Router, Switch } from "react-router-dom";
 import { History } from "history";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
-import { LineageViewerItemEditor } from "./items/LineageViewerItem";
+// Removed: import { LineageViewerItemEditor } from "./items/LineageViewerItem";
 import { RequirementBoardItemEditor } from "./items/RequirementBoardItem";
 import { LineageWorkbenchItemEditor } from "./items/LineageWorkbenchItem";
 import { ConditionalPlaygroundRoutes } from "./playground/ConditionalPlaygroundRoutes";
@@ -35,10 +35,7 @@ export function App({ history, workloadClient }: AppProps) {
     return <Router history={history}>
         <Switch>
             {/* Routings for the LineageViewer Item Editor */}
-            <Route path="/LineageViewerItem-editor/:itemObjectId">
-                <LineageViewerItemEditor
-                    workloadClient={workloadClient} data-testid="LineageViewerItem-editor" />
-            </Route>
+            {/* Removed: Standalone LineageViewerItemEditor route */}
 
             {/* Routings for the RequirementBoard Item Editor */}
             <Route path="/RequirementBoardItem-editor/:itemObjectId">

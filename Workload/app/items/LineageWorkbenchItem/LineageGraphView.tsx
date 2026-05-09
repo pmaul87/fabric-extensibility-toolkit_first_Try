@@ -15,9 +15,34 @@ import {
 import type { Node, Edge, NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
-import { LineageViewerEdge, LineageViewerNode } from "./LineageViewerItemDefinition";
 
-// ─── Entity-type colour palette (Fabric CSS tokens + palette fallbacks) ──────
+// ─── Lineage graph types (inlined from original LineageViewerItemDefinition) ──
+
+export interface LineageViewerNode {
+  nodeId: string;
+  displayName: string;
+  entityType: "report" | "visual" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "warehouse" | "unknown";
+  datasetId?: string;
+  modelName?: string;
+  tableName?: string;
+  objectName?: string;
+  objectSubtype?: string;
+  dataType?: string;
+  reportId?: string;
+  visualType?: string;
+}
+
+export interface LineageViewerEdge {
+  edgeId: string;
+  fromNodeId: string;
+  toNodeId: string;
+  edgeType: string;
+  datasetId?: string;
+  reportId?: string;
+  evidence?: string;
+}
+
+// ÔöÇÔöÇÔöÇ Entity-type colour palette (Fabric CSS tokens + palette fallbacks) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 interface EntityPalette {
   bg: string;
@@ -85,12 +110,12 @@ const PALETTE: Record<string, EntityPalette> = {
 
 const palette = (type: string): EntityPalette => PALETTE[type] ?? PALETTE.unknown;
 
-// ─── Node dimensions for dagre ───────────────────────────────────────────────
+// ÔöÇÔöÇÔöÇ Node dimensions for dagre ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 const NODE_W = 210;
 const NODE_H = 64;
 
-// ─── Custom node data shape ──────────────────────────────────────────────────
+// ÔöÇÔöÇÔöÇ Custom node data shape ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 export interface LineageNodeData extends Record<string, unknown> {
   label: string;
@@ -103,7 +128,7 @@ export interface LineageNodeData extends Record<string, unknown> {
 
 type LineageFlowNode = Node<LineageNodeData, "lineageNode">;
 
-// ─── Custom node renderer ────────────────────────────────────────────────────
+// ÔöÇÔöÇÔöÇ Custom node renderer ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 function LineageNodeComponent({ data }: NodeProps<LineageFlowNode>) {
   const pal = palette(data.entityType);
@@ -187,7 +212,7 @@ function LineageNodeComponent({ data }: NodeProps<LineageFlowNode>) {
 
 const NODE_TYPES = { lineageNode: LineageNodeComponent };
 
-// ─── Dagre auto-layout ───────────────────────────────────────────────────────
+// ÔöÇÔöÇÔöÇ Dagre auto-layout ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 function buildLayout(
   lvNodes: LineageViewerNode[],
@@ -251,7 +276,7 @@ function buildLayout(
   return { nodes, edges };
 }
 
-// ─── Inner component (needs to be inside ReactFlowProvider) ─────────────────
+// ÔöÇÔöÇÔöÇ Inner component (needs to be inside ReactFlowProvider) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 interface LineageGraphViewProps {
   nodes: LineageViewerNode[];
@@ -361,7 +386,7 @@ function LineageGraphInner({
   );
 }
 
-// ─── Public export (wraps with provider) ─────────────────────────────────────
+// ÔöÇÔöÇÔöÇ Public export (wraps with provider) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 export function LineageGraphView(props: LineageGraphViewProps) {
   return (

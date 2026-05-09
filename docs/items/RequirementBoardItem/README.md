@@ -6,14 +6,14 @@ RequirementBoardItem provides a Kanban-style planning surface for lineage remedi
 
 - Track requirements by delivery status: Backlog, To Do, In Progress, Review, Done.
 - Link requirements to lineage nodes by node ID.
-- Navigate directly between Requirement Board and Lineage Viewer.
+- Navigate directly between Requirement Board and Lineage Workbench.
 
 ## Data Model
 
 Persisted definition fields:
 
 - requirements: Requirement[]
-- linkedLineageViewerItemId?: string
+- linkedLineageWorkbenchItemId?: string
 
 Each requirement stores:
 
@@ -31,9 +31,8 @@ Each requirement stores:
 
 This item supports URL hash deep links for fast context transfer:
 
-- Open node in Lineage Viewer from Requirement Board:
-  - /LineageViewerItem-editor/{lineageItemId}#focus={nodeId}
-- Create requirement from a Lineage node:
+  - /LineageWorkbenchItem-editor/{lineageItemId}#focus={nodeId}
+ #focus={nodeId} is consumed by LineageWorkbenchItem and clears hash after processing.
   - /RequirementBoardItem-editor/{boardItemId}#create={nodeId}
 
 Hash behavior:

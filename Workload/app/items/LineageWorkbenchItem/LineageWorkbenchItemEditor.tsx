@@ -7,14 +7,14 @@ import { ItemWithDefinition, callGetItem, getWorkloadItem, saveWorkloadItem } fr
 import { callOpenSettings } from "../../controller/SettingsController";
 import { callNotificationOpen } from "../../controller/NotificationController";
 import { ItemEditor, useViewNavigation } from "../../components/ItemEditor";
-import { LineageWorkbenchItemDefinition, LineageWorkbenchExtractionConfig } from "./LineageWorkbenchItemDefinition";
+import { LineageWorkbenchItemDefinition, LineageWorkbenchExtractionConfig } from "./LineageWorkbenchItemDefinition"; 
 import { LineageWorkbenchItemDefaultView } from "./LineageWorkbenchItemDefaultView";
 import { LineageWorkbenchItemExtractionView } from "./LineageWorkbenchItemExtractionView";
 import { LineageWorkbenchItemEmptyView } from "./LineageWorkbenchItemEmptyView";
+import { LineageWorkbenchItemLineageView } from "./LineageWorkbenchItemLineageView";
 import { LineageWorkbenchItemRibbon, VIEW, LineageWorkbenchView } from "./LineageWorkbenchItemRibbon";
 import { LineageWorkbenchItemRequirementsView } from "./LineageWorkbenchItemRequirementsView";
-import { LineageViewerItemDefaultView } from "../LineageViewerItem/LineageViewerItemDefaultView";
-import { LineageViewerItemDefinition } from "../LineageViewerItem/LineageViewerItemDefinition";
+// Removed LineageViewerItem imports (standalone workload eliminated)
 import "./LineageWorkbenchItem.scss";
 
 const enum SaveStatus {
@@ -25,6 +25,7 @@ const enum SaveStatus {
 
 const INITIAL_DEFINITION: LineageWorkbenchItemDefinition = {
   lineage: {
+    dataSourceMode: "actual",
     direction: "both",
     maxDepth: 4,
     requirements: [],
@@ -46,6 +47,7 @@ function HomeViewWrapper({ definition, onViewChange }: HomeViewWrapperProps) {
     setCurrentView(view);
     onViewChange(view);
   };
+
   return (
     <LineageWorkbenchItemDefaultView
       definition={definition}
@@ -106,6 +108,7 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
             lineage: {
               ...INITIAL_DEFINITION.lineage,
               ...(loadedItem.definition?.lineage ?? {}),
+              dataSourceMode: loadedItem.definition?.lineage?.dataSourceMode ?? "actual",
               requirements: loadedItem.definition?.lineage?.requirements ?? [],
             },
           };
@@ -137,7 +140,8 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
     setSaveStatus(SaveStatus.NotSaved);
   };
 
-  const handleLineageChange = (next: LineageViewerItemDefinition) => {
+  // The lineage state is now managed directly in the Workbench definition.
+  const handleLineageChange = (next: any) => {
     setDefinition((prev) => ({ ...prev, lineage: next }));
     setSaveStatus(SaveStatus.NotSaved);
   };
@@ -230,11 +234,9 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
     {
       name: VIEW.LINEAGE,
       component: (
-        <LineageViewerItemDefaultView
-          workloadClient={workloadClient}
-          item={item as ItemWithDefinition<LineageViewerItemDefinition> | undefined}
-          definition={definition.lineage ?? INITIAL_DEFINITION.lineage!}
-          onDefinitionChange={handleLineageChange}
+        <LineageWorkbenchItemLineageView
+          lineage={definition.lineage}
+          onLineageChange={handleLineageChange}
         />
       ),
     },

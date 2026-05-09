@@ -1,4 +1,4 @@
-import type { LineageViewerItemDefinition } from "../LineageViewerItem/LineageViewerItemDefinition";
+// Removed: import type { LineageViewerItemDefinition } from "../LineageViewerItem/LineageViewerItemDefinition";
 
 /**
  * Unified definition for the Lineage Workbench item.
@@ -18,5 +18,5 @@ export interface LineageWorkbenchItemDefinition {
   /** Extraction pipeline configuration */
   extraction?: LineageWorkbenchExtractionConfig;
   /** Lineage graph + viewer state + requirements — all in one place */
-  lineage?: LineageViewerItemDefinition;
+  lineage?: any;
 }

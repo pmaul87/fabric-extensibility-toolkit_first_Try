@@ -20,7 +20,7 @@ import {
 import { ItemEditorDefaultView, useViewNavigation } from "../../components/ItemEditor";
 import type { Requirement, RequirementStatus, RequirementPriority } from "../RequirementBoardItem";
 import { PRIORITY_CONFIG, KANBAN_COLUMNS, SCOPE_CONFIG, RequirementDialog } from "../RequirementBoardItem";
-import type { LineageViewerItemDefinition } from "../LineageViewerItem/LineageViewerItemDefinition";
+// Removed: import type { LineageViewerItemDefinition } from "../LineageViewerItem/LineageViewerItemDefinition";
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -145,8 +145,8 @@ const STATUS_COLOR: Record<RequirementStatus, "informative" | "success" | "warni
 // ---------------------------------------------------------------------------
 
 interface LineageWorkbenchItemRequirementsViewProps {
-  lineage: LineageViewerItemDefinition | undefined;
-  onLineageChange: (next: LineageViewerItemDefinition) => void;
+  lineage: any;
+  onLineageChange: (next: any) => void;
 }
 
 // ---------------------------------------------------------------------------

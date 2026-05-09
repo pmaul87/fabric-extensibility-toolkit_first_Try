@@ -131,7 +131,7 @@ Fabric Lineage Manager/
 
 **Objectives**:
 - Create backend service for graph processing
-- Implement LineageViewer item for visualization
+// Removed: Implement LineageViewer item for visualization (now integrated into Workbench)
 - Add advanced querying capabilities
 
 **Tasks**:
@@ -142,7 +142,7 @@ Fabric Lineage Manager/
    - Impact analysis queries
    - Upstream/downstream tracing
 
-2. **LineageViewer Item**
+// Removed: 2. **LineageViewer Item** (now integrated into Workbench)
    - Graph rendering with React Flow or D3.js
    - Interactive exploration (zoom, pan, filter)
    - Drill-down to entity details

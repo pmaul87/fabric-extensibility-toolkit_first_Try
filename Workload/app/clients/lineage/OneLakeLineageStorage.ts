@@ -130,10 +130,12 @@ export class OneLakeLineageStorage {
     this.ensureInitialized();
     
     const path = `${this.PROCESSED_PATH}/graph_${workspaceId}.json`;
+    const genericPath = `${this.PROCESSED_PATH}/graph.json`;
     const content = JSON.stringify(graphData, null, 2);
     
     try {
       await this.itemWrapper!.writeFileAsText(path, content);
+      await this.itemWrapper!.writeFileAsText(genericPath, content);
       console.log(`Saved lineage graph: ${path}`);
     } catch (error) {
       console.error(`Failed to save lineage graph: ${path}`, error);
@@ -148,14 +150,28 @@ export class OneLakeLineageStorage {
     this.ensureInitialized();
     
     const path = `${this.PROCESSED_PATH}/graph_${workspaceId}.json`;
+    const genericPath = `${this.PROCESSED_PATH}/graph.json`;
     
     try {
       const content = await this.itemWrapper!.readFileAsText(path);
-      return JSON.parse(content);
+      if (content.trim()) {
+        return JSON.parse(content);
+      }
     } catch (error) {
-      console.error(`Failed to load lineage graph: ${path}`, error);
+      console.warn(`Primary lineage graph load failed: ${path}`, error);
+    }
+
+    try {
+      const fallbackContent = await this.itemWrapper!.readFileAsText(genericPath);
+      if (fallbackContent.trim()) {
+        return JSON.parse(fallbackContent);
+      }
+    } catch (error) {
+      console.error(`Failed to load lineage graph: ${genericPath}`, error);
       throw error;
     }
+
+    throw new Error(`No lineage graph snapshot found at ${path} or ${genericPath}`);
   }
 
   /**

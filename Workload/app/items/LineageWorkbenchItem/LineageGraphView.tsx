@@ -28,6 +28,8 @@ export interface LineageViewerNode {
   objectName?: string;
   objectSubtype?: string;
   dataType?: string;
+  expression?: string;
+  formatString?: string;
   reportId?: string;
   visualType?: string;
 }
@@ -123,6 +125,8 @@ export interface LineageNodeData extends Record<string, unknown> {
   entityType: string;
   isFocus: boolean;
   isRelated: boolean;
+  isDirectUpstream: boolean;
+  isDirectDownstream: boolean;
   depth: number;
 }
 
@@ -134,11 +138,40 @@ function LineageNodeComponent({ data }: NodeProps<LineageFlowNode>) {
   const pal = palette(data.entityType);
   const isFocus = data.isFocus;
   const isRelated = data.isRelated;
+  const isDirectUpstream = data.isDirectUpstream;
+  const isDirectDownstream = data.isDirectDownstream;
   const relatedBg = "var(--colorPaletteLavenderBackground2, #f0e8ff)";
   const relatedBorder = "var(--colorPaletteLavenderBorderActive, #6b4eff)";
-  const nodeBg = isFocus ? "var(--colorBrandBackground, #0078d4)" : isRelated ? relatedBg : pal.bg;
-  const nodeBorder = isFocus ? "var(--colorBrandBackground, #0078d4)" : isRelated ? relatedBorder : pal.border;
-  const accentColor = isFocus ? "#fff" : isRelated ? relatedBorder : pal.border;
+  const upstreamBg = "var(--colorPaletteRedBackground2, #fde7e9)";
+  const upstreamBorder = "var(--colorPaletteRedBorderActive, #d13438)";
+  const downstreamBg = "var(--colorPaletteGreenBackground2, #e6f4ea)";
+  const downstreamBorder = "var(--colorPaletteGreenBorderActive, #2d7d32)";
+  const bidirectionalBg = "var(--colorPaletteDarkOrangeBackground2, #ffe8d1)";
+  const bidirectionalBorder = "var(--colorPaletteDarkOrangeBorderActive, #b75d00)";
+
+  const nodeBg = isFocus
+    ? "var(--colorBrandBackground, #0078d4)"
+    : isDirectUpstream && isDirectDownstream
+      ? bidirectionalBg
+      : isDirectUpstream
+        ? upstreamBg
+        : isDirectDownstream
+          ? downstreamBg
+          : isRelated
+            ? relatedBg
+            : pal.bg;
+  const nodeBorder = isFocus
+    ? "var(--colorBrandBackground, #0078d4)"
+    : isDirectUpstream && isDirectDownstream
+      ? bidirectionalBorder
+      : isDirectUpstream
+        ? upstreamBorder
+        : isDirectDownstream
+          ? downstreamBorder
+          : isRelated
+            ? relatedBorder
+            : pal.border;
+  const accentColor = isFocus ? "#fff" : nodeBorder;
 
   return (
     <div
@@ -222,6 +255,24 @@ function buildLayout(
   highlightedNodeIds: Set<string>,
   highlightedEdgeIds: Set<string>
 ): { nodes: LineageFlowNode[]; edges: Edge[] } {
+  const directUpstreamNodeIds = new Set<string>();
+  const directDownstreamNodeIds = new Set<string>();
+  const directUpstreamEdgeIds = new Set<string>();
+  const directDownstreamEdgeIds = new Set<string>();
+
+  if (focusNodeId) {
+    for (const edge of lvEdges) {
+      if (edge.toNodeId === focusNodeId) {
+        directUpstreamNodeIds.add(edge.fromNodeId);
+        directUpstreamEdgeIds.add(edge.edgeId);
+      }
+      if (edge.fromNodeId === focusNodeId) {
+        directDownstreamNodeIds.add(edge.toNodeId);
+        directDownstreamEdgeIds.add(edge.edgeId);
+      }
+    }
+  }
+
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "LR", nodesep: 50, ranksep: 80, marginx: 32, marginy: 32 });
@@ -246,6 +297,8 @@ function buildLayout(
         entityType: n.entityType,
         isFocus: n.nodeId === focusNodeId,
         isRelated: highlightedNodeIds.has(n.nodeId) && n.nodeId !== focusNodeId,
+        isDirectUpstream: directUpstreamNodeIds.has(n.nodeId),
+        isDirectDownstream: directDownstreamNodeIds.has(n.nodeId),
         depth: depthByNodeId.get(n.nodeId) ?? 0,
       },
     };
@@ -253,9 +306,16 @@ function buildLayout(
 
   const edges: Edge[] = lvEdges.map((e) => {
     const isHighlighted = highlightedEdgeIds.has(e.edgeId);
-    const edgeColor = isHighlighted
-      ? "var(--colorPaletteLavenderBorderActive, #6b4eff)"
-      : "var(--colorNeutralStroke1, #9e9e9e)";
+    const isUpstreamEdge = directUpstreamEdgeIds.has(e.edgeId);
+    const isDownstreamEdge = directDownstreamEdgeIds.has(e.edgeId);
+    const edgeColor = isUpstreamEdge
+      ? "var(--colorPaletteRedBorderActive, #d13438)"
+      : isDownstreamEdge
+        ? "var(--colorPaletteGreenBorderActive, #2d7d32)"
+        : isHighlighted
+          ? "var(--colorPaletteLavenderBorderActive, #6b4eff)"
+          : "var(--colorNeutralStroke1, #9e9e9e)";
+    const edgeWidth = isUpstreamEdge || isDownstreamEdge ? 2.6 : isHighlighted ? 2.2 : 1.5;
 
     return {
       id: e.edgeId,
@@ -264,7 +324,7 @@ function buildLayout(
       type: "smoothstep",
       animated: false,
       markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
-      style: { stroke: edgeColor, strokeWidth: isHighlighted ? 2.2 : 1.5 },
+      style: { stroke: edgeColor, strokeWidth: edgeWidth },
       label: e.edgeType.replace(/_/g, " "),
       labelStyle: { fontSize: 9, fill: isHighlighted ? edgeColor : "var(--colorNeutralForeground3, #757575)" },
       labelBgStyle: { fill: "var(--colorNeutralBackground1, #fff)", fillOpacity: 0.85 },
@@ -372,6 +432,9 @@ function LineageGraphInner({
         nodeColor={(node) => {
           const d = node.data as LineageNodeData;
           if (d.isFocus) return "var(--colorBrandBackground, #0078d4)";
+          if (d.isDirectUpstream && d.isDirectDownstream) return "var(--colorPaletteDarkOrangeBorderActive, #b75d00)";
+          if (d.isDirectUpstream) return "var(--colorPaletteRedBorderActive, #d13438)";
+          if (d.isDirectDownstream) return "var(--colorPaletteGreenBorderActive, #2d7d32)";
           if (d.isRelated) return "var(--colorPaletteLavenderBorderActive, #6b4eff)";
           return palette(d.entityType).border;
         }}

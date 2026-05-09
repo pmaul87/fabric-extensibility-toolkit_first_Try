@@ -235,6 +235,9 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
       name: VIEW.LINEAGE,
       component: (
         <LineageWorkbenchItemLineageView
+            workloadClient={workloadClient}
+            workspaceId={item?.workspaceId}
+            targetLakehouseId={definition.extraction?.targetLakehouseId}
           lineage={definition.lineage}
           onLineageChange={handleLineageChange}
         />

@@ -12,10 +12,10 @@ import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
 
 const useStyles = makeStyles({
   root: {
-    padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalL}`,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
     display: "flex",
     flexDirection: "column",
-    gap: tokens.spacingVerticalM,
+    gap: tokens.spacingVerticalS,
     overflowY: "auto",
     height: "100%",
     fontFamily: "var(--fontFamilyBase, 'Segoe UI', sans-serif)",
@@ -35,23 +35,23 @@ const useStyles = makeStyles({
     background: tokens.colorNeutralBackground2,
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     borderRadius: tokens.borderRadiusMedium,
-    padding: tokens.spacingVerticalM,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
     display: "flex",
     flexDirection: "column",
-    gap: tokens.spacingVerticalS,
+    gap: tokens.spacingVerticalXS,
   },
   cardTitle: {
     fontWeight: tokens.fontWeightSemibold,
-    fontSize: tokens.fontSizeBase300,
+    fontSize: tokens.fontSizeBase200,
     color: tokens.colorNeutralForeground1,
-    marginBottom: tokens.spacingVerticalXS,
+    marginBottom: "2px",
   },
 
   // ── Property grid ────────────────────────────────────────────────────────
   grid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+    gap: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
   },
   fieldWide: {
     gridColumn: "1 / -1",
@@ -65,7 +65,7 @@ const useStyles = makeStyles({
     marginBottom: "2px",
   },
   fieldValue: {
-    fontSize: tokens.fontSizeBase300,
+    fontSize: tokens.fontSizeBase200,
     color: tokens.colorNeutralForeground1,
     wordBreak: "break-word",
   },
@@ -80,7 +80,7 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "2px",
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalXS}`,
     background: tokens.colorNeutralBackground1,
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     borderRadius: tokens.borderRadiusMedium,
@@ -88,7 +88,7 @@ const useStyles = makeStyles({
     userSelect: "none",
   },
   metricValue: {
-    fontSize: tokens.fontSizeBase500,
+    fontSize: tokens.fontSizeBase400,
     fontWeight: tokens.fontWeightSemibold,
     color: tokens.colorBrandForeground1,
   },
@@ -108,7 +108,7 @@ const useStyles = makeStyles({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalM}`,
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     background: tokens.colorNeutralBackground2,
   },
@@ -117,7 +117,7 @@ const useStyles = makeStyles({
     flexDirection: "column",
   },
   relatedGroupLabel: {
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalM}`,
+    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalM}`,
     fontSize: tokens.fontSizeBase100,
     fontWeight: tokens.fontWeightSemibold,
     textTransform: "uppercase",
@@ -131,7 +131,7 @@ const useStyles = makeStyles({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalM}`,
+    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalM}`,
     borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
     cursor: "pointer",
     userSelect: "none",
@@ -144,7 +144,7 @@ const useStyles = makeStyles({
     background: "var(--colorBrandBackground2, #cce4f6)",
   },
   relatedItemName: {
-    fontSize: tokens.fontSizeBase200,
+    fontSize: tokens.fontSizeBase100,
     fontWeight: tokens.fontWeightMedium,
     color: tokens.colorNeutralForeground1,
     flex: 1,
@@ -155,6 +155,21 @@ const useStyles = makeStyles({
   relatedItemSub: {
     fontSize: tokens.fontSizeBase100,
     color: tokens.colorNeutralForeground3,
+  },
+  codeBlock: {
+    background: tokens.colorNeutralBackground1,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusMedium,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    marginTop: tokens.spacingVerticalXXS,
+    fontFamily: "Consolas, 'Courier New', monospace",
+    fontSize: tokens.fontSizeBase100,
+    lineHeight: "1.3",
+    color: tokens.colorNeutralForeground1,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    maxHeight: "180px",
+    overflowY: "auto",
   },
 
   // ── Section divider ───────────────────────────────────────────────────────
@@ -208,6 +223,59 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
   }, [nodes]);
 
   const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : undefined;
+
+  const typeSpecificFields = useMemo(() => {
+    if (!selectedNode) return [] as Array<{ label: string; value?: string }>;
+
+    const common = [
+      { label: t("LineageDetail_Model", "Semantic model"), value: selectedNode.modelName ?? selectedNode.datasetId },
+      { label: t("LineageDetail_ObjectSubtype", "Subtype"), value: selectedNode.objectSubtype },
+    ];
+
+    switch (selectedNode.entityType) {
+      case "measure":
+        return [
+          { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
+          { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
+          { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString },
+          { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType },
+          ...common,
+        ];
+      case "column":
+        return [
+          { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
+          { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
+          { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType },
+          { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString },
+          ...common,
+        ];
+      case "visual":
+        return [
+          { label: t("LineageDetail_VisualType", "Visual type"), value: selectedNode.visualType },
+          { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
+          ...common,
+        ];
+      case "report":
+        return [
+          { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
+          ...common,
+        ];
+      case "table":
+        return [
+          { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName ?? selectedNode.displayName },
+          { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
+          ...common,
+        ];
+      default:
+        return [
+          { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
+          ...common,
+          { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType },
+        ];
+    }
+  }, [selectedNode, t]);
+
+  const definitionExpression = selectedNode?.expression;
 
   const nodeEdges = useMemo(() => {
     if (!selectedNodeId) return { incoming: [] as LineageViewerEdge[], outgoing: [] as LineageViewerEdge[] };
@@ -320,18 +388,16 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
       <div className={styles.card}>
         <div className={styles.cardTitle}>{t("LineageDetail_SelectedObject", "Selected object")}</div>
         <div className={styles.grid}>
-          <Field label={t("LineageDetail_Type", "Type")} value={selectedNode.entityType} />
+          <Field label={t("LineageDetail_Type", "Type")} value={getEntityTypeLabel(selectedNode.entityType)} />
           <Field label={t("LineageDetail_Name", "Name")} value={selectedNode.displayName} />
-          <Field label={t("LineageDetail_Model", "Semantic model")} value={selectedNode.datasetId} />
-          <Field label={t("LineageDetail_Depth", "Graph depth")} value={nodeEdges.incoming.length > 0 || nodeEdges.outgoing.length > 0 ? String(Math.max(nodeEdges.incoming.length, 0)) : "0"} />
+          <Field label={t("LineageDetail_UpstreamCount", "Upstream")} value={String(nodeEdges.incoming.length)} />
+          <Field label={t("LineageDetail_DownstreamCount", "Downstream")} value={String(nodeEdges.outgoing.length)} />
 
-          {(selectedNode.entityType === "measure" || selectedNode.entityType === "column") && (
-            <Field label={t("LineageDetail_Table", "Table")} value={selectedNode.tableName} />
-          )}
-
-          {selectedNode.entityType === "report" && (
-            <Field label={t("LineageDetail_ReportId", "Report ID")} value={selectedNode.reportId} />
-          )}
+          {typeSpecificFields
+            .filter((field) => !!field.value)
+            .map((field) => (
+              <Field key={field.label} label={field.label} value={field.value} />
+            ))}
 
           <Field
             label={t("LineageDetail_NodeId", "Node ID")}
@@ -339,6 +405,13 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
             wide
           />
         </div>
+
+        {(selectedNode.entityType === "measure" || selectedNode.entityType === "column") && definitionExpression && (
+          <div>
+            <div className={styles.fieldLabel}>{t("LineageDetail_Expression", "Expression")}</div>
+            <div className={styles.codeBlock}>{definitionExpression}</div>
+          </div>
+        )}
       </div>
 
       {/* ── Entity-type metrics grid ── */}

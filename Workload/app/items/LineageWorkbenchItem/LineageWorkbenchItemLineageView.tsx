@@ -4,6 +4,8 @@ import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import {
   Button,
   Input,
+  MessageBar,
+  MessageBarBody,
   Select,
   Text,
   Radio,
@@ -29,6 +31,7 @@ import { OneLakeLineageStorage } from "../../clients/lineage/OneLakeLineageStora
 import { LineageGraphView, LineageViewerNode, LineageViewerEdge } from "./LineageGraphView";
 import { LineageTableView } from "./LineageTableView";
 import { LineageDetailView } from "./LineageDetailView";
+import type { Requirement } from "../RequirementBoardItem";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -163,7 +166,7 @@ const useStyles = makeStyles({
   },
   panelFill: {
     flex: 1,
-    minHeight: "200px",
+    minHeight: "0",
   },
   panelFixed: {
     minHeight: "220px",
@@ -264,7 +267,19 @@ function getNodeId(node: any): string {
   return String(node?.nodeId ?? node?.node_id ?? "");
 }
 function getDisplayName(node: any): string {
-  return String(node?.displayName ?? node?.display_name ?? getNodeId(node));
+  return String(
+    node?.displayName
+      ?? node?.display_name
+      ?? node?.reportName
+      ?? node?.report_name
+      ?? node?.modelName
+      ?? node?.model_name
+      ?? node?.objectName
+      ?? node?.object_name
+      ?? node?.name
+      ?? node?.title
+      ?? getNodeId(node)
+  );
 }
 function getEntityType(node: any): string {
   return String(node?.entityType ?? node?.entity_type ?? "unknown");
@@ -366,6 +381,7 @@ interface LineageWorkbenchItemLineageViewProps {
   targetLakehouseId?: string;
   lineage: any;
   onLineageChange: (next: any) => void;
+  onOpenRequirementsBoard?: () => void;
 }
 
 export function LineageWorkbenchItemLineageView({
@@ -374,6 +390,7 @@ export function LineageWorkbenchItemLineageView({
   targetLakehouseId,
   lineage,
   onLineageChange,
+  onOpenRequirementsBoard,
 }: LineageWorkbenchItemLineageViewProps) {
   const { t } = useTranslation();
   const styles = useStyles();
@@ -384,6 +401,7 @@ export function LineageWorkbenchItemLineageView({
   const [tableExpanded, setTableExpanded] = useState(true);
   const [graphExpanded, setGraphExpanded] = useState(false);
   const [detailExpanded, setDetailExpanded] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [searchText, setSearchText] = useState("");
@@ -460,8 +478,30 @@ export function LineageWorkbenchItemLineageView({
         objectName: n?.objectName ?? n?.object_name ?? undefined,
         objectSubtype: n?.objectSubtype ?? n?.object_subtype ?? undefined,
         dataType: n?.dataType ?? n?.data_type ?? undefined,
-        expression: n?.expression ?? n?.daxExpression ?? n?.dax_expression ?? n?.formula ?? undefined,
-        formatString: n?.formatString ?? n?.format_string ?? n?.format ?? undefined,
+        expression:
+          n?.expression
+          ?? n?.daxExpression
+          ?? n?.dax_expression
+          ?? n?.measureExpression
+          ?? n?.measure_expression
+          ?? n?.columnExpression
+          ?? n?.column_expression
+          ?? n?.expressionText
+          ?? n?.expression_text
+          ?? n?.formula
+          ?? n?.["Measure Expression"]
+          ?? n?.["Column Expression"]
+          ?? undefined,
+        formatString:
+          n?.formatString
+          ?? n?.format_string
+          ?? n?.format
+          ?? n?.formatText
+          ?? n?.format_text
+          ?? n?.formatStringExpression
+          ?? n?.format_string_expression
+          ?? n?.["Format String"]
+          ?? undefined,
         reportId: n?.reportId ?? n?.report_id ?? undefined,
         visualType: n?.visualType ?? n?.visual_type ?? undefined,
       }))
@@ -610,14 +650,30 @@ export function LineageWorkbenchItemLineageView({
 
   // ── Empty state text ──────────────────────────────────────────────────────
   const emptyMessage =
-    dataSourceMode === "actual"
+    dataSourceMode === "actual" && !targetLakehouseId
+      ? t(
+          "LineageWorkbench_Lineage_Empty_Actual_MissingLakehouse",
+          "Actual data mode requires a saved OneLake Lakehouse ID. Open Extract, enter the lakehouse item ID, and save the workbench before loading real lineage data."
+        )
+      : dataSourceMode === "actual"
       ? t("LineageWorkbench_Lineage_Empty_Actual", "No actual graph snapshot is stored on this item yet. The workbench is trying to load it from the target lakehouse.")
       : t("LineageWorkbench_Lineage_Empty", "No graph nodes available. Run extraction first.");
 
-  // Only one panel fills remaining height (the first one that is expanded)
-  const graphFills = graphExpanded && !tableExpanded && !detailExpanded;
-  const tableFills = tableExpanded && !graphExpanded && !detailExpanded;
-  const detailFills = detailExpanded && !graphExpanded && !tableExpanded;
+  // In stacked mode, expanded panels split available space evenly.
+  const stackedSharedHeight = exploreLayout === "stacked";
+  const graphFills = graphExpanded && (stackedSharedHeight || (!tableExpanded && !detailExpanded));
+  const tableFills = tableExpanded && (stackedSharedHeight || (!graphExpanded && !detailExpanded));
+  const detailFills = detailExpanded && (stackedSharedHeight || (!graphExpanded && !tableExpanded));
+
+  const handleCreateRequirement = (requirement: Requirement) => {
+    onLineageChange({
+      ...(lineage ?? {}),
+      requirements: [...(lineage?.requirements ?? []), requirement],
+    });
+    if (!detailExpanded) {
+      setDetailExpanded(true);
+    }
+  };
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -834,7 +890,6 @@ export function LineageWorkbenchItemLineageView({
                     selectedNodeId={selectedNodeId}
                     onNodeSelect={(id) => {
                       setSelectedNodeId(id);
-                      if (!graphExpanded) setGraphExpanded(true);
                       if (!detailExpanded) setDetailExpanded(true);
                     }}
                   />
@@ -878,6 +933,18 @@ export function LineageWorkbenchItemLineageView({
                       depthByNodeId={depthByNodeId}
                       highlightedNodeIds={highlightedNodeIds}
                       highlightedEdgeIds={highlightedEdgeIds}
+                      expandedGroups={expandedGroups}
+                      onToggleGroup={(groupId) => {
+                        setExpandedGroups(prev => {
+                          const next = new Set(prev);
+                          if (next.has(groupId)) {
+                            next.delete(groupId);
+                          } else {
+                            next.add(groupId);
+                          }
+                          return next;
+                        });
+                      }}
                       onNodeClick={(id) => {
                         setSelectedNodeId(id);
                         if (!detailExpanded) setDetailExpanded(true);
@@ -899,6 +966,18 @@ export function LineageWorkbenchItemLineageView({
                 }}
                 fillHeight
               >
+                {dataSourceMode === "actual" && !targetLakehouseId && (
+                  <div className={styles.graphHint}>
+                    <MessageBar intent="warning">
+                      <MessageBarBody>
+                        {t(
+                          "LineageWorkbench_Lineage_MissingLakehouse_Warning",
+                          "Real lineage data is disabled until a OneLake Lakehouse ID is configured and saved in the Extract view."
+                        )}
+                      </MessageBarBody>
+                    </MessageBar>
+                  </div>
+                )}
                 <div
                   className={`${styles.splitExplore} ${
                     exploreLayout === "side-by-side" ? styles.splitExploreHorizontal : styles.splitExploreVertical
@@ -957,6 +1036,18 @@ export function LineageWorkbenchItemLineageView({
                         depthByNodeId={depthByNodeId}
                         highlightedNodeIds={highlightedNodeIds}
                         highlightedEdgeIds={highlightedEdgeIds}
+                        expandedGroups={expandedGroups}
+                        onToggleGroup={(groupId) => {
+                          setExpandedGroups(prev => {
+                            const next = new Set(prev);
+                            if (next.has(groupId)) {
+                              next.delete(groupId);
+                            } else {
+                              next.add(groupId);
+                            }
+                            return next;
+                          });
+                        }}
                         onNodeClick={(id) => {
                           setSelectedNodeId(id);
                           if (!detailExpanded) setDetailExpanded(true);
@@ -985,6 +1076,9 @@ export function LineageWorkbenchItemLineageView({
                 nodes={filtered}
                 edges={filteredEdges}
                 selectedNodeId={selectedNodeId}
+                requirementsCount={lineage?.requirements?.length ?? 0}
+                onOpenRequirementsBoard={onOpenRequirementsBoard}
+                onCreateRequirement={handleCreateRequirement}
                 onNodeSelect={(nodeId) => {
                   setSelectedNodeId(nodeId);
                   setGraphExpanded(true);

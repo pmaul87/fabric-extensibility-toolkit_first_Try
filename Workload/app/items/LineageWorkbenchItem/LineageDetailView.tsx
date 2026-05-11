@@ -2,11 +2,15 @@ import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Badge,
+  Button,
   Text,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
+import { ArrowRight16Regular, Add16Regular } from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
+import type { Requirement } from "../RequirementBoardItem";
+import { RequirementDialog } from "../RequirementBoardItem";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -50,8 +54,11 @@ const useStyles = makeStyles({
   // ── Property grid ────────────────────────────────────────────────────────
   grid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     gap: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    "@media (max-width: 1300px)": {
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    },
   },
   fieldWide: {
     gridColumn: "1 / -1",
@@ -95,6 +102,45 @@ const useStyles = makeStyles({
   metricLabel: {
     fontSize: tokens.fontSizeBase100,
     color: tokens.colorNeutralForeground3,
+  },
+  infoCardsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalXS}`,
+    "@media (max-width: 1300px)": {
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    },
+  },
+  infoCardButton: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: "2px",
+    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalS}`,
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    background: tokens.colorNeutralBackground1,
+    cursor: "default",
+    textAlign: "left",
+  },
+  infoCardLabel: {
+    fontSize: tokens.fontSizeBase100,
+    color: tokens.colorNeutralForeground3,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  infoCardPreview: {
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground1,
+    fontWeight: tokens.fontWeightSemibold,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    display: "-webkit-box",
+    WebkitLineClamp: "2",
+    WebkitBoxOrient: "vertical",
+    lineHeight: "1.25",
+    minHeight: "2.5em",
   },
 
   // ── Related panel ────────────────────────────────────────────────────────
@@ -156,22 +202,6 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase100,
     color: tokens.colorNeutralForeground3,
   },
-  codeBlock: {
-    background: tokens.colorNeutralBackground1,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderRadius: tokens.borderRadiusMedium,
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    marginTop: tokens.spacingVerticalXXS,
-    fontFamily: "Consolas, 'Courier New', monospace",
-    fontSize: tokens.fontSizeBase100,
-    lineHeight: "1.3",
-    color: tokens.colorNeutralForeground1,
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-    maxHeight: "180px",
-    overflowY: "auto",
-  },
-
   // ── Section divider ───────────────────────────────────────────────────────
   divider: {
     height: "1px",
@@ -205,16 +235,28 @@ interface LineageDetailViewProps {
   selectedNodeId?: string;
   nodes: LineageViewerNode[];
   edges: LineageViewerEdge[];
+  requirementsCount?: number;
+  onOpenRequirementsBoard?: () => void;
+  onCreateRequirement?: (requirement: Requirement) => void;
   onNodeSelect?: (nodeId: string) => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }: LineageDetailViewProps) {
+export function LineageDetailView({
+  selectedNodeId,
+  nodes,
+  edges,
+  requirementsCount,
+  onOpenRequirementsBoard,
+  onCreateRequirement,
+  onNodeSelect,
+}: LineageDetailViewProps) {
   const { t } = useTranslation();
   const styles = useStyles();
 
   const [activeMetric, setActiveMetric] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const nodeById = useMemo(() => {
     const m = new Map<string, LineageViewerNode>();
@@ -224,11 +266,28 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
 
   const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : undefined;
 
+  const inferredExpression = useMemo(() => {
+    if (!selectedNodeId) {
+      return undefined;
+    }
+
+    const evidence = edges.find((edge) => {
+      if (edge.toNodeId !== selectedNodeId) {
+        return false;
+      }
+      if (!edge.edgeType.includes("depends_on")) {
+        return false;
+      }
+      return !!edge.evidence?.trim();
+    })?.evidence;
+
+    return evidence?.trim() || undefined;
+  }, [selectedNodeId, edges]);
+
   const typeSpecificFields = useMemo(() => {
     if (!selectedNode) return [] as Array<{ label: string; value?: string }>;
 
     const common = [
-      { label: t("LineageDetail_Model", "Semantic model"), value: selectedNode.modelName ?? selectedNode.datasetId },
       { label: t("LineageDetail_ObjectSubtype", "Subtype"), value: selectedNode.objectSubtype },
     ];
 
@@ -238,6 +297,7 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
           { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString },
+          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType },
           ...common,
         ];
@@ -247,6 +307,7 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType },
           { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString },
+          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression },
           ...common,
         ];
       case "visual":
@@ -273,9 +334,31 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType },
         ];
     }
-  }, [selectedNode, t]);
+  }, [selectedNode, inferredExpression, t]);
 
-  const definitionExpression = selectedNode?.expression;
+  const selectedInfoCards = useMemo(() => {
+    if (!selectedNode) return [] as Array<{ key: string; label: string; value: string; isCode?: boolean }>;
+
+    return [
+      {
+        key: "type",
+        label: t("LineageDetail_Type", "Type"),
+        value: getEntityTypeLabel(selectedNode.entityType),
+      },
+      {
+        key: "name",
+        label: t("LineageDetail_Name", "Name"),
+        value: selectedNode.displayName,
+      },
+      ...typeSpecificFields
+        .filter((field) => !!field.value)
+        .map((field, index) => ({
+          key: `meta-${index}-${field.label}`,
+          label: field.label,
+          value: field.value!,
+        })),
+    ];
+  }, [selectedNode, typeSpecificFields, t]);
 
   const nodeEdges = useMemo(() => {
     if (!selectedNodeId) return { incoming: [] as LineageViewerEdge[], outgoing: [] as LineageViewerEdge[] };
@@ -301,8 +384,6 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
     const byType = (type: string) => all.filter((n) => n.entityType === type);
 
     return {
-      incoming: { label: t("LineageDetail_Incoming", "Upstream / Feeds into this"), nodes: incoming },
-      outgoing: { label: t("LineageDetail_Outgoing", "Downstream / This feeds into"), nodes: outgoing },
       connectedColumns: { label: t("LineageDetail_Columns", "Connected columns"), nodes: byType("column") },
       connectedMeasures: { label: t("LineageDetail_Measures", "Connected measures"), nodes: byType("measure") },
       connectedVisuals: { label: t("LineageDetail_Visuals", "Connected visuals"), nodes: byType("visual") },
@@ -329,19 +410,6 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
         <div className={styles.empty}>
           {t("LineageWorkbench_Detail_NoSelection", "Select a node in the graph or table to view details")}
         </div>
-      </div>
-    );
-  }
-
-  function Field({ label, value, wide }: { label: string; value?: string | null; wide?: boolean }) {
-    return (
-      <div className={wide ? styles.fieldWide : undefined}>
-        <div className={styles.fieldLabel}>{label}</div>
-        {value ? (
-          <div className={styles.fieldValue}>{value}</div>
-        ) : (
-          <div className={styles.fieldMuted}>—</div>
-        )}
       </div>
     );
   }
@@ -373,8 +441,6 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
   }
 
   const rel = relations as {
-    incoming: { label: string; nodes: LineageViewerNode[] };
-    outgoing: { label: string; nodes: LineageViewerNode[] };
     connectedColumns: { label: string; nodes: LineageViewerNode[] };
     connectedMeasures: { label: string; nodes: LineageViewerNode[] };
     connectedVisuals: { label: string; nodes: LineageViewerNode[] };
@@ -384,41 +450,51 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
 
   return (
     <div className={styles.root}>
+      <div className={styles.card}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: tokens.spacingHorizontalS }}>
+          <div>
+            <div className={styles.cardTitle}>{t("LineageDetail_Requirements_Title", "Requirements")}</div>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+              {t("LineageDetail_Requirements_Count", "{{count}} linked tickets in board", { count: requirementsCount ?? 0 })}
+            </Text>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+            <Button
+              size="small"
+              appearance="subtle"
+              icon={<ArrowRight16Regular />}
+              iconPosition="after"
+              onClick={() => onOpenRequirementsBoard?.()}
+            >
+              {t("LineageDetail_OpenRequirementsBoard", "Open board")}
+            </Button>
+            <Button
+              size="small"
+              appearance="primary"
+              icon={<Add16Regular />}
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              {t("LineageDetail_CreateTicket", "Create ticket")}
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {/* ── Main properties card ── */}
       <div className={styles.card}>
-        <div className={styles.cardTitle}>{t("LineageDetail_SelectedObject", "Selected object")}</div>
-        <div className={styles.grid}>
-          <Field label={t("LineageDetail_Type", "Type")} value={getEntityTypeLabel(selectedNode.entityType)} />
-          <Field label={t("LineageDetail_Name", "Name")} value={selectedNode.displayName} />
-          <Field label={t("LineageDetail_UpstreamCount", "Upstream")} value={String(nodeEdges.incoming.length)} />
-          <Field label={t("LineageDetail_DownstreamCount", "Downstream")} value={String(nodeEdges.outgoing.length)} />
-
-          {typeSpecificFields
-            .filter((field) => !!field.value)
-            .map((field) => (
-              <Field key={field.label} label={field.label} value={field.value} />
-            ))}
-
-          <Field
-            label={t("LineageDetail_NodeId", "Node ID")}
-            value={selectedNode.nodeId}
-            wide
-          />
+        <div className={styles.cardTitle}>{t("LineageDetail_SelectedObject", "Selected object info")}</div>
+        <div className={styles.infoCardsGrid}>
+          {selectedInfoCards.map((card) => (
+            <div key={card.key} className={styles.infoCardButton} title={card.value}>
+              <span className={styles.infoCardLabel}>{card.label}</span>
+              <span className={styles.infoCardPreview}>{card.value}</span>
+            </div>
+          ))}
         </div>
-
-        {(selectedNode.entityType === "measure" || selectedNode.entityType === "column") && definitionExpression && (
-          <div>
-            <div className={styles.fieldLabel}>{t("LineageDetail_Expression", "Expression")}</div>
-            <div className={styles.codeBlock}>{definitionExpression}</div>
-          </div>
-        )}
       </div>
 
       {/* ── Entity-type metrics grid ── */}
       <div className={styles.grid}>
-        <MetricChip label={rel.incoming.label} count={rel.incoming.nodes.length} metricKey="incoming" />
-        <MetricChip label={rel.outgoing.label} count={rel.outgoing.nodes.length} metricKey="outgoing" />
-
         {(selectedNode.entityType === "measure" || selectedNode.entityType === "visual") && (
           <MetricChip label={rel.connectedColumns.label} count={rel.connectedColumns.nodes.length} metricKey="connectedColumns" />
         )}
@@ -491,6 +567,19 @@ export function LineageDetailView({ selectedNodeId, nodes, edges, onNodeSelect }
           ))}
         </div>
       )}
+
+      <RequirementDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        nodes={nodes}
+        initialTitle={selectedNode ? `Review lineage impact: ${selectedNode.displayName}` : undefined}
+        initialLinkedNodeIds={selectedNode ? [selectedNode.nodeId] : []}
+        currentUser={{ displayName: "Current User", email: "" }}
+        onSave={(req) => {
+          onCreateRequirement?.(req);
+          setCreateDialogOpen(false);
+        }}
+      />
     </div>
   );
 }

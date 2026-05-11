@@ -24,6 +24,11 @@ const enum SaveStatus {
 }
 
 const INITIAL_DEFINITION: LineageWorkbenchItemDefinition = {
+  extraction: {
+    targetLakehouseId: "",
+    artifactTypes: [],
+    lastRunStatus: "idle",
+  },
   lineage: {
     dataSourceMode: "actual",
     direction: "both",
@@ -105,6 +110,10 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
           const loadedDefinition: LineageWorkbenchItemDefinition = {
             ...INITIAL_DEFINITION,
             ...(loadedItem.definition ?? {}),
+            extraction: {
+              ...INITIAL_DEFINITION.extraction,
+              ...(loadedItem.definition?.extraction ?? {}),
+            },
             lineage: {
               ...INITIAL_DEFINITION.lineage,
               ...(loadedItem.definition?.lineage ?? {}),
@@ -171,10 +180,14 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
 
     setSaveStatus(SaveStatus.Saving);
     try {
-      await saveWorkloadItem<LineageWorkbenchItemDefinition>(workloadClient, {
+      const saveResult = await saveWorkloadItem<LineageWorkbenchItemDefinition>(workloadClient, {
         ...item,
         definition,
       });
+      if (!saveResult) {
+        throw new Error("The item definition update did not return a result.");
+      }
+      setItem((prev) => (prev ? { ...prev, definition } : prev));
       setSaveStatus(SaveStatus.Saved);
       await callNotificationOpen(
         workloadClient,
@@ -240,6 +253,7 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
             targetLakehouseId={definition.extraction?.targetLakehouseId}
           lineage={definition.lineage}
           onLineageChange={handleLineageChange}
+          onOpenRequirementsBoard={() => navigateTo(VIEW.REQUIREMENTS)}
         />
       ),
     },

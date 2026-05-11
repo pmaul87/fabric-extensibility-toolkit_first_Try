@@ -208,7 +208,7 @@ export async function callUpdateItemDefinition(
         });
     } catch (exception) {
         console.error("Failed updating Item definition %s", itemId, exception);
-        return undefined
+        throw exception;
     }
 }
 

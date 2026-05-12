@@ -22,7 +22,7 @@ import { ChevronRightFilled } from "@fluentui/react-icons";
 export interface LineageViewerNode {
   nodeId: string;
   displayName: string;
-  entityType: "report" | "visual" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "warehouse" | "unknown";
+  entityType: "report" | "page" | "visual" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "warehouse" | "unknown";
   datasetId?: string;
   modelName?: string;
   tableName?: string;
@@ -60,6 +60,11 @@ const PALETTE: Record<string, EntityPalette> = {
     bg: "var(--colorBrandBackground2, #cce4f6)",
     border: "var(--colorBrandStroke1, #0078d4)",
     typeLabel: "Report",
+  },
+  page: {
+    bg: "var(--colorPaletteBlueBackground2, #e7f1fb)",
+    border: "var(--colorPaletteBlueBorderActive, #005a9e)",
+    typeLabel: "Page",
   },
   visual: {
     bg: "var(--colorPalettePurpleBackground2, #ede8f8)",
@@ -361,10 +366,15 @@ function buildLayout(
 
   // 1. Reports are natural group nodes
   const reportIds = new Set<string>();
+  const reportNodeIdByRawId = new Map<string, string>();
   for (const node of lvNodes) {
     if (node.entityType === "report") {
       groupNodeIds.add(node.nodeId);
       reportIds.add(node.nodeId);
+      reportNodeIdByRawId.set(node.nodeId, node.nodeId);
+      if (node.reportId) {
+        reportNodeIdByRawId.set(node.reportId, node.nodeId);
+      }
     }
   }
 
@@ -402,9 +412,9 @@ function buildLayout(
   for (const node of lvNodes) {
     let parentId: string | undefined;
 
-    // Visuals belong to Reports
-    if (node.entityType === "visual" && node.reportId) {
-      parentId = node.reportId;
+    // Visuals/pages belong to Reports
+    if ((node.entityType === "visual" || node.entityType === "page") && node.reportId) {
+      parentId = reportNodeIdByRawId.get(node.reportId) ?? node.reportId;
     }
     // Tables/Columns/Measures belong to their Semantic Model
     else if ((node.entityType === "table" || node.entityType === "column" || node.entityType === "measure") && node.datasetId) {

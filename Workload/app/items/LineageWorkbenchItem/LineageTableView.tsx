@@ -184,16 +184,28 @@ export function LineageTableView({
       const reportNodes = new Map<string, GroupedItem[]>();
       const datasetNodes = new Map<string, GroupedItem[]>();
       const orphanNodes: GroupedItem[] = [];
+      const reportNodeIdByRawId = new Map<string, string>();
+
+      // Build mapping from raw report id -> report node id so children can resolve to real report nodes.
+      for (const node of nodes) {
+        if (node.entityType === "report") {
+          reportNodeIdByRawId.set(node.nodeId, node.nodeId);
+          if (node.reportId) {
+            reportNodeIdByRawId.set(node.reportId, node.nodeId);
+          }
+        }
+      }
 
       for (const node of nodes) {
-        // Visuals belong to reports
-        if (node.entityType === "visual" && node.reportId) {
-          if (!reportNodes.has(node.reportId)) {
-            reportNodes.set(node.reportId, []);
+        // Visuals/pages belong to reports
+        if ((node.entityType === "visual" || node.entityType === "page") && node.reportId) {
+          const resolvedReportGroupId = reportNodeIdByRawId.get(node.reportId) ?? node.reportId;
+          if (!reportNodes.has(resolvedReportGroupId)) {
+            reportNodes.set(resolvedReportGroupId, []);
           }
-          reportNodes.get(node.reportId)!.push({
+          reportNodes.get(resolvedReportGroupId)!.push({
             ...node,
-            parentId: node.reportId,
+            parentId: resolvedReportGroupId,
           });
         }
         // Tables/Columns/Measures belong to datasets

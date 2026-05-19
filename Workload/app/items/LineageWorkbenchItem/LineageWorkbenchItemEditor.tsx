@@ -90,15 +90,6 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
   const pageContext = useParams<ContextProps>();
   const { t } = useTranslation();
 
-  // DEBUG: Log what's actually in pageContext
-  console.log("[LineageWorkbenchItemEditor] PageContext:", {
-    itemObjectId: pageContext.itemObjectId,
-    workspaceObjectId: pageContext.workspaceObjectId,
-    source: pageContext.source,
-    allKeys: Object.keys(pageContext),
-    fullContext: pageContext,
-  });
-
   const [isLoading, setIsLoading] = useState(true);
   const [item, setItem] = useState<ItemWithDefinition<LineageWorkbenchItemDefinition>>();
   const [definition, setDefinition] = useState<LineageWorkbenchItemDefinition>(INITIAL_DEFINITION);
@@ -249,7 +240,7 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
       component: (
         <LineageWorkbenchItemExtractionView
           workloadClient={workloadClient}
-          workspaceId={pageContext.workspaceObjectId}
+          workspaceId={item?.workspaceId}
           extraction={definition.extraction ?? {}}
           onExtractionChange={handleExtractionChange}
         />
@@ -260,7 +251,7 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
       component: (
         <LineageWorkbenchItemLineageView
             workloadClient={workloadClient}
-            workspaceId={definition.extraction?.workspaceId || pageContext.workspaceObjectId}
+            workspaceId={definition.extraction?.workspaceId || item?.workspaceId}
             targetLakehouseId={definition.extraction?.targetLakehouseId}
             sqlEndpoint={definition.extraction?.sqlEndpoint}
           lineage={definition.lineage}

@@ -17,7 +17,7 @@ import {
 import type { Node, Edge, NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ChevronRightFilled, SaveRegular, TargetArrowRegular } from "@fluentui/react-icons";
-import { Switch, Text, tokens, Button, Slider, Label } from "@fluentui/react-components";
+import { Switch, Text, tokens, Button, Slider, Label, Spinner } from "@fluentui/react-components";
 import dagre from "dagre";
 import { toPng } from "html-to-image";
 
@@ -805,6 +805,7 @@ function buildLayout(
 interface LineageGraphViewProps {
   nodes: LineageViewerNode[];
   edges: LineageViewerEdge[];
+  isLoading?: boolean;
   focusNodeId?: string;
   depthByNodeId: Map<string, number>;
   highlightedNodeIds?: Set<string>;
@@ -899,6 +900,7 @@ function GraphLegend({ useTableColors, onToggleColorMode }: LegendProps) {
 function LineageGraphInner({
   nodes: lvNodes,
   edges: lvEdges,
+  isLoading,
   focusNodeId,
   depthByNodeId,
   highlightedNodeIds,
@@ -1042,6 +1044,31 @@ function LineageGraphInner({
 
   return (
     <div ref={reactFlowWrapper} style={{ width: "100%", height: "100%", position: "relative" }}>
+      {isLoading && (
+        <div style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 1000,
+          background: tokens.colorNeutralBackground1,
+          padding: `${tokens.spacingVerticalXXL} ${tokens.spacingHorizontalXXL}`,
+          borderRadius: tokens.borderRadiusLarge,
+          boxShadow: tokens.shadow16,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: tokens.spacingVerticalL,
+        }}>
+          <Spinner size="large" />
+          <Text size={400} weight="semibold">
+            Loading lineage graph...
+          </Text>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3, maxWidth: "300px", textAlign: "center" }}>
+            Fetching semantic models, tables, columns, measures, and relationships from the lakehouse.
+          </Text>
+        </div>
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}

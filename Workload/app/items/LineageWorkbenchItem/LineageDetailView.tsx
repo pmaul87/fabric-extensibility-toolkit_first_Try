@@ -6,6 +6,10 @@ import {
   Text,
   makeStyles,
   tokens,
+  Accordion,
+  AccordionHeader,
+  AccordionItem,
+  AccordionPanel,
 } from "@fluentui/react-components";
 import { ArrowRight16Regular, Add16Regular } from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
@@ -258,7 +262,6 @@ export function LineageDetailView({
   const { t } = useTranslation();
   const styles = useStyles();
 
-  const [activeMetric, setActiveMetric] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const nodeById = useMemo(() => {
@@ -979,50 +982,12 @@ export function LineageDetailView({
 
   const rel = relationsWithFilteredBy;
 
-  // Active related list based on clicked metric chip
-  const activeRelated = activeMetric && (rel as any)[activeMetric];
-  const activeRelatedGroups = useMemo(() => {
-    if (!activeRelated) return [];
-    const grouped = new Map<string, LineageViewerNode[]>();
-    for (const n of activeRelated.nodes) {
-      if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
-      grouped.get(n.entityType)!.push(n);
-    }
-    return Array.from(grouped.entries()).map(([entityType, nodes]) => ({ entityType, nodes }));
-  }, [activeRelated]);
-
   if (!selectedNode) {
     return (
       <div className={styles.root}>
         <div className={styles.empty}>
           {t("LineageWorkbench_Detail_NoSelection", "Select a node in the graph or table to view details")}
         </div>
-      </div>
-    );
-  }
-
-  function MetricChip({
-    label,
-    count,
-    metricKey,
-  }: {
-    label: string;
-    count: number;
-    metricKey: string;
-  }) {
-    const isActive = activeMetric === metricKey;
-    return (
-      <div
-        className={styles.metricChip}
-        style={isActive ? {
-          backgroundColor: "var(--colorPaletteLavenderBackground2, #f0e8ff)",
-          borderColor: "var(--colorPaletteLavenderBorderActive, #6b4eff)",
-        } : undefined}
-        onClick={() => setActiveMetric(isActive ? null : metricKey)}
-        title={`Click to see ${label}`}
-      >
-        <div className={styles.metricValue}>{count}</div>
-        <div className={styles.metricLabel}>{label}</div>
       </div>
     );
   }
@@ -1059,47 +1024,17 @@ export function LineageDetailView({
         </div>
       </div>
 
-      {/* ── Dependencies card ── */}
-      {(nodeEdges.incomingRelationships.length > 0 || nodeEdges.outgoingRelationships.length > 0 || 
-        nodeEdges.incomingDependencies.length > 0 || nodeEdges.outgoingDependencies.length > 0) && (
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>{t("LineageDetail_Dependencies", "Dependencies")}</div>
-          <div className={styles.grid}>
-            {nodeEdges.incomingRelationships.length > 0 && (
-              <div>
-                <div className={styles.fieldLabel}>{t("LineageDetail_IncomingRelationships", "Incoming Relationships")}</div>
-                <div className={styles.fieldValue}>{nodeEdges.incomingRelationships.length}</div>
-              </div>
-            )}
-            {nodeEdges.outgoingRelationships.length > 0 && (
-              <div>
-                <div className={styles.fieldLabel}>{t("LineageDetail_OutgoingRelationships", "Outgoing Relationships")}</div>
-                <div className={styles.fieldValue}>{nodeEdges.outgoingRelationships.length}</div>
-              </div>
-            )}
-            {nodeEdges.incomingDependencies.length > 0 && (
-              <div>
-                <div className={styles.fieldLabel}>{t("LineageDetail_IncomingDependencies", "Used By")}</div>
-                <div className={styles.fieldValue}>{nodeEdges.incomingDependencies.length}</div>
-              </div>
-            )}
-            {nodeEdges.outgoingDependencies.length > 0 && (
-              <div>
-                <div className={styles.fieldLabel}>{t("LineageDetail_OutgoingDependencies", "Depends On")}</div>
-                <div className={styles.fieldValue}>{nodeEdges.outgoingDependencies.length}</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── Connected elements ── */}
       {(nodeEdges.incoming.length > 0 || nodeEdges.outgoing.length > 0) && (
-        <div className={styles.relatedPanel}>
-          <div className={styles.relatedPanelHeader}>
-            <Text weight="semibold">{t("LineageDetail_ConnectedElements", "Connected Elements")}</Text>
-            <Badge>{nodeEdges.incoming.length + nodeEdges.outgoing.length}</Badge>
-          </div>
+        <Accordion className={styles.relatedPanel} collapsible>
+          <AccordionItem value="connected-elements">
+            <AccordionHeader>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{t("LineageDetail_ConnectedElements", "Connected Elements")}</Text>
+                <Badge>{nodeEdges.incoming.length + nodeEdges.outgoing.length}</Badge>
+              </div>
+            </AccordionHeader>
+            <AccordionPanel>
           {nodeEdges.incoming.length > 0 && (
             <div className={styles.relatedGroup}>
               <div className={styles.relatedGroupLabel}>{t("LineageDetail_IncomingConnections", "Incoming ({count})", { count: nodeEdges.incoming.length })}</div>
@@ -1138,80 +1073,52 @@ export function LineageDetailView({
               })}
             </div>
           )}
-        </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
       )}
 
       {/* ── Main properties card ── */}
       <div className={styles.card}>
-        <div className={styles.cardTitle}>{t("LineageDetail_SelectedObject", "Selected object info")}</div>
-        <div className={styles.infoCardsGrid}>
-          {selectedInfoCards.map((card) => (
-            <div key={card.key} className={styles.infoCardButton} title={card.value}>
-              <span className={styles.infoCardLabel}>{card.label}</span>
-              <span className={styles.infoCardPreview}>{card.value}</span>
-            </div>
+        <div className={styles.cardTitle}>{t("LineageDetail_SelectedInfo", "Selected info")}</div>
+        <div style={{ 
+          display: "flex", 
+          flexWrap: "wrap", 
+          gap: tokens.spacingHorizontalXS,
+          fontSize: tokens.fontSizeBase200
+        }}>
+          {selectedInfoCards.map((card, idx) => (
+            <span key={card.key} style={{ 
+              display: "flex", 
+              alignItems: "center",
+              gap: "4px"
+            }}>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{card.label}:</Text>
+              <Text size={200} weight="semibold" title={card.value} style={{ 
+                maxWidth: "150px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}>{card.value}</Text>
+              {idx < selectedInfoCards.length - 1 && <span style={{ color: tokens.colorNeutralForeground4 }}>•</span>}
+            </span>
           ))}
         </div>
       </div>
 
-      {/* ── Entity-type metrics grid ── */}
-      {((): null => {
-        console.log("[LineageDetail] Rendering metrics grid:", {
-          hasRel: !!rel,
-          hasFilteredBy: !!rel.filteredBy,
-          filteredByCount: rel.filteredBy?.nodes?.length || 0,
-          filteredByLabel: rel.filteredBy?.label,
-          willShowMetricChip: !!(rel.filteredBy && rel.filteredBy.nodes.length > 0)
-        });
-        return null;
-      })()}
-      <div className={styles.grid}>
-        {(selectedNode.entityType === "measure" || selectedNode.entityType === "visual") && (
-          <MetricChip label={rel.connectedColumns.label} count={rel.connectedColumns.nodes.length} metricKey="connectedColumns" />
-        )}
-        {(selectedNode.entityType === "visual" || selectedNode.entityType === "column" || selectedNode.entityType === "table") && (
-          <MetricChip label={rel.connectedMeasures.label} count={rel.connectedMeasures.nodes.length} metricKey="connectedMeasures" />
-        )}
-        {(selectedNode.entityType === "report" || selectedNode.entityType === "measure") && (
-          <MetricChip label={rel.connectedVisuals.label} count={rel.connectedVisuals.nodes.length} metricKey="connectedVisuals" />
-        )}
-        {selectedNode.entityType === "visual" && (
-          <MetricChip label={rel.connectedReports.label} count={rel.connectedReports.nodes.length} metricKey="connectedReports" />
-        )}
-        <MetricChip label={rel.directNeighbors.label} count={rel.directNeighbors.nodes.length} metricKey="directNeighbors" />
-        {rel.filteredBy && rel.filteredBy.nodes.length > 0 && (
-          <MetricChip label={rel.filteredBy.label} count={rel.filteredBy.nodes.length} metricKey="filteredBy" />
-        )}
-      </div>
 
-      {/* ── Edge type breakdown ── */}
-      {(nodeEdges.incoming.length > 0 || nodeEdges.outgoing.length > 0) && (
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>{t("LineageDetail_EdgeTypes", "Dependency types")}</div>
-          <div className={styles.grid}>
-            {Array.from(
-              new Set([...nodeEdges.incoming, ...nodeEdges.outgoing].map((e) => e.edgeType))
-            ).map((edgeType) => (
-              <div key={edgeType}>
-                <div className={styles.fieldLabel}>{edgeType.replace(/_/g, " ")}</div>
-                <Badge appearance="outline" size="small" color="informative">
-                  {[...nodeEdges.incoming, ...nodeEdges.outgoing].filter((e) => e.edgeType === edgeType).length}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ── Direct neighbors list (always visible) ── */}
       {rel.directNeighbors.nodes.length > 0 && (
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>
-            {t("LineageDetail_DirectConnections", "Direct connections")} ({rel.directNeighbors.nodes.length})
-          </div>
-          <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
-            {t("LineageDetail_ConnectionsHint", "Click a node to navigate to it in the graph")}
-          </Text>
+        <Accordion className={styles.card} collapsible>
+          <AccordionItem value="direct-neighbors">
+            <AccordionHeader>
+              <Text weight="semibold">{t("LineageDetail_DirectConnections", "Direct connections")} ({rel.directNeighbors.nodes.length})</Text>
+            </AccordionHeader>
+            <AccordionPanel>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
+                {t("LineageDetail_ConnectionsHint", "Click a node to navigate to it in the graph")}
+              </Text>
           
           {(() => {
             const grouped = new Map<string, LineageViewerNode[]>();
@@ -1242,18 +1149,22 @@ export function LineageDetailView({
               </div>
             ));
           })()}
-        </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
       )}
 
       {/* ── Used by list (incoming dependencies) ── */}
       {rel.usedBy && rel.usedBy.nodes.length > 0 && (
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>
-            {t("LineageDetail_UsedBy", "Used by")} ({rel.usedBy.nodes.length})
-          </div>
-          <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
-            {t("LineageDetail_UsedByHint", "Nodes that depend on or reference this node")}
-          </Text>
+        <Accordion className={styles.card} collapsible>
+          <AccordionItem value="used-by">
+            <AccordionHeader>
+              <Text weight="semibold">{t("LineageDetail_UsedBy", "Used by")} ({rel.usedBy.nodes.length})</Text>
+            </AccordionHeader>
+            <AccordionPanel>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
+                {t("LineageDetail_UsedByHint", "Nodes that depend on or reference this node")}
+              </Text>
           
           {(() => {
             const grouped = new Map<string, LineageViewerNode[]>();
@@ -1284,18 +1195,22 @@ export function LineageDetailView({
               </div>
             ));
           })()}
-        </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
       )}
 
       {/* ── Uses list (outgoing dependencies) ── */}
       {rel.uses && rel.uses.nodes.length > 0 && (
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>
-            {t("LineageDetail_Uses", "Uses")} ({rel.uses.nodes.length})
-          </div>
-          <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
-            {t("LineageDetail_UsesHint", "Nodes that this node depends on or references")}
-          </Text>
+        <Accordion className={styles.card} collapsible>
+          <AccordionItem value="uses">
+            <AccordionHeader>
+              <Text weight="semibold">{t("LineageDetail_Uses", "Uses")} ({rel.uses.nodes.length})</Text>
+            </AccordionHeader>
+            <AccordionPanel>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
+                {t("LineageDetail_UsesHint", "Nodes that this node depends on or references")}
+              </Text>
           
           {(() => {
             const grouped = new Map<string, LineageViewerNode[]>();
@@ -1326,18 +1241,22 @@ export function LineageDetailView({
               </div>
             ));
           })()}
-        </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
       )}
 
       {/* ── Filtered by list (tables that filter this table via active relationships) ── */}
       {rel.filteredBy && rel.filteredBy.nodes.length > 0 && (
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>
-            {t("LineageDetail_FilteredBy", "Filtered by")} ({rel.filteredBy.nodes.length})
-          </div>
-          <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
-            {t("LineageDetail_FilteredByHint", "Tables that apply filters to this element or its dependencies through active relationships (BothDirections or OneDirection with ToCardinality=One)")}
-          </Text>
+        <Accordion className={styles.card} collapsible>
+          <AccordionItem value="filtered-by">
+            <AccordionHeader>
+              <Text weight="semibold">{t("LineageDetail_FilteredBy", "Filtered by")} ({rel.filteredBy.nodes.length})</Text>
+            </AccordionHeader>
+            <AccordionPanel>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
+                {t("LineageDetail_FilteredByHint", "Tables that apply filters to this element or its dependencies through active relationships (BothDirections or OneDirection with ToCardinality=One)")}
+              </Text>
           
           {(() => {
             const grouped = new Map<string, LineageViewerNode[]>();
@@ -1368,18 +1287,22 @@ export function LineageDetailView({
               </div>
             ));
           })()}
-        </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
       )}
 
       {/* ── Table Relationships (for table nodes only) ── */}
       {selectedNode?.entityType === "table" && (tableRelationships.asFrom.length > 0 || tableRelationships.asTo.length > 0) && (
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>
-            {t("LineageDetail_TableRelationships", "Relationships")} ({tableRelationships.asFrom.length + tableRelationships.asTo.length})
-          </div>
-          <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalM }}>
-            {t("LineageDetail_TableRelationshipsHint", "All relationships where this table participates")}
-          </Text>
+        <Accordion className={styles.card} collapsible>
+          <AccordionItem value="table-relationships">
+            <AccordionHeader>
+              <Text weight="semibold">{t("LineageDetail_TableRelationships", "Relationships")} ({tableRelationships.asFrom.length + tableRelationships.asTo.length})</Text>
+            </AccordionHeader>
+            <AccordionPanel>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalM }}>
+                {t("LineageDetail_TableRelationshipsHint", "All relationships where this table participates")}
+              </Text>
 
           {/* Relationships where this table is the FROM table */}
           {tableRelationships.asFrom.length > 0 && (
@@ -1488,46 +1411,9 @@ export function LineageDetailView({
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Related nodes panel (shown when a metric chip is active) ── */}
-      {activeRelated && activeRelated.nodes.length > 0 && activeMetric !== "directNeighbors" && activeMetric !== "usedBy" && activeMetric !== "uses" && (
-        <div className={styles.relatedPanel}>
-          <div className={styles.relatedPanelHeader}>
-            <div>
-              <Text weight="semibold" size={300}>{activeRelated.label}</Text>
-              <br />
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                {t("LineageDetail_RelatedHint", "Click a node to navigate to it")}
-              </Text>
-            </div>
-            <Badge appearance="tint" size="medium">{activeRelated.nodes.length}</Badge>
-          </div>
-
-          {activeRelatedGroups.map((group) => (
-            <div key={group.entityType} className={styles.relatedGroup}>
-              <div className={styles.relatedGroupLabel}>
-                {getEntityTypeLabel(group.entityType)} ({group.nodes.length})
-              </div>
-              {group.nodes.map((node) => (
-                <button
-                  key={node.nodeId}
-                  type="button"
-                  className={`${styles.relatedItem}${node.nodeId === selectedNodeId ? ` ${styles.relatedItemSelected}` : ""}`}
-                  onClick={() => onNodeSelect?.(node.nodeId)}
-                >
-                  <span className={styles.relatedItemName} title={node.displayName}>
-                    {node.displayName}
-                  </span>
-                  {node.tableName && (
-                    <span className={styles.relatedItemSub}>{node.tableName}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
       )}
 
       <RequirementDialog

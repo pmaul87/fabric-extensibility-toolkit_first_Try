@@ -13,6 +13,7 @@ import {
   makeStyles,
   tokens,
   Tooltip,
+  Spinner,
 } from "@fluentui/react-components";
 import {
   ChevronLeftFilled,
@@ -447,7 +448,7 @@ export function LineageWorkbenchItemLineageView({
   // ── Resizable panel heights ──────────────────────────────────────────────
   const [tableHeight, setTableHeight] = useState<number>(300);
   const [graphHeight, setGraphHeight] = useState<number>(400);
-  const [detailHeight, setDetailHeight] = useState<number>(250);
+  const [detailHeight, setDetailHeight] = useState<number>(350);
 
   // ── Resize handlers ───────────────────────────────────────────────────────
   const handleResizeStart = (panel: string) => (e: React.MouseEvent) => {
@@ -488,9 +489,22 @@ export function LineageWorkbenchItemLineageView({
   const [graphNodeLimit, setGraphNodeLimit] = useState<number>(DEFAULT_GRAPH_NODE_LIMIT);
   const [graphDisplayMode, setGraphDisplayMode] = useState<"highlight" | "filter">("filter");
   const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("side-by-side");
+  const [isLoadingGraph, setIsLoadingGraph] = useState(false);
 
   // ── Data source ───────────────────────────────────────────────────────────
   const dataSourceMode = lineage?.dataSourceMode === "mock" ? "mock" : "actual";
+
+  // Check if we should be loading data (to prevent showing empty state prematurely)
+  const shouldLoadData = useMemo(() => {
+    if (dataSourceMode !== "actual") return false;
+    if (hasHydratedActualGraphRef.current) return false;
+    if (!targetLakehouseId) return false;
+    const hasDimensionData = 
+      lineage?.graphSnapshot?.dimensions?.semanticModels?.length > 0 ||
+      lineage?.graphSnapshot?.dimensions?.smTables?.length > 0;
+    if (hasDimensionData) return false;
+    return true;
+  }, [dataSourceMode, targetLakehouseId, lineage?.graphSnapshot?.dimensions]);
 
   useEffect((): void | (() => void) => {
     console.log("[LineageView] Data loading effect running:", {
@@ -527,6 +541,7 @@ export function LineageWorkbenchItemLineageView({
     console.log("[LineageView] Starting API call to load graph...");
     let cancelled = false;
     setLoadError(""); // Clear any previous errors
+    setIsLoadingGraph(true);
     const loadActualGraph = async (): Promise<void> => {
       try {
         const storage = new OneLakeLineageStorage(workloadClient);
@@ -1069,16 +1084,38 @@ export function LineageWorkbenchItemLineageView({
     return { depthByNodeId: depthMap, highlightedNodeIds: hlNodes, highlightedEdgeIds: hlEdges };
   }, [selectedNodeId, edges]);
 
-  // ── Empty state text ──────────────────────────────────────────────────────
-  const emptyMessage =
-    dataSourceMode === "actual" && !targetLakehouseId
-      ? t(
+  // ── Empty state configuration ─────────────────────────────────────────────
+  const emptyStateConfig = useMemo(() => {
+    if (dataSourceMode === "actual" && !targetLakehouseId) {
+      return {
+        title: t("LineageWorkbench_Lineage_Empty_Title_NoLakehouse", "Lakehouse Not Configured"),
+        message: t(
           "LineageWorkbench_Lineage_Empty_Actual_MissingLakehouse",
           "Actual data mode requires a saved OneLake Lakehouse ID. Open Extract, enter the lakehouse item ID, and save the workbench before loading real lineage data."
-        )
-      : dataSourceMode === "actual"
-      ? t("LineageWorkbench_Lineage_Empty_Actual", "No semantic models found in the target lakehouse. Run the semantic model extraction notebook to populate lineage_semantic_models and related tables.")
-      : t("LineageWorkbench_Lineage_Empty", "No graph nodes available. Run extraction first.");
+        ),
+        icon: "info" as const,
+      };
+    }
+    if (dataSourceMode === "actual" && targetLakehouseId && !isLoadingGraph) {
+      return {
+        title: t("LineageWorkbench_Lineage_Empty_Title_NoData", "No Data Found"),
+        message: t(
+          "LineageWorkbench_Lineage_Empty_Actual",
+          "No semantic models found in the target lakehouse. Go to the Extract tab and click 'Run Extraction' to populate lineage data from your workspace."
+        ),
+        hint: t(
+          "LineageWorkbench_Lineage_Empty_Hint",
+          "The extraction process will scan your workspace for Power BI semantic models, reports, and other artifacts, then store the lineage metadata in Delta tables."
+        ),
+        icon: "empty" as const,
+      };
+    }
+    return {
+      title: t("LineageWorkbench_Lineage_Empty_Title_Generic", "No Graph Data"),
+      message: t("LineageWorkbench_Lineage_Empty", "No graph nodes available. Run extraction first."),
+      icon: "empty" as const,
+    };
+  }, [dataSourceMode, targetLakehouseId, isLoadingGraph, t]);
 
   // In stacked mode, expanded panels split available space evenly.
   const stackedSharedHeight = exploreLayout === "stacked";
@@ -1301,20 +1338,55 @@ export function LineageWorkbenchItemLineageView({
           </MessageBar>
         )}
         
-        {nodes.length === 0 ? (
+        {nodes.length === 0 && (isLoadingGraph || shouldLoadData) ? (
           <div
             style={{
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               flex: 1,
               padding: "40px",
               textAlign: "center",
+              gap: tokens.spacingVerticalL,
             }}
           >
-            <Text style={{ color: tokens.colorNeutralForeground3, maxWidth: 480 }}>
-              {emptyMessage}
-            </Text>
+            <Spinner size="extra-large" />
+            <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, maxWidth: 520 }}>
+              <Text size={500} weight="semibold" style={{ color: tokens.colorNeutralForeground1 }}>
+                {t("LineageWorkbench_Loading_Title", "Loading Lineage Graph")}
+              </Text>
+              <Text style={{ color: tokens.colorNeutralForeground3 }}>
+                {t("LineageWorkbench_Loading_Message", "Fetching semantic models, tables, columns, measures, and relationships from the lakehouse...")}
+              </Text>
+            </div>
+          </div>
+        ) : nodes.length === 0 && !isLoadingGraph && !shouldLoadData ? (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              flex: 1,
+              padding: "40px",
+              textAlign: "center",
+              gap: tokens.spacingVerticalL,
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, maxWidth: 520 }}>
+              <Text size={500} weight="semibold" style={{ color: tokens.colorNeutralForeground1 }}>
+                {emptyStateConfig.title}
+              </Text>
+              <Text style={{ color: tokens.colorNeutralForeground3 }}>
+                {emptyStateConfig.message}
+              </Text>
+              {emptyStateConfig.hint && (
+                <Text size={200} style={{ color: tokens.colorNeutralForeground4, fontStyle: "italic" }}>
+                  {emptyStateConfig.hint}
+                </Text>
+              )}
+            </div>
           </div>
         ) : (
           <>
@@ -1384,6 +1456,7 @@ export function LineageWorkbenchItemLineageView({
                     <LineageGraphView
                       nodes={graphNodes}
                       edges={graphEdges}
+                      isLoading={isLoadingGraph}
                       focusNodeId={selectedNodeId || undefined}
                       depthByNodeId={depthByNodeId}
                       highlightedNodeIds={highlightedNodeIds}
@@ -1491,6 +1564,7 @@ export function LineageWorkbenchItemLineageView({
                       <LineageGraphView
                         nodes={graphNodes}
                         edges={graphEdges}
+                        isLoading={isLoadingGraph}
                         focusNodeId={selectedNodeId || undefined}
                         depthByNodeId={depthByNodeId}
                         highlightedNodeIds={highlightedNodeIds}

@@ -24,6 +24,7 @@
     "@xyflow/react": "^12.10.2",
     "dagre": "^0.8.5",
     "history": "^4.9.0",
+    "html-to-image": "^1.11.13",
     "i18next": "^25.4.1",
     "i18next-http-backend": "^2.4.2",
     "jwt-decode": "^3.1.2",

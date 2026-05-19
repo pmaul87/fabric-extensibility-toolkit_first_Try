@@ -1,8 +1,8 @@
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge, Text, makeStyles, tokens, RadioGroup, Radio } from "@fluentui/react-components";
-import { ChevronDownRegular, ChevronRightRegular } from "@fluentui/react-icons";
+import { Badge, Text, makeStyles, tokens, RadioGroup, Radio, Input } from "@fluentui/react-components";
+import { ChevronDownRegular, ChevronRightRegular, SearchRegular } from "@fluentui/react-icons";
 
 const useStyles = makeStyles({
   root: {
@@ -12,6 +12,13 @@ const useStyles = makeStyles({
     gap: tokens.spacingVerticalL,
     height: "100%",
     overflow: "auto",
+  },
+  searchBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalS,
+    paddingLeft: tokens.spacingHorizontalM,
+    paddingRight: tokens.spacingHorizontalM,
   },
   groupingToggle: {
     display: "flex",
@@ -100,11 +107,6 @@ const useStyles = makeStyles({
     fontWeight: tokens.fontWeightSemibold,
     wordBreak: "break-word",
   },
-  nodeId: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase200,
-    wordBreak: "break-all",
-  },
   empty: {
     padding: tokens.spacingVerticalXXL,
     textAlign: "center",
@@ -117,6 +119,7 @@ interface LineageTableViewProps {
     nodeId: string;
     displayName: string;
     entityType: string;
+    parentNodeId?: string;
     reportId?: string;
     datasetId?: string;
     modelName?: string;
@@ -135,6 +138,7 @@ export function LineageTableView({
 }: LineageTableViewProps) {
   // Grouping mode: "parent" (default) or "type"
   const [groupingMode, setGroupingMode] = useState<"parent" | "type">("parent");
+  const [searchQuery, setSearchQuery] = useState("");
   const { t } = useTranslation();
   const styles = useStyles();
 
@@ -158,18 +162,27 @@ export function LineageTableView({
       nodeId: string;
       displayName: string;
       entityType: string;
+      parentNodeId?: string;
+      depth?: number;
       reportId?: string;
       datasetId?: string;
       modelName?: string;
       objectName?: string;
-      parentId?: string;
-      parentDisplayName?: string;
     }
+    
+    // Filter nodes based on search query
+    const query = searchQuery.toLowerCase().trim();
+    const filteredNodes = query
+      ? nodes.filter(n =>
+          n.displayName.toLowerCase().includes(query) ||
+          n.entityType.toLowerCase().includes(query)
+        )
+      : nodes;
     
     if (groupingMode === "type") {
       // Group by entityType
       const typeMap = new Map<string, GroupedItem[]>();
-      for (const node of nodes) {
+      for (const node of filteredNodes) {
         if (!typeMap.has(node.entityType)) typeMap.set(node.entityType, []);
         typeMap.get(node.entityType)!.push(node);
       }
@@ -180,112 +193,62 @@ export function LineageTableView({
         nodes: items.sort((a, b) => a.displayName.localeCompare(b.displayName)),
       }));
     } else {
-      // Group by parent (report/dataset)
-      const reportNodes = new Map<string, GroupedItem[]>();
-      const datasetNodes = new Map<string, GroupedItem[]>();
-      const orphanNodes: GroupedItem[] = [];
-      const reportNodeIdByRawId = new Map<string, string>();
+      const nodeById = new Map(filteredNodes.map((node) => [node.nodeId, node]));
+      const childrenByParentId = new Map<string, GroupedItem[]>();
 
-      // Build mapping from raw report id -> report node id so children can resolve to real report nodes.
-      for (const node of nodes) {
-        if (node.entityType === "report") {
-          reportNodeIdByRawId.set(node.nodeId, node.nodeId);
-          if (node.reportId) {
-            reportNodeIdByRawId.set(node.reportId, node.nodeId);
+      for (const node of filteredNodes) {
+        if (!node.parentNodeId) {
+          continue;
+        }
+        if (!childrenByParentId.has(node.parentNodeId)) {
+          childrenByParentId.set(node.parentNodeId, []);
+        }
+        childrenByParentId.get(node.parentNodeId)!.push(node);
+      }
+
+      const roots = filteredNodes.filter((node) => !node.parentNodeId || !nodeById.has(node.parentNodeId));
+      const typePriority = new Map<string, number>([
+        ["report", 0],
+        ["semantic_model", 1],
+        ["page", 2],
+        ["table", 3],
+      ]);
+      roots.sort((a, b) => {
+        const pA = typePriority.get(a.entityType) ?? 9;
+        const pB = typePriority.get(b.entityType) ?? 9;
+        if (pA !== pB) return pA - pB;
+        return a.displayName.localeCompare(b.displayName);
+      });
+
+      const flattenHierarchy = (rootNode: GroupedItem): GroupedItem[] => {
+        const output: GroupedItem[] = [];
+        const walk = (current: GroupedItem, depth: number): void => {
+          output.push({ ...current, depth });
+          const children = [...(childrenByParentId.get(current.nodeId) ?? [])].sort((a, b) => a.displayName.localeCompare(b.displayName));
+          for (const child of children) {
+            walk(child, depth + 1);
           }
-        }
-      }
+        };
+        walk(rootNode, 0);
+        return output;
+      };
 
-      for (const node of nodes) {
-        // Visuals/pages belong to reports
-        if ((node.entityType === "visual" || node.entityType === "page") && node.reportId) {
-          const resolvedReportGroupId = reportNodeIdByRawId.get(node.reportId) ?? node.reportId;
-          if (!reportNodes.has(resolvedReportGroupId)) {
-            reportNodes.set(resolvedReportGroupId, []);
-          }
-          reportNodes.get(resolvedReportGroupId)!.push({
-            ...node,
-            parentId: resolvedReportGroupId,
-          });
-        }
-        // Tables/Columns/Measures belong to datasets
-        else if ((node.entityType === "table" || node.entityType === "column" || node.entityType === "measure") && node.datasetId) {
-          if (!datasetNodes.has(node.datasetId)) {
-            datasetNodes.set(node.datasetId, []);
-          }
-          datasetNodes.get(node.datasetId)!.push({
-            ...node,
-            parentId: node.datasetId,
-          });
-        }
-        // Reports and other items
-        else if (node.entityType === "report") {
-          if (!reportNodes.has(node.nodeId)) {
-            reportNodes.set(node.nodeId, []);
-          }
-        }
-        // Orphan nodes
-        else {
-          orphanNodes.push(node);
-        }
-      }
-
-      const groups: Array<{
-        groupType: "report" | "dataset" | "orphan";
-        groupId: string;
-        groupDisplayName: string;
-        nodes: GroupedItem[];
-      }> = [];
-
-      // Add report groups
-      for (const [reportId, reportChildren] of reportNodes.entries()) {
-        const reportNode = nodes.find(n => n.nodeId === reportId);
-        const reportName = reportNode?.displayName || reportChildren[0]?.objectName || reportChildren[0]?.displayName || reportId;
-        if (reportNode) {
-          groups.push({
-            groupType: "report",
-            groupId: reportId,
-            groupDisplayName: reportName,
-            nodes: [reportNode, ...reportChildren.sort((a, b) => a.displayName.localeCompare(b.displayName))],
-          });
-        } else if (reportChildren.length > 0) {
-          groups.push({
-            groupType: "report",
-            groupId: reportId,
-            groupDisplayName: reportName,
-            nodes: reportChildren.sort((a, b) => a.displayName.localeCompare(b.displayName)),
-          });
-        }
-      }
-
-      // Add dataset groups
-      for (const [datasetId, datasetChildren] of datasetNodes.entries()) {
-        const modelName = datasetChildren.find((n) => n.modelName?.trim())?.modelName?.trim();
-        groups.push({
-          groupType: "dataset",
-          groupId: datasetId,
-          groupDisplayName: modelName || datasetId,
-          nodes: datasetChildren.sort((a, b) => a.displayName.localeCompare(b.displayName)),
-        });
-      }
-
-      // Add orphan group if there are any
-      if (orphanNodes.length > 0) {
-        groups.push({
-          groupType: "orphan",
-          groupId: "orphan",
-          groupDisplayName: "Other",
-          nodes: orphanNodes.sort((a, b) => a.displayName.localeCompare(b.displayName)),
-        });
-      }
-
-      return groups;
+      return roots.map((rootNode) => ({
+        groupType: rootNode.entityType,
+        groupId: rootNode.nodeId,
+        groupDisplayName: rootNode.displayName,
+        nodes: flattenHierarchy(rootNode),
+      }));
     }
-  }, [nodes, groupingMode]);
+  }, [nodes, groupingMode, searchQuery]);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set(groupedNodes.map((group) => group.groupId))
   );
+
+  useEffect(() => {
+    setCollapsedGroups(new Set(groupedNodes.map((group) => group.groupId)));
+  }, [groupedNodes]);
 
   const toggleGroup = (groupId: string) => {
     setCollapsedGroups((previous) => {
@@ -309,6 +272,20 @@ export function LineageTableView({
 
   return (
     <div className={styles.root}>
+      <div className={styles.searchBox}>
+        <SearchRegular style={{ color: tokens.colorNeutralForeground3 }} />
+        <Input
+          placeholder={t("LineageWorkbench_SearchPlaceholder", "Search nodes...")}
+          value={searchQuery}
+          onChange={(_, data) => setSearchQuery(data.value)}
+          style={{ flex: 1 }}
+        />
+        {searchQuery && (
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+            {groupedNodes.reduce((sum, g) => sum + g.nodes.length, 0)} result{groupedNodes.reduce((sum, g) => sum + g.nodes.length, 0) !== 1 ? 's' : ''}
+          </Text>
+        )}
+      </div>
       <div className={styles.groupingToggle}>
         <RadioGroup
           layout="horizontal"
@@ -349,7 +326,7 @@ export function LineageTableView({
               <Badge className={styles.groupTypeBadge} appearance="outline" size="small">
                 {group.groupType === "report"
                   ? t("LineageWorkbench_GroupType_Report", "Report")
-                  : group.groupType === "dataset"
+                  : group.groupType === "semantic_model"
                   ? t("LineageWorkbench_GroupType_SemanticModel", "Semantic Model")
                   : group.groupType === "orphan"
                   ? t("LineageWorkbench_GroupType_Other", "Other")
@@ -362,20 +339,18 @@ export function LineageTableView({
             </div>
           </div>
           {!collapsedGroups.has(group.groupId) && group.nodes.map((node, idx) => {
-            // For report groups, show parent report with special styling, then children with indent
-            const isParentNode = group.groupType === "report" && idx === 0;
-            const isChildNode = group.groupType === "report" && idx > 0;
+            const isParentNode = idx === 0;
+            const indentDepth = node.depth ?? 0;
 
             return (
               <div
                 key={node.nodeId}
                 className={`${styles.row} ${selectedNodeId && node.nodeId === selectedNodeId ? styles.selectedRow : ""}`}
                 onClick={() => onNodeSelect?.(node.nodeId)}
-                style={isChildNode ? { paddingLeft: `calc(${tokens.spacingHorizontalM} + 24px)` } : undefined}
+                style={indentDepth > 0 ? { paddingLeft: `calc(${tokens.spacingHorizontalM} + ${indentDepth * 20}px)` } : undefined}
               >
                 <div className={styles.nameCell}>
                   <Text className={styles.nodeName}>{node.displayName}</Text>
-                  <Text className={styles.nodeId}>{node.nodeId}</Text>
                 </div>
                 <Badge appearance="outline" color={isParentNode ? "important" : "informative"}>
                   {node.entityType}

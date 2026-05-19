@@ -17,6 +17,22 @@ const sql = require("mssql");
 
 const FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1";
 
+const LINEAGE_REQUIRED_TABLES = ["lineage_graph_nodes", "lineage_graph_edges"];
+const LINEAGE_OPTIONAL_TABLES = [
+  "lineage_reports",
+  "lineage_report_visuals",
+  "lineage_semantic_models",
+  "lineage_semantic_model_tables",
+  "lineage_semantic_model_columns",
+  "lineage_semantic_model_measures",
+  "lineage_semantic_model_relationships",
+  "lineage_semantic_model_dependencies",
+  "lineage_lakehouses",
+  "lineage_warehouses",
+  "workspace_artifacts",
+  "lineage_graph_nodes_enriched",
+];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -101,34 +117,226 @@ function toIsoOrNull(value) {
   return isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
-async function fetchLakehouseMetadata(token, workspaceId, lakehouseId) {
+async function fetchLakehouseMetadata(token, workspaceId, lakehouseId, manualSqlEndpoint) {
   const diagnostics = [];
   let sqlEndpoint;
   let defaultSchema;
+  let lakehouseName;
+  let resolvedWorkspaceId = workspaceId;
+
+  console.log("[LakehouseAnalyzerService] fetchLakehouseMetadata called:", {
+    lakehouseId,
+    workspaceId: workspaceId || "(not provided)",
+    manualSqlEndpoint: manualSqlEndpoint || "(not provided)",
+  });
 
   try {
-    const lakehouses = await fabricGetAllPages(token, `/workspaces/${workspaceId}/lakehouses`);
+    // If manual SQL endpoint is provided, construct proper connection string
+    if (manualSqlEndpoint) {
+      console.log("[LakehouseAnalyzerService] *** Manual SQL endpoint override detected ***");
+      console.log("[LakehouseAnalyzerService] Manual endpoint hostname:", manualSqlEndpoint);
+      
+      // Still need to resolve workspace and get lakehouse name for Initial Catalog
+      if (!resolvedWorkspaceId) {
+        console.log("[LakehouseAnalyzerService] No workspaceId provided, fetching lakehouse item to determine workspace...");
+        const lakehouseItem = await fabricGet(token, `/items/${lakehouseId}`);
+        resolvedWorkspaceId = lakehouseItem?.workspaceId;
+        if (!resolvedWorkspaceId) {
+          throw new Error("Could not determine workspace ID from lakehouse item. The lakehouse may not exist or you don't have access to it.");
+        }
+        console.log("[LakehouseAnalyzerService] ✓ Resolved workspaceId from lakehouse item:", resolvedWorkspaceId);
+      }
+      
+      // Fetch lakehouse name for database (Initial Catalog)
+      console.log("[LakehouseAnalyzerService] Fetching lakehouse name for database...");
+      try {
+        const lakehouses = await fabricGetAllPages(token, `/workspaces/${resolvedWorkspaceId}/lakehouses`);
+        console.log("[LakehouseAnalyzerService] Found", lakehouses.length, "lakehouses in workspace");
+        const lakehouse = lakehouses.find((item) => item.id === lakehouseId);
+        if (lakehouse) {
+          lakehouseName = lakehouse.displayName || lakehouse.name;
+          // Construct full connection string with manual endpoint as Server
+          sqlEndpoint = `Server=${manualSqlEndpoint};Initial Catalog=${lakehouseName}`;
+          console.log("[LakehouseAnalyzerService] ✓ Successfully constructed connection string:");
+          console.log("[LakehouseAnalyzerService]   - Server:", manualSqlEndpoint);
+          console.log("[LakehouseAnalyzerService]   - Initial Catalog:", lakehouseName);
+          console.log("[LakehouseAnalyzerService]   - Full connection string:", sqlEndpoint);
+        } else {
+          console.error("[LakehouseAnalyzerService] ✗ Lakehouse not found in workspace. Looking for lakehouseId:", lakehouseId);
+          console.error("[LakehouseAnalyzerService] Available lakehouse IDs:", lakehouses.map(lh => lh.id));
+          throw new Error("Could not find lakehouse to determine database name for connection string.");
+        }
+      } catch (err) {
+        console.error("[LakehouseAnalyzerService] ✗ Failed to construct connection string with manual endpoint:", err.message);
+        throw new Error(`Could not construct SQL connection string: ${err.message}`);
+      }
+      
+      diagnostics.push(`Using manual SQL endpoint: Server=${manualSqlEndpoint}, Database=${lakehouseName}`);
+      console.log("[LakehouseAnalyzerService] ✓ Manual endpoint configuration complete");
+      return { sqlEndpoint, defaultSchema, lakehouseName, workspaceId: resolvedWorkspaceId, diagnostics };
+    }
+
+    // Auto-detection path: no manual endpoint provided
+    console.log("[LakehouseAnalyzerService] *** Auto-detection mode: querying Fabric API for SQL endpoint ***");
+    
+    // If workspaceId is not provided, try to get it from the lakehouse item itself
+    if (!resolvedWorkspaceId) {
+      console.log("[LakehouseAnalyzerService] No workspaceId provided, fetching lakehouse item to determine workspace...");
+      const lakehouseItem = await fabricGet(token, `/items/${lakehouseId}`);
+      resolvedWorkspaceId = lakehouseItem?.workspaceId;
+      console.log("[LakehouseAnalyzerService] ✓ Resolved workspaceId from lakehouse item:", resolvedWorkspaceId);
+      if (!resolvedWorkspaceId) {
+        throw new Error("Could not determine workspace ID from lakehouse item. The lakehouse may not exist or you don't have access to it.");
+      }
+    }
+
+    console.log("[LakehouseAnalyzerService] Fetching lakehouses in workspace:", resolvedWorkspaceId);
+    const lakehouses = await fabricGetAllPages(token, `/workspaces/${resolvedWorkspaceId}/lakehouses`);
+    console.log("[LakehouseAnalyzerService] Found", lakehouses.length, "lakehouses in workspace");
+    console.log("[LakehouseAnalyzerService] Found", lakehouses.length, "lakehouses in workspace");
     const lakehouse = lakehouses.find((item) => item.id === lakehouseId);
 
     if (!lakehouse) {
+      console.error("[LakehouseAnalyzerService] ✗ Lakehouse NOT FOUND in workspace!");
+      console.error("[LakehouseAnalyzerService] Looking for lakehouseId:", lakehouseId);
+      console.error("[LakehouseAnalyzerService] Available lakehouse IDs:", lakehouses.map(lh => lh.id));
       diagnostics.push(
         "Could not find the selected Lakehouse in workspace metadata while handling a schema-enabled fallback."
       );
-      return { sqlEndpoint, defaultSchema, diagnostics };
+      return { sqlEndpoint, defaultSchema, lakehouseName, diagnostics };
     }
+
+    lakehouseName = lakehouse.displayName || lakehouse.name;
+    console.log("[LakehouseAnalyzerService] ✓ Found lakehouse:", lakehouseName);
+
+    console.log("[LakehouseAnalyzerService] Lakehouse API response structure:", {
+      id: lakehouse.id,
+      displayName: lakehouse.displayName,
+      hasProperties: !!lakehouse.properties,
+      propertiesKeys: lakehouse.properties ? Object.keys(lakehouse.properties) : [],
+      hasSqlEndpointProperties: !!lakehouse.properties?.sqlEndpointProperties,
+      sqlEndpointPropertiesKeys: lakehouse.properties?.sqlEndpointProperties ? Object.keys(lakehouse.properties.sqlEndpointProperties) : [],
+    });
 
     sqlEndpoint =
       lakehouse?.properties?.sqlEndpointProperties?.connectionString ||
       lakehouse?.properties?.connectionString ||
       undefined;
     defaultSchema = lakehouse?.properties?.defaultSchema || undefined;
+
+    console.log("[LakehouseAnalyzerService] Extracted from lakehouse properties:");
+    console.log("[LakehouseAnalyzerService]   - SQL endpoint:", sqlEndpoint || "(NONE - will use fallback)");
+    console.log("[LakehouseAnalyzerService]   - Default schema:", defaultSchema || "(not specified)");
+    console.log("[LakehouseAnalyzerService]   - Lakehouse name:", lakehouseName);
+
+    // Fallback: Construct SQL endpoint manually if not provided by API
+    if (!sqlEndpoint && lakehouse) {
+      console.log("[LakehouseAnalyzerService] *** SQL endpoint not found in API, constructing fallback ***");
+      const server = `${resolvedWorkspaceId}.datawarehouse.fabric.microsoft.com`;
+      const database = lakehouseName;
+      sqlEndpoint = `Server=${server};Initial Catalog=${database}`;
+      diagnostics.push(
+        `SQL endpoint connection string not found in API response. Constructed fallback: Server=${server}, Database=${database}`
+      );
+      console.log("[LakehouseAnalyzerService] ✓ Constructed fallback SQL endpoint:");
+      console.log("[LakehouseAnalyzerService]   - Server:", server);
+      console.log("[LakehouseAnalyzerService]   - Initial Catalog:", database);
+      console.log("[LakehouseAnalyzerService]   - Full connection string:", sqlEndpoint);
+    }
   } catch (error) {
     const msg = `Could not fetch Lakehouse metadata: ${error?.message || error}`;
     diagnostics.push(msg);
-    console.warn(`[LakehouseAnalyzerService] ${msg}`);
+    console.error(`[LakehouseAnalyzerService] ✗ Error in fetchLakehouseMetadata:`, msg);
   }
 
-  return { sqlEndpoint, defaultSchema, diagnostics };
+  console.log("[LakehouseAnalyzerService] === fetchLakehouseMetadata FINAL RESULT ===");
+  console.log("[LakehouseAnalyzerService] SQL Endpoint:", sqlEndpoint || "❌ MISSING");
+  console.log("[LakehouseAnalyzerService] Lakehouse Name:", lakehouseName || "❌ MISSING");
+  console.log("[LakehouseAnalyzerService] Workspace ID:", resolvedWorkspaceId || "❌ MISSING");
+  console.log("[LakehouseAnalyzerService] Default Schema:", defaultSchema || "(not specified)");
+  console.log("[LakehouseAnalyzerService] Diagnostics:", diagnostics);
+  console.log("[LakehouseAnalyzerService] ==========================================");
+
+  return { sqlEndpoint, defaultSchema, lakehouseName, workspaceId: resolvedWorkspaceId, diagnostics };
+}
+
+function escapeSqlIdentifier(identifier) {
+  return `[${String(identifier).replace(/]/g, "]]" )}]`;
+}
+
+async function resolveTableSchema(pool, tableName) {
+  const result = await pool
+    .request()
+    .input("tableName", sql.NVarChar, tableName)
+    .query(`
+      SELECT TOP 1 TABLE_SCHEMA AS schemaName
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_NAME = @tableName
+      ORDER BY CASE WHEN TABLE_SCHEMA = 'dbo' THEN 0 ELSE 1 END, TABLE_SCHEMA;
+    `);
+
+  const row = (result.recordset || [])[0];
+  return row?.schemaName || null;
+}
+
+async function queryLineageTables(sqlEndpoint, sqlAccessToken, tableNames, fallbackDatabase) {
+  const { server, database } = parseSqlConnectionInfo(sqlEndpoint, fallbackDatabase);
+  console.log("[LakehouseAnalyzerService] Parsed SQL connection:", {
+    server: server ? `${server.substring(0, 40)}...` : "UNDEFINED",
+    database: database || "UNDEFINED",
+    usedFallback: !sqlEndpoint?.includes("Initial Catalog") && !sqlEndpoint?.includes("Database="),
+  });
+  if (!server || !database) {
+    throw new Error("Lakehouse SQL connection info is incomplete. Server or Initial Catalog is missing.");
+  }
+
+  const pool = new sql.ConnectionPool({
+    server,
+    database,
+    port: 1433,
+    options: {
+      encrypt: true,
+      trustServerCertificate: false,
+    },
+    authentication: {
+      type: "azure-active-directory-access-token",
+      options: {
+        token: sqlAccessToken,
+      },
+    },
+    pool: {
+      max: 1,
+      min: 0,
+      idleTimeoutMillis: 30000,
+    },
+    connectionTimeout: 30000,
+    requestTimeout: 60000,
+  });
+
+  try {
+    await pool.connect();
+
+    const output = {};
+    const diagnostics = [];
+    for (const tableName of tableNames) {
+      const schemaName = await resolveTableSchema(pool, tableName);
+      if (!schemaName) {
+        output[tableName] = [];
+        diagnostics.push(`Table '${tableName}' not found in Lakehouse SQL endpoint.`);
+        console.log(`[LakehouseAnalyzer] Table not found: ${tableName}`);
+        continue;
+      }
+
+      const qualified = `${escapeSqlIdentifier(schemaName)}.${escapeSqlIdentifier(tableName)}`;
+      const rowsResult = await pool.request().query(`SELECT * FROM ${qualified};`);
+      output[tableName] = rowsResult.recordset || [];
+      console.log(`[LakehouseAnalyzer] Queried ${qualified}: ${output[tableName].length} rows`);
+    }
+
+    return { output, diagnostics };
+  } finally {
+    await pool.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -553,6 +761,98 @@ class LakehouseAnalyzerService {
       analyzedAt,
       isPartial,
       diagnostics: allDiagnostics,
+    };
+  }
+
+  async loadLineageGraphFromLakehouseTables({
+    workspaceId,
+    lakehouseId,
+    sqlEndpoint,
+    accessToken,
+    sqlAccessToken,
+    includeDimensions = true,
+  }) {
+    const diagnostics = [];
+
+    if (!lakehouseId) {
+      throw new Error("lakehouseId is required.");
+    }
+    if (!accessToken) {
+      throw new Error("Delegated Fabric access token is required.");
+    }
+    if (!sqlAccessToken) {
+      throw new Error("Delegated Azure SQL access token is required to query Delta tables.");
+    }
+
+    const metadata = await fetchLakehouseMetadata(accessToken, workspaceId, lakehouseId, sqlEndpoint);
+    diagnostics.push(...metadata.diagnostics);
+    if (!metadata.sqlEndpoint) {
+      throw new Error("Lakehouse SQL endpoint is not available.");
+    }
+
+    // Use the resolved workspaceId from metadata if it was determined from the lakehouse item
+    const resolvedWorkspaceId = metadata.workspaceId || workspaceId;
+    console.log("[LakehouseAnalyzerService] Using workspaceId:", resolvedWorkspaceId);
+
+    const requestedTables = includeDimensions
+      ? [...LINEAGE_REQUIRED_TABLES, ...LINEAGE_OPTIONAL_TABLES]
+      : [...LINEAGE_REQUIRED_TABLES];
+
+    // Use lakehouseName as database (defaultSchema is 'dbo', which is a schema name, not a database name)
+    const fallbackDatabase = metadata.lakehouseName;
+    const { output, diagnostics: queryDiagnostics } = await queryLineageTables(
+      metadata.sqlEndpoint,
+      sqlAccessToken,
+      requestedTables,
+      fallbackDatabase
+    );
+    diagnostics.push(...queryDiagnostics);
+
+    const nodes = Array.isArray(output.lineage_graph_nodes) ? output.lineage_graph_nodes : [];
+    const edges = Array.isArray(output.lineage_graph_edges) ? output.lineage_graph_edges : [];
+
+    if (nodes.length === 0 && edges.length === 0) {
+      diagnostics.push("lineage_graph_nodes and lineage_graph_edges returned no rows.");
+    }
+
+    const dimensions = {
+      reports: output.lineage_reports || [],
+      reportVisuals: output.lineage_report_visuals || [],
+      semanticModels: output.lineage_semantic_models || [],
+      smTables: output.lineage_semantic_model_tables || [],
+      smColumns: output.lineage_semantic_model_columns || [],
+      smMeasures: output.lineage_semantic_model_measures || [],
+      smRelationships: output.lineage_semantic_model_relationships || [],
+      smDependencies: output.lineage_semantic_model_dependencies || [],
+      lakehouses: output.lineage_lakehouses || [],
+      warehouses: output.lineage_warehouses || [],
+      workspaceArtifacts: output.workspace_artifacts || [],
+      enrichedNodes: output.lineage_graph_nodes_enriched || [],
+    };
+
+    console.log("[LakehouseAnalyzer] Dimensions summary:", {
+      semanticModels: dimensions.semanticModels.length,
+      smTables: dimensions.smTables.length,
+      smColumns: dimensions.smColumns.length,
+      smMeasures: dimensions.smMeasures.length,
+      smRelationships: dimensions.smRelationships.length,
+      smDependencies: dimensions.smDependencies.length,
+    });
+
+    return {
+      graphId: "lineage_graph",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        source: "delta_tables",
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        lakehouseId,
+        workspaceId,
+        diagnostics,
+      },
+      nodes,
+      edges,
+      dimensions,
     };
   }
 }

@@ -392,6 +392,11 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
+# Python virtual environments
+.venv/
+.venv-1/
+__pycache__/
+
 # Fabric files
 
 /dist/*

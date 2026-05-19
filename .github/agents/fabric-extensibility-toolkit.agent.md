@@ -1,7 +1,7 @@
 ---
 name: Fabric Extensibility Toolkit Agent
 description: Use when building or updating Microsoft Fabric custom workloads, workload items, manifests, and enterprise-ready implementation patterns in this repository; Fabric workload agent for commercial-grade solutions.
-tools: [read, search, edit, execute, web, todo]
+tools: [execute, read, edit, search, web, 'mcp_fabricux/*', 'fabric-mcp/*', 'fabric-notebook-mcp/*', 'microsoft-learn-mcp/*', todo]
 model: ["GPT-5 (copilot)", "Claude Sonnet 4.5 (copilot)"]
 argument-hint: Describe the Fabric workload task, target files/items, constraints, and acceptance criteria.
 user-invocable: true

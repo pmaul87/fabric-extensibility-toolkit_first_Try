@@ -8,6 +8,8 @@
 export interface LineageWorkbenchExtractionConfig {
   targetWorkspaces?: string[];
   targetLakehouseId?: string;
+  workspaceId?: string;
+  sqlEndpoint?: string;
   artifactTypes?: string[];
   lastRunAt?: string;
   lastRunStatus?: "idle" | "running" | "success" | "error";

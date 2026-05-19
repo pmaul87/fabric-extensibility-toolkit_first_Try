@@ -218,4 +218,98 @@ router.post("/api/lakehouse/analyze", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// POST /api/lakehouse/lineage-graph
+// ---------------------------------------------------------------------------
+/**
+ * Load lineage graph and optional dimensions directly from Lakehouse Delta tables.
+ *
+ * Request body:
+ * {
+ *   lakehouseId: string,              // Required: Lakehouse item ID
+ *   workspaceId?: string,              // Optional: Will be resolved from lakehouse if not provided
+ *   sqlEndpoint?: string,              // Optional: Manual SQL endpoint override (hostname only)
+ *   includeDimensions?: boolean        // Optional: Include dimension tables (default: true)
+ * }
+ */
+router.post("/api/lakehouse/lineage-graph", async (req, res) => {
+  const requestContext = createRequestContext(req);
+  const startedAt = Date.now();
+
+  try {
+    const authHeader = req.headers?.authorization;
+    if (typeof authHeader !== "string" || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        error: "Missing delegated token",
+        message: "Authorization header with Bearer token is required.",
+      });
+    }
+
+    const sqlAuthHeader = req.headers?.["x-sql-authorization"];
+    if (typeof sqlAuthHeader !== "string" || !sqlAuthHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        error: "Missing SQL delegated token",
+        message: "X-Sql-Authorization header with Bearer token is required.",
+      });
+    }
+
+    const accessToken = authHeader.substring("Bearer ".length).trim();
+    const sqlAccessToken = sqlAuthHeader.substring("Bearer ".length).trim();
+
+    const {
+      workspaceId,
+      lakehouseId,
+      sqlEndpoint,
+      includeDimensions = true,
+    } = req.body || {};
+
+    console.log("[Lakehouse API] POST /api/lakehouse/lineage-graph - Request parameters:", {
+      workspaceId: workspaceId || "(not provided, will auto-resolve)",
+      lakehouseId,
+      sqlEndpoint: sqlEndpoint || "(not provided, will auto-detect)",
+      includeDimensions,
+    });
+
+    if (!lakehouseId) {
+      return res.status(400).json({
+        error: "Invalid payload",
+        message: "lakehouseId is required.",
+      });
+    }
+
+    const graph = await lakehouseService.loadLineageGraphFromLakehouseTables({
+      workspaceId,
+      lakehouseId,
+      sqlEndpoint,
+      accessToken,
+      sqlAccessToken,
+      includeDimensions,
+    });
+
+    console.log("[Lakehouse API] POST /api/lakehouse/lineage-graph completed", {
+      ...requestContext,
+      workspaceId,
+      lakehouseId,
+      nodeCount: graph?.nodes?.length || 0,
+      edgeCount: graph?.edges?.length || 0,
+      elapsedMs: Date.now() - startedAt,
+    });
+
+    return res.status(200).json({ graph });
+  } catch (error) {
+    console.error("[Lakehouse API] Lineage graph load failed", {
+      ...requestContext,
+      elapsedMs: Date.now() - startedAt,
+      message: error?.message || "Unknown error",
+      stack: error?.stack,
+      error,
+    });
+
+    return res.status(500).json({
+      error: "Failed to load lineage graph from Delta tables",
+      message: error?.message || "Unknown error",
+    });
+  }
+});
+
 module.exports = { router, initializeLakehouseApi };

@@ -238,6 +238,23 @@ const useStyles = makeStyles({
     flex: 1,
     overflow: "hidden",
   },
+  splitTablePane: {
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
+    minHeight: 0,
+    flex: "0 0 35%",
+    maxWidth: "500px",
+    overflow: "hidden",
+  },
+  splitGraphPane: {
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
+    minHeight: 0,
+    flex: 1,
+    overflow: "hidden",
+  },
   splitPaneHeader: {
     display: "flex",
     alignItems: "center",
@@ -259,58 +276,60 @@ const useStyles = makeStyles({
     background: tokens.colorNeutralStroke2,
     flexShrink: 0,
   },
+  resizeHandle: {
+    height: "6px",
+    background: tokens.colorNeutralBackground2,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    cursor: "ns-resize",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    ":hover": {
+      background: tokens.colorBrandBackground2,
+    },
+    ":active": {
+      background: tokens.colorBrandBackground,
+    },
+  },
+  resizeHandleLine: {
+    width: "40px",
+    height: "2px",
+    background: tokens.colorNeutralStroke1,
+    borderRadius: "1px",
+  },
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getNodeId(node: any): string {
-  return String(node?.nodeId ?? node?.node_id ?? "");
-}
-function getDisplayName(node: any): string {
-  return String(
-    node?.displayName
-      ?? node?.display_name
-      ?? node?.reportName
-      ?? node?.report_name
-      ?? node?.modelName
-      ?? node?.model_name
-      ?? node?.objectName
-      ?? node?.object_name
-      ?? node?.name
-      ?? node?.title
-      ?? getNodeId(node)
-  );
-}
-function getEntityType(node: any): string {
-  return String(node?.entityType ?? node?.entity_type ?? "unknown");
-}
-function getFrom(edge: any): string {
-  return String(edge?.fromNodeId ?? edge?.from_node_id ?? "");
-}
-function getTo(edge: any): string {
-  return String(edge?.toNodeId ?? edge?.to_node_id ?? "");
-}
 
 function createMockSnapshot() {
   return {
     generatedAtUtc: new Date().toISOString(),
     nodes: [
-      { nodeId: "report:sales_overview", displayName: "Sales Overview", entityType: "report" },
-      { nodeId: "visual:sales_overview|kpi_card", displayName: "KPI Card", entityType: "visual" },
-      { nodeId: "measure:sales|total_sales", displayName: "Total Sales", entityType: "measure" },
-      { nodeId: "table:sales", displayName: "Sales", entityType: "table" },
-      { nodeId: "column:sales|amount", displayName: "Sales.Amount", entityType: "column" },
+      { nodeId: "sm:mock_model", displayName: "Sales Model", entityType: "semantic_model" },
+      { nodeId: "table:mock_model|Sales", displayName: "Sales", entityType: "table" },
+      { nodeId: "table:mock_model|Date", displayName: "Date", entityType: "table" },
+      { nodeId: "col:mock_model|Sales|Amount", displayName: "Amount", entityType: "column" },
+      { nodeId: "measure:mock_model|Sales|Total Sales", displayName: "Total Sales", entityType: "measure" },
     ],
     edges: [
-      { fromNodeId: "report:sales_overview", toNodeId: "visual:sales_overview|kpi_card" },
-      { fromNodeId: "visual:sales_overview|kpi_card", toNodeId: "measure:sales|total_sales" },
-      { fromNodeId: "table:sales", toNodeId: "column:sales|amount" },
-      { fromNodeId: "column:sales|amount", toNodeId: "measure:sales|total_sales" },
+      { fromNodeId: "table:mock_model|Sales", toNodeId: "table:mock_model|Date", edgeType: "relationship" },
+      { fromNodeId: "measure:mock_model|Sales|Total Sales", toNodeId: "col:mock_model|Sales|Amount", edgeType: "dependency" },
     ],
+    dimensions: {
+      semanticModels: [{ model_id: "mock_model", model_name: "Sales Model" }],
+      smTables: [
+        { model_id: "mock_model", name: "Sales", ishidden: false },
+        { model_id: "mock_model", name: "Date", ishidden: false },
+      ],
+      smColumns: [{ model_id: "mock_model", table: "Sales", name: "Amount", datatype: "decimal" }],
+      smMeasures: [{ model_id: "mock_model", table: "Sales", name: "Total Sales", expression: "SUM(Sales[Amount])" }],
+      smRelationships: [{ model_id: "mock_model", name: "Sales_Date", fromtable: "Sales", totable: "Date" }],
+      smDependencies: [{ model_id: "mock_model", objectname: "Total Sales", objecttype: "Measure", tablename: "Sales", referencedobjectname: "Amount", referencedobjecttype: "Column", referencedtablename: "Sales" }],
+    },
   };
 }
-
-// ─── SidebarSection ───────────────────────────────────────────────────────────
 
 interface SidebarSectionProps {
   label: string;
@@ -344,6 +363,8 @@ interface CollapsiblePanelProps {
   onToggle: () => void;
   /** fill remaining height when true */
   fillHeight?: boolean;
+  /** custom height in pixels (overrides fillHeight) */
+  customHeight?: number;
   children: React.ReactNode;
 }
 
@@ -354,14 +375,16 @@ function CollapsiblePanel({
   expanded,
   onToggle,
   fillHeight = false,
+  customHeight,
   children,
 }: CollapsiblePanelProps) {
   const styles = useStyles();
 
   const panelExtra = expanded ? (fillHeight ? styles.panelFill : styles.panelFixed) : "";
+  const panelStyle = customHeight && expanded ? { height: `${customHeight}px`, flex: "0 0 auto" } : undefined;
 
   return (
-    <div className={`${styles.panel}${panelExtra ? ` ${panelExtra}` : ""}`}>
+    <div className={`${styles.panel}${panelExtra ? ` ${panelExtra}` : ""}`} style={panelStyle}>
       <div className={styles.panelHeader} onClick={onToggle}>
         {icon}
         <span className={styles.panelHeaderTitle}>{title}</span>
@@ -373,12 +396,28 @@ function CollapsiblePanel({
   );
 }
 
+// ─── ResizeHandle ─────────────────────────────────────────────────────────────
+
+interface ResizeHandleProps {
+  onMouseDown: (e: React.MouseEvent) => void;
+}
+
+function ResizeHandle({ onMouseDown }: ResizeHandleProps) {
+  const styles = useStyles();
+  return (
+    <div className={styles.resizeHandle} onMouseDown={onMouseDown}>
+      <div className={styles.resizeHandleLine} />
+    </div>
+  );
+}
+
 // ─── Main view ────────────────────────────────────────────────────────────────
 
 interface LineageWorkbenchItemLineageViewProps {
   workloadClient: WorkloadClientAPI;
   workspaceId?: string;
   targetLakehouseId?: string;
+  sqlEndpoint?: string;
   lineage: any;
   onLineageChange: (next: any) => void;
   onOpenRequirementsBoard?: () => void;
@@ -388,6 +427,7 @@ export function LineageWorkbenchItemLineageView({
   workloadClient,
   workspaceId,
   targetLakehouseId,
+  sqlEndpoint,
   lineage,
   onLineageChange,
   onOpenRequirementsBoard,
@@ -402,6 +442,43 @@ export function LineageWorkbenchItemLineageView({
   const [graphExpanded, setGraphExpanded] = useState(false);
   const [detailExpanded, setDetailExpanded] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [loadError, setLoadError] = useState<string>("");
+  
+  // ── Resizable panel heights ──────────────────────────────────────────────
+  const [tableHeight, setTableHeight] = useState<number>(300);
+  const [graphHeight, setGraphHeight] = useState<number>(400);
+  const [detailHeight, setDetailHeight] = useState<number>(250);
+
+  // ── Resize handlers ───────────────────────────────────────────────────────
+  const handleResizeStart = (panel: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = 
+      panel === "table" ? tableHeight :
+      panel === "graph" ? graphHeight :
+      detailHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientY - startY;
+      const newHeight = Math.max(150, startHeight + delta); // Minimum 150px
+      
+      if (panel === "table") {
+        setTableHeight(newHeight);
+      } else if (panel === "graph") {
+        setGraphHeight(newHeight);
+      } else if (panel === "detail") {
+        setDetailHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [searchText, setSearchText] = useState("");
@@ -409,38 +486,67 @@ export function LineageWorkbenchItemLineageView({
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
   const [graphScope, setGraphScope] = useState<"focused" | "full">("focused");
   const [graphNodeLimit, setGraphNodeLimit] = useState<number>(DEFAULT_GRAPH_NODE_LIMIT);
-  const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("stacked");
+  const [graphDisplayMode, setGraphDisplayMode] = useState<"highlight" | "filter">("filter");
+  const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("side-by-side");
 
   // ── Data source ───────────────────────────────────────────────────────────
   const dataSourceMode = lineage?.dataSourceMode === "mock" ? "mock" : "actual";
 
   useEffect((): void | (() => void) => {
+    console.log("[LineageView] Data loading effect running:", {
+      dataSourceMode,
+      hasHydrated: hasHydratedActualGraphRef.current,
+      workspaceId: workspaceId || "MISSING",
+      targetLakehouseId: targetLakehouseId || "MISSING",
+      hasExistingNodes: !!lineage?.graphSnapshot?.nodes?.length,
+      hasExistingEdges: !!lineage?.graphSnapshot?.edges?.length,
+    });
+
     if (dataSourceMode !== "actual") {
+      console.log("[LineageView] Skipping load: not in actual mode");
       return;
     }
     if (hasHydratedActualGraphRef.current) {
+      console.log("[LineageView] Skipping load: already hydrated");
       return;
     }
-    if (!workspaceId || !targetLakehouseId) {
+    if (!targetLakehouseId) {
+      console.log("[LineageView] Skipping load: missing targetLakehouseId");
       return;
     }
-    if (lineage?.graphSnapshot?.nodes?.length || lineage?.graphSnapshot?.edges?.length) {
+    // Check if we have semantic model dimension data (new format)
+    const hasDimensionData = 
+      lineage?.graphSnapshot?.dimensions?.semanticModels?.length > 0 ||
+      lineage?.graphSnapshot?.dimensions?.smTables?.length > 0;
+    if (hasDimensionData) {
+      console.log("[LineageView] Skipping load: existing dimension data found");
       hasHydratedActualGraphRef.current = true;
       return;
     }
 
+    console.log("[LineageView] Starting API call to load graph...");
     let cancelled = false;
+    setLoadError(""); // Clear any previous errors
     const loadActualGraph = async (): Promise<void> => {
       try {
         const storage = new OneLakeLineageStorage(workloadClient);
         storage.initializeForItem(targetLakehouseId, workspaceId);
-        const loadedGraph = await storage.loadLineageGraph(workspaceId);
+        const loadedGraph = await storage.loadLineageGraph(workspaceId, sqlEndpoint);
         const snapshot = loadedGraph?.graphSnapshot ?? loadedGraph;
         if (cancelled || !snapshot) {
           return;
         }
 
         hasHydratedActualGraphRef.current = true;
+        console.log("[LineageView] Loaded graph snapshot:", {
+          hasNodes: !!snapshot?.nodes?.length,
+          hasEdges: !!snapshot?.edges?.length,
+          hasDimensions: !!snapshot?.dimensions,
+          semanticModelCount: snapshot?.dimensions?.semanticModels?.length || 0,
+          smTableCount: snapshot?.dimensions?.smTables?.length || 0,
+          smColumnCount: snapshot?.dimensions?.smColumns?.length || 0,
+          smMeasureCount: snapshot?.dimensions?.smMeasures?.length || 0,
+        });
         onLineageChange({
           ...(lineage ?? {}),
           dataSourceMode: "actual",
@@ -448,6 +554,31 @@ export function LineageWorkbenchItemLineageView({
         });
       } catch (error) {
         console.warn("Unable to hydrate actual lineage graph from lakehouse:", error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        
+        // Provide user-friendly error messages
+        if (errorMsg.includes("lakehouseId is required") || 
+            errorMsg.includes("Lakehouse ID is missing")) {
+          setLoadError(
+            t("LineageWorkbench_Error_MissingLakehouseId", 
+              "Lakehouse ID is not configured. Go to Extract view, enter your Lakehouse ID, and save the workbench.")
+          );
+        } else if (errorMsg.includes("Lakehouse SQL endpoint is not available")) {
+          setLoadError(
+            t("LineageWorkbench_Error_NoSqlEndpoint", 
+              "The lakehouse does not have a SQL endpoint available. Ensure you have a Lakehouse item with Delta tables.")
+          );
+        } else if (errorMsg.includes("Could not determine workspace ID")) {
+          setLoadError(
+            t("LineageWorkbench_Error_CannotResolveWorkspace", 
+              "Could not determine workspace from lakehouse ID. Please ensure the lakehouse exists and you have access to it.")
+          );
+        } else {
+          setLoadError(
+            t("LineageWorkbench_Error_LoadFailed", 
+              "Failed to load lineage data: {{error}}", { error: errorMsg })
+          );
+        }
       }
     };
 
@@ -461,64 +592,291 @@ export function LineageWorkbenchItemLineageView({
     if (dataSourceMode === "mock") {
       return lineage?.mockGraphSnapshot ?? createMockSnapshot();
     }
-    return lineage?.graphSnapshot ?? { nodes: [], edges: [] };
+    return lineage?.graphSnapshot ?? { 
+      nodes: [], 
+      edges: [], 
+      dimensions: {
+        semanticModels: [],
+        smTables: [],
+        smColumns: [],
+        smMeasures: [],
+        smRelationships: [],
+        smDependencies: [],
+      }
+    };
   }, [dataSourceMode, lineage]);
 
   // ── Node & edge normalization ─────────────────────────────────────────────
+  // Builds the graph at runtime from the semantic model dimension tables.
   const nodes: LineageViewerNode[] = useMemo(() => {
-    const raw = activeSnapshot?.nodes ?? [];
-    return raw
-      .map((n: any) => ({
-        nodeId: getNodeId(n),
-        displayName: getDisplayName(n),
-        entityType: getEntityType(n) as LineageViewerNode["entityType"],
-        tableName: n?.tableName ?? n?.table_name ?? undefined,
-        datasetId: n?.datasetId ?? n?.dataset_id ?? undefined,
-        modelName: n?.modelName ?? n?.model_name ?? undefined,
-        objectName: n?.objectName ?? n?.object_name ?? undefined,
-        objectSubtype: n?.objectSubtype ?? n?.object_subtype ?? undefined,
-        dataType: n?.dataType ?? n?.data_type ?? undefined,
-        expression:
-          n?.expression
-          ?? n?.daxExpression
-          ?? n?.dax_expression
-          ?? n?.measureExpression
-          ?? n?.measure_expression
-          ?? n?.columnExpression
-          ?? n?.column_expression
-          ?? n?.expressionText
-          ?? n?.expression_text
-          ?? n?.formula
-          ?? n?.["Measure Expression"]
-          ?? n?.["Column Expression"]
-          ?? undefined,
-        formatString:
-          n?.formatString
-          ?? n?.format_string
-          ?? n?.format
-          ?? n?.formatText
-          ?? n?.format_text
-          ?? n?.formatStringExpression
-          ?? n?.format_string_expression
-          ?? n?.["Format String"]
-          ?? undefined,
-        reportId: n?.reportId ?? n?.report_id ?? undefined,
-        visualType: n?.visualType ?? n?.visual_type ?? undefined,
-      }))
-      .filter((n: LineageViewerNode) => n.nodeId !== "");
+    const dimensions = activeSnapshot?.dimensions ?? {};
+    const smModels = Array.isArray(dimensions?.semanticModels) ? dimensions.semanticModels : [];
+    const smTables = Array.isArray(dimensions?.smTables) ? dimensions.smTables : [];
+    const smColumns = Array.isArray(dimensions?.smColumns) ? dimensions.smColumns : [];
+    const smMeasures = Array.isArray(dimensions?.smMeasures) ? dimensions.smMeasures : [];
+
+    console.log("[LineageView] Building nodes from dimensions:", {
+      modelsCount: smModels.length,
+      tablesCount: smTables.length,
+      columnsCount: smColumns.length,
+      measuresCount: smMeasures.length,
+    });
+
+    // Deduplicate dimension data using Map (dimension tables may have duplicate rows)
+    const uniqueModels = new Map<string, any>();
+    const uniqueTables = new Map<string, any>();
+    const uniqueColumns = new Map<string, any>();
+    const uniqueMeasures = new Map<string, any>();
+
+    for (const model of smModels) {
+      if (model.model_id) {
+        uniqueModels.set(model.model_id, model);
+      }
+    }
+
+    for (const table of smTables) {
+      if (table.model_id && table.name) {
+        const key = `${table.model_id}|${table.name}`;
+        uniqueTables.set(key, table);
+      }
+    }
+
+    for (const col of smColumns) {
+      if (col.model_id && col.table && col.name) {
+        const key = `${col.model_id}|${col.table}|${col.name}`;
+        uniqueColumns.set(key, col);
+      }
+    }
+
+    for (const measure of smMeasures) {
+      if (measure.model_id && measure.table && measure.name) {
+        const key = `${measure.model_id}|${measure.table}|${measure.name}`;
+        uniqueMeasures.set(key, measure);
+      }
+    }
+
+    console.log("[LineageView] After deduplication:", {
+      uniqueModels: uniqueModels.size,
+      uniqueTables: uniqueTables.size,
+      uniqueColumns: uniqueColumns.size,
+      uniqueMeasures: uniqueMeasures.size,
+    });
+
+    const result: LineageViewerNode[] = [];
+
+    for (const model of uniqueModels.values()) {
+      result.push({
+        nodeId: `sm:${model.model_id}`,
+        displayName: model.model_name || model.dataset_name || `Model (${model.model_id})`,
+        entityType: "semantic_model",
+        isGroupNode: true,
+        datasetId: model.model_id,
+        modelName: model.model_name,
+      });
+    }
+
+    for (const table of uniqueTables.values()) {
+      result.push({
+        nodeId: `table:${table.model_id}|${table.name}`,
+        displayName: table.name,
+        entityType: "table",
+        tableName: table.name,
+        datasetId: table.model_id,
+        parentNodeId: `sm:${table.model_id}`,
+        objectSubtype: table.ishidden ? "hidden" : undefined,
+      });
+    }
+
+    for (const col of uniqueColumns.values()) {
+      result.push({
+        nodeId: `col:${col.model_id}|${col.table}|${col.name}`,
+        displayName: col.name,
+        entityType: "column",
+        tableName: col.table,
+        datasetId: col.model_id,
+        dataType: col.datatype || undefined,
+        expression: col.expression || undefined,
+        objectName: col.name,
+        objectSubtype: col.ishidden ? "hidden" : undefined,
+        parentNodeId: `table:${col.model_id}|${col.table}`,
+      });
+    }
+
+    for (const measure of uniqueMeasures.values()) {
+      result.push({
+        nodeId: `measure:${measure.model_id}|${measure.table}|${measure.name}`,
+        displayName: measure.name,
+        entityType: "measure",
+        tableName: measure.table,
+        datasetId: measure.model_id,
+        expression: measure.expression || undefined,
+        formatString: measure.formatstring || undefined,
+        objectName: measure.name,
+        parentNodeId: `table:${measure.model_id}|${measure.table}`,
+      });
+    }
+
+    return result;
   }, [activeSnapshot]);
 
   const edges: LineageViewerEdge[] = useMemo(() => {
-    const raw = activeSnapshot?.edges ?? [];
-    return raw.map((e: any, idx: number) => ({
-      edgeId: e?.edgeId ?? e?.edge_id ?? `edge-${idx}-${getFrom(e)}-${getTo(e)}`,
-      fromNodeId: getFrom(e),
-      toNodeId: getTo(e),
-      edgeType: e?.edgeType ?? e?.edge_type ?? "dependency",
-      datasetId: e?.datasetId ?? e?.dataset_id ?? undefined,
-      reportId: e?.reportId ?? e?.report_id ?? undefined,
-      evidence: e?.evidence ?? undefined,
-    }));
+    const dimensions = activeSnapshot?.dimensions ?? {};
+    const smRelationships = Array.isArray(dimensions?.smRelationships) ? dimensions.smRelationships : [];
+    const smDependencies = Array.isArray(dimensions?.smDependencies) ? dimensions.smDependencies : [];
+    const smColumns = Array.isArray(dimensions?.smColumns) ? dimensions.smColumns : [];
+    const smMeasures = Array.isArray(dimensions?.smMeasures) ? dimensions.smMeasures : [];
+
+    // Deduplicate relationships and dependencies
+    const uniqueRelationships = new Map<string, any>();
+    const uniqueDependencies = new Map<string, any>();
+
+    for (const rel of smRelationships) {
+      if (rel.model_id && rel.fromtable && rel.totable) {
+        const relName = rel.name || `${rel.fromtable}_${rel.totable}`;
+        const key = `${rel.model_id}|${relName}`;
+        uniqueRelationships.set(key, rel);
+      }
+    }
+
+    for (const dep of smDependencies) {
+      if (dep.model_id && dep.objectname && dep.referencedobjectname) {
+        const depFrom = dep.fullobjectname || dep.objectname;
+        const depTo = dep.referencedfullobjectname || dep.referencedobjectname;
+        const key = `${dep.model_id}|${depFrom}|${depTo}|${dep.objecttype}|${dep.referencedobjecttype}`;
+        uniqueDependencies.set(key, dep);
+      }
+    }
+
+    console.log("[LineageView] Building edges from dimensions:", {
+      relationshipsCount: smRelationships.length,
+      dependenciesCount: smDependencies.length,
+      uniqueRelationships: uniqueRelationships.size,
+      uniqueDependencies: uniqueDependencies.size,
+    });
+
+    const result: LineageViewerEdge[] = [];
+
+    for (const rel of uniqueRelationships.values()) {
+      const relName = rel.name || `${rel.fromtable}_${rel.totable}`;
+      result.push({
+        edgeId: `rel:${rel.model_id}|${relName}`,
+        fromNodeId: `table:${rel.model_id}|${rel.fromtable}`,
+        toNodeId: `table:${rel.model_id}|${rel.totable}`,
+        edgeType: "relationship",
+        datasetId: rel.model_id,
+      });
+    }
+
+    let skippedDeps = 0;
+    let createdDeps = 0;
+    for (const dep of uniqueDependencies.values()) {
+      const objectType = String(dep.objecttype || "").toLowerCase();
+      const refType = String(dep.referencedobjecttype || "").toLowerCase();
+
+      const fromNodeId =
+        objectType === "measure" ? `measure:${dep.model_id}|${dep.tablename}|${dep.objectname}`
+        : objectType === "column" ? `col:${dep.model_id}|${dep.tablename}|${dep.objectname}`
+        : objectType === "table" ? `table:${dep.model_id}|${dep.objectname}`
+        : null;
+
+      const toNodeId =
+        refType === "measure" ? `measure:${dep.model_id}|${dep.referencedtablename}|${dep.referencedobjectname}`
+        : refType === "column" ? `col:${dep.model_id}|${dep.referencedtablename}|${dep.referencedobjectname}`
+        : refType === "table" ? `table:${dep.model_id}|${dep.referencedobjectname}`
+        : null;
+
+      if (!fromNodeId || !toNodeId || fromNodeId === toNodeId) {
+        skippedDeps++;
+        if (skippedDeps <= 3) {
+          console.log("[LineageView] Skipped dependency:", {
+            objectType,
+            refType,
+            fromNodeId,
+            toNodeId,
+            dep,
+          });
+        }
+        continue;
+      }
+
+      const depFrom = dep.fullobjectname || dep.objectname;
+      const depTo = dep.referencedfullobjectname || dep.referencedobjectname;
+      createdDeps++;
+      if (createdDeps <= 3) {
+        console.log("[LineageView] Created dependency edge:", {
+          fromNodeId,
+          toNodeId,
+          objectType,
+          refType,
+        });
+      }
+      result.push({
+        edgeId: `dep:${dep.model_id}|${depFrom}-${depTo}`,
+        fromNodeId,
+        toNodeId,
+        edgeType: "dependency",
+        datasetId: dep.model_id,
+      });
+    }
+
+    console.log("[LineageView] Dependency edge summary:", {
+      uniqueDependencies: uniqueDependencies.size,
+      createdDeps,
+      skippedDeps,
+      totalEdges: result.length,
+    });
+
+    // Add structural "contains" edges: table → column and table → measure
+    let containsEdges = 0;
+    const uniqueColumns = new Map<string, any>();
+    const uniqueMeasures = new Map<string, any>();
+    
+    for (const col of smColumns) {
+      if (col.model_id && col.table && col.name) {
+        const key = `${col.model_id}|${col.table}|${col.name}`;
+        uniqueColumns.set(key, col);
+      }
+    }
+    
+    for (const measure of smMeasures) {
+      if (measure.model_id && measure.table && measure.name) {
+        const key = `${measure.model_id}|${measure.table}|${measure.name}`;
+        uniqueMeasures.set(key, measure);
+      }
+    }
+    
+    for (const col of uniqueColumns.values()) {
+      const tableNodeId = `table:${col.model_id}|${col.table}`;
+      const colNodeId = `col:${col.model_id}|${col.table}|${col.name}`;
+      result.push({
+        edgeId: `contains:${tableNodeId}→${colNodeId}`,
+        fromNodeId: tableNodeId,
+        toNodeId: colNodeId,
+        edgeType: "contains",
+        datasetId: col.model_id,
+      });
+      containsEdges++;
+    }
+    
+    for (const measure of uniqueMeasures.values()) {
+      const tableNodeId = `table:${measure.model_id}|${measure.table}`;
+      const measureNodeId = `measure:${measure.model_id}|${measure.table}|${measure.name}`;
+      result.push({
+        edgeId: `contains:${tableNodeId}→${measureNodeId}`,
+        fromNodeId: tableNodeId,
+        toNodeId: measureNodeId,
+        edgeType: "contains",
+        datasetId: measure.model_id,
+      });
+      containsEdges++;
+    }
+    
+    console.log("[LineageView] Added containment edges:", {
+      containsEdges,
+      totalEdgesWithContains: result.length,
+    });
+
+    return result;
   }, [activeSnapshot]);
 
   const entityTypes = useMemo(() => {
@@ -560,10 +918,29 @@ export function LineageWorkbenchItemLineageView({
     }
 
     if (graphScope === "full") {
-      const limitedNodes = [...filtered]
+      let limitedNodes = [...filtered]
         .sort((a, b) => a.displayName.localeCompare(b.displayName))
         .slice(0, graphNodeLimit);
+      
+      // IMPORTANT: Always include parent semantic model containers when their children are visible
       const limitedNodeIds = new Set(limitedNodes.map((n) => n.nodeId));
+      const parentIds = new Set<string>();
+      for (const node of limitedNodes) {
+        if (node.parentNodeId && !limitedNodeIds.has(node.parentNodeId)) {
+          parentIds.add(node.parentNodeId);
+        }
+      }
+      
+      // Add parent nodes from full nodes list
+      for (const parentId of parentIds) {
+        const parentNode = nodes.find(n => n.nodeId === parentId);
+        if (parentNode) {
+          limitedNodes.push(parentNode);
+          limitedNodeIds.add(parentId);
+        }
+      }
+      
+      // For full mode, use filtered edges (both endpoints must be in filtered set)
       const limitedEdges = filteredEdges.filter((e) => limitedNodeIds.has(e.fromNodeId) && limitedNodeIds.has(e.toNodeId));
 
       return {
@@ -575,6 +952,7 @@ export function LineageWorkbenchItemLineageView({
       };
     }
 
+    // Focused mode: show selected node + all connected nodes (regardless of filter)
     const selectedInFilter = selectedNodeId && filtered.some((n) => n.nodeId === selectedNodeId);
     if (!selectedInFilter) {
       return {
@@ -586,37 +964,81 @@ export function LineageWorkbenchItemLineageView({
       };
     }
 
+    // Build adjacency map from ALL edges (not just filtered ones)
     const adjacency = new Map<string, string[]>();
-    for (const edge of filteredEdges) {
+    for (const edge of edges) {
       if (!adjacency.has(edge.fromNodeId)) adjacency.set(edge.fromNodeId, []);
       if (!adjacency.has(edge.toNodeId)) adjacency.set(edge.toNodeId, []);
       adjacency.get(edge.fromNodeId)!.push(edge.toNodeId);
       adjacency.get(edge.toNodeId)!.push(edge.fromNodeId);
     }
 
+    // BFS traversal through ALL nodes (not just filtered ones)
+    // In filter mode, limit to 2 hops (direct neighbors + their neighbors)
+    const maxDepth = graphDisplayMode === "filter" ? 2 : Infinity;
     const visited = new Set<string>([selectedNodeId]);
+    const depthMap = new Map<string, number>([[selectedNodeId, 0]]);
     const queue: string[] = [selectedNodeId];
+    
     while (queue.length > 0 && visited.size < graphNodeLimit) {
       const current = queue.shift()!;
+      const currentDepth = depthMap.get(current) || 0;
+      
+      // Skip if we've reached max depth
+      if (currentDepth >= maxDepth) continue;
+      
       const neighbors = adjacency.get(current) ?? [];
       for (const neighbor of neighbors) {
         if (visited.has(neighbor)) continue;
         visited.add(neighbor);
+        depthMap.set(neighbor, currentDepth + 1);
         queue.push(neighbor);
         if (visited.size >= graphNodeLimit) break;
       }
     }
+    
+    console.log("[LineageView] Filter mode BFS:", {
+      mode: graphDisplayMode,
+      maxDepth,
+      visitedCount: visited.size,
+      selectedNode: selectedNodeId,
+    });
 
-    const limitedNodes = filtered.filter((n) => visited.has(n.nodeId));
-    const limitedEdges = filteredEdges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));
+    // In filter mode, only show visited nodes. In highlight mode, show all filtered nodes
+    let limitedNodes = graphDisplayMode === "filter" 
+      ? nodes.filter((n) => visited.has(n.nodeId))  // Filter: only visited nodes
+      : filtered;  // Highlight: show all filtered nodes but highlight visited ones
+    
+    // IMPORTANT: Always include parent semantic model containers when their children are visible
+    const limitedNodeIds = new Set(limitedNodes.map(n => n.nodeId));
+    const parentIds = new Set<string>();
+    for (const node of limitedNodes) {
+      if (node.parentNodeId && !limitedNodeIds.has(node.parentNodeId)) {
+        parentIds.add(node.parentNodeId);
+      }
+    }
+    
+    // Add parent nodes from full nodes list
+    for (const parentId of parentIds) {
+      const parentNode = nodes.find(n => n.nodeId === parentId);
+      if (parentNode) {
+        limitedNodes.push(parentNode);
+      }
+    }
+    
+    // In filter mode, only include edges between visited nodes. In highlight mode, use filtered edges
+    const limitedEdges = graphDisplayMode === "filter"
+      ? edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId))
+      : filteredEdges;
+    
     return {
       graphNodes: limitedNodes,
       graphEdges: limitedEdges,
-      hiddenNodeCount: Math.max(0, filtered.length - limitedNodes.length),
-      hiddenEdgeCount: Math.max(0, filteredEdges.length - limitedEdges.length),
+      hiddenNodeCount: Math.max(0, nodes.length - limitedNodes.length),
+      hiddenEdgeCount: Math.max(0, edges.length - limitedEdges.length),
       requiresSelection: false,
     };
-  }, [filtered, filteredEdges, graphNodeLimit, graphScope, selectedNodeId]);
+  }, [filtered, filteredEdges, nodes, edges, graphNodeLimit, graphScope, selectedNodeId, graphDisplayMode]);
 
   // ── BFS highlight map ─────────────────────────────────────────────────────
   const { depthByNodeId, highlightedNodeIds, highlightedEdgeIds } = useMemo(() => {
@@ -630,7 +1052,8 @@ export function LineageWorkbenchItemLineageView({
     while (queue.length > 0) {
       const current = queue.shift()!;
       const d = depthMap.get(current)!;
-      for (const e of filteredEdges) {
+      // Use ALL edges for BFS traversal, not just filtered edges
+      for (const e of edges) {
         if (e.fromNodeId === current && !depthMap.has(e.toNodeId)) {
           depthMap.set(e.toNodeId, d + 1);
           hlNodes.add(e.toNodeId);
@@ -646,7 +1069,7 @@ export function LineageWorkbenchItemLineageView({
       }
     }
     return { depthByNodeId: depthMap, highlightedNodeIds: hlNodes, highlightedEdgeIds: hlEdges };
-  }, [selectedNodeId, filteredEdges]);
+  }, [selectedNodeId, edges]);
 
   // ── Empty state text ──────────────────────────────────────────────────────
   const emptyMessage =
@@ -656,7 +1079,7 @@ export function LineageWorkbenchItemLineageView({
           "Actual data mode requires a saved OneLake Lakehouse ID. Open Extract, enter the lakehouse item ID, and save the workbench before loading real lineage data."
         )
       : dataSourceMode === "actual"
-      ? t("LineageWorkbench_Lineage_Empty_Actual", "No actual graph snapshot is stored on this item yet. The workbench is trying to load it from the target lakehouse.")
+      ? t("LineageWorkbench_Lineage_Empty_Actual", "No semantic models found in the target lakehouse. Run the semantic model extraction notebook to populate lineage_semantic_models and related tables.")
       : t("LineageWorkbench_Lineage_Empty", "No graph nodes available. Run extraction first.");
 
   // In stacked mode, expanded panels split available space evenly.
@@ -742,6 +1165,26 @@ export function LineageWorkbenchItemLineageView({
                 <Radio
                   value="full"
                   label={t("LineageWorkbench_GraphScope_Full", "Full graph (limited)")}
+                />
+              </RadioGroup>
+
+              <Text size={200} style={{ color: tokens.colorNeutralForeground2, marginTop: tokens.spacingVerticalXS }}>
+                {t("LineageWorkbench_GraphDisplayMode", "Display mode")}
+              </Text>
+              <RadioGroup
+                layout="vertical"
+                value={graphDisplayMode}
+                onChange={(_, data) => {
+                  setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
+                }}
+              >
+                <Radio
+                  value="highlight"
+                  label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight connected")}
+                />
+                <Radio
+                  value="filter"
+                  label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter to connected only")}
                 />
               </RadioGroup>
 
@@ -852,6 +1295,14 @@ export function LineageWorkbenchItemLineageView({
 
       {/* ── Main content: three collapsible panels stacked vertically ── */}
       <div className={styles.mainContent}>
+        {loadError && (
+          <MessageBar intent="error">
+            <MessageBarBody>
+              {loadError}
+            </MessageBarBody>
+          </MessageBar>
+        )}
+        
         {nodes.length === 0 ? (
           <div
             style={{
@@ -883,6 +1334,7 @@ export function LineageWorkbenchItemLineageView({
                   expanded={tableExpanded}
                   onToggle={() => setTableExpanded((v) => !v)}
                   fillHeight={tableFills}
+                  customHeight={tableExpanded && !tableFills ? tableHeight : undefined}
                 >
                   <LineageTableView
                     nodes={filtered}
@@ -894,6 +1346,10 @@ export function LineageWorkbenchItemLineageView({
                     }}
                   />
                 </CollapsiblePanel>
+                
+                {tableExpanded && graphExpanded && !tableFills && (
+                  <ResizeHandle onMouseDown={handleResizeStart("table")} />
+                )}
 
                 {/* Graph panel */}
                 <CollapsiblePanel
@@ -903,6 +1359,7 @@ export function LineageWorkbenchItemLineageView({
                   expanded={graphExpanded}
                   onToggle={() => setGraphExpanded((v) => !v)}
                   fillHeight={graphFills}
+                  customHeight={graphExpanded && !graphFills ? graphHeight : undefined}
                 >
                   {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (
                     <div className={styles.graphHint}>
@@ -952,6 +1409,10 @@ export function LineageWorkbenchItemLineageView({
                     />
                   )}
                 </CollapsiblePanel>
+                
+                {graphExpanded && detailExpanded && !graphFills && (
+                  <ResizeHandle onMouseDown={handleResizeStart("graph")} />
+                )}
               </>
             ) : (
               <CollapsiblePanel
@@ -983,7 +1444,7 @@ export function LineageWorkbenchItemLineageView({
                     exploreLayout === "side-by-side" ? styles.splitExploreHorizontal : styles.splitExploreVertical
                   }`}
                 >
-                  <div className={styles.splitPane}>
+                  <div className={styles.splitTablePane}>
                     <div className={styles.splitPaneHeader}>
                       <span>{t("LineageWorkbench_Panel_Table", "Table")}</span>
                       <span>{filtered.length}</span>
@@ -1001,7 +1462,7 @@ export function LineageWorkbenchItemLineageView({
 
                   <div className={exploreLayout === "side-by-side" ? styles.splitDividerVertical : styles.splitDividerHorizontal} />
 
-                  <div className={styles.splitPane}>
+                  <div className={styles.splitGraphPane}>
                     <div className={styles.splitPaneHeader}>
                       <span>{t("LineageWorkbench_Panel_Graph", "Graph")}</span>
                       <span>{`${graphNodes.length}/${filtered.length}`}</span>
@@ -1071,10 +1532,11 @@ export function LineageWorkbenchItemLineageView({
               expanded={detailExpanded}
               onToggle={() => setDetailExpanded((v) => !v)}
               fillHeight={detailFills}
+              customHeight={detailExpanded && !detailFills ? detailHeight : undefined}
             >
               <LineageDetailView
-                nodes={filtered}
-                edges={filteredEdges}
+                nodes={nodes}
+                edges={edges}
                 selectedNodeId={selectedNodeId}
                 requirementsCount={lineage?.requirements?.length ?? 0}
                 onOpenRequirementsBoard={onOpenRequirementsBoard}

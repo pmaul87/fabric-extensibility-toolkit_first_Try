@@ -6,6 +6,8 @@ import { OneLakeStorageClientItemWrapper } from "./OneLakeStorageClientItemWrapp
 import { ItemReference } from "../controller/ItemCRUDController";
 import { OneLakeStorageContainerMetadata } from "./FabricPlatformTypes";
 
+export type { OneLakeStorageClientItemWrapper };
+
 export const FILE_FOLDER_NAME = "Files"
 export const TABLE_FOLDER_NAME = "Tables"
 

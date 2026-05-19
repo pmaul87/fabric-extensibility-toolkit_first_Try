@@ -216,6 +216,7 @@ function getEntityTypeLabel(entityType: string): string {
   const labels: Record<string, string> = {
     report: "Reports",
     visual: "Visuals",
+    semantic_model: "Semantic Models",
     measure: "Measures",
     column: "Columns",
     table: "Tables",
@@ -361,10 +362,32 @@ export function LineageDetailView({
   }, [selectedNode, typeSpecificFields, t]);
 
   const nodeEdges = useMemo(() => {
-    if (!selectedNodeId) return { incoming: [] as LineageViewerEdge[], outgoing: [] as LineageViewerEdge[] };
+    if (!selectedNodeId) return { 
+      incoming: [] as LineageViewerEdge[], 
+      outgoing: [] as LineageViewerEdge[],
+      incomingRelationships: [] as LineageViewerEdge[],
+      outgoingRelationships: [] as LineageViewerEdge[],
+      incomingDependencies: [] as LineageViewerEdge[],
+      outgoingDependencies: [] as LineageViewerEdge[],
+    };
+    const incoming = edges.filter((e) => e.toNodeId === selectedNodeId);
+    const outgoing = edges.filter((e) => e.fromNodeId === selectedNodeId);
+    
+    console.log("[LineageDetail] Node edges for", selectedNodeId, ":", {
+      incomingCount: incoming.length,
+      outgoingCount: outgoing.length,
+      totalEdges: edges.length,
+      sampleIncoming: incoming.slice(0, 3),
+      sampleOutgoing: outgoing.slice(0, 3),
+    });
+    
     return {
-      incoming: edges.filter((e) => e.toNodeId === selectedNodeId),
-      outgoing: edges.filter((e) => e.fromNodeId === selectedNodeId),
+      incoming,
+      outgoing,
+      incomingRelationships: incoming.filter((e) => e.edgeType === "relationship"),
+      outgoingRelationships: outgoing.filter((e) => e.edgeType === "relationship"),
+      incomingDependencies: incoming.filter((e) => e.edgeType === "dependency"),
+      outgoingDependencies: outgoing.filter((e) => e.edgeType === "dependency"),
     };
   }, [selectedNodeId, edges]);
 
@@ -372,13 +395,19 @@ export function LineageDetailView({
   const relations = useMemo(() => {
     if (!selectedNode) return {};
 
+    // Only include dependency and relationship edges, exclude structural "contains" edges
+    const dependencyEdgesOnly = {
+      incoming: nodeEdges.incoming.filter(e => e.edgeType === "dependency" || e.edgeType === "relationship"),
+      outgoing: nodeEdges.outgoing.filter(e => e.edgeType === "dependency" || e.edgeType === "relationship"),
+    };
+
     const neighborsOf = (edgeList: LineageViewerEdge[], side: "from" | "to") =>
       edgeList
         .map((e) => nodeById.get(side === "from" ? e.fromNodeId : e.toNodeId))
         .filter((n): n is LineageViewerNode => n !== undefined);
 
-    const incoming = neighborsOf(nodeEdges.incoming, "from");
-    const outgoing = neighborsOf(nodeEdges.outgoing, "to");
+    const incoming = neighborsOf(dependencyEdgesOnly.incoming, "from");
+    const outgoing = neighborsOf(dependencyEdgesOnly.outgoing, "to");
     const all = [...incoming, ...outgoing];
 
     const byType = (type: string) => all.filter((n) => n.entityType === type);
@@ -389,6 +418,8 @@ export function LineageDetailView({
       connectedVisuals: { label: t("LineageDetail_Visuals", "Connected visuals"), nodes: byType("visual") },
       connectedReports: { label: t("LineageDetail_Reports", "Connected reports"), nodes: byType("report") },
       directNeighbors: { label: t("LineageDetail_Neighbors", "All direct neighbors"), nodes: all },
+      usedBy: { label: t("LineageDetail_UsedBy", "Used by"), nodes: incoming },
+      uses: { label: t("LineageDetail_Uses", "Uses"), nodes: outgoing },
     };
   }, [selectedNode, nodeEdges, nodeById, t]);
 
@@ -446,6 +477,8 @@ export function LineageDetailView({
     connectedVisuals: { label: string; nodes: LineageViewerNode[] };
     connectedReports: { label: string; nodes: LineageViewerNode[] };
     directNeighbors: { label: string; nodes: LineageViewerNode[] };
+    usedBy: { label: string; nodes: LineageViewerNode[] };
+    uses: { label: string; nodes: LineageViewerNode[] };
   };
 
   return (
@@ -479,6 +512,88 @@ export function LineageDetailView({
           </div>
         </div>
       </div>
+
+      {/* ── Dependencies card ── */}
+      {(nodeEdges.incomingRelationships.length > 0 || nodeEdges.outgoingRelationships.length > 0 || 
+        nodeEdges.incomingDependencies.length > 0 || nodeEdges.outgoingDependencies.length > 0) && (
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>{t("LineageDetail_Dependencies", "Dependencies")}</div>
+          <div className={styles.grid}>
+            {nodeEdges.incomingRelationships.length > 0 && (
+              <div>
+                <div className={styles.fieldLabel}>{t("LineageDetail_IncomingRelationships", "Incoming Relationships")}</div>
+                <div className={styles.fieldValue}>{nodeEdges.incomingRelationships.length}</div>
+              </div>
+            )}
+            {nodeEdges.outgoingRelationships.length > 0 && (
+              <div>
+                <div className={styles.fieldLabel}>{t("LineageDetail_OutgoingRelationships", "Outgoing Relationships")}</div>
+                <div className={styles.fieldValue}>{nodeEdges.outgoingRelationships.length}</div>
+              </div>
+            )}
+            {nodeEdges.incomingDependencies.length > 0 && (
+              <div>
+                <div className={styles.fieldLabel}>{t("LineageDetail_IncomingDependencies", "Used By")}</div>
+                <div className={styles.fieldValue}>{nodeEdges.incomingDependencies.length}</div>
+              </div>
+            )}
+            {nodeEdges.outgoingDependencies.length > 0 && (
+              <div>
+                <div className={styles.fieldLabel}>{t("LineageDetail_OutgoingDependencies", "Depends On")}</div>
+                <div className={styles.fieldValue}>{nodeEdges.outgoingDependencies.length}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Connected elements ── */}
+      {(nodeEdges.incoming.length > 0 || nodeEdges.outgoing.length > 0) && (
+        <div className={styles.relatedPanel}>
+          <div className={styles.relatedPanelHeader}>
+            <Text weight="semibold">{t("LineageDetail_ConnectedElements", "Connected Elements")}</Text>
+            <Badge>{nodeEdges.incoming.length + nodeEdges.outgoing.length}</Badge>
+          </div>
+          {nodeEdges.incoming.length > 0 && (
+            <div className={styles.relatedGroup}>
+              <div className={styles.relatedGroupLabel}>{t("LineageDetail_IncomingConnections", "Incoming ({count})", { count: nodeEdges.incoming.length })}</div>
+              {nodeEdges.incoming.map((edge, index) => {
+                const node = nodeById.get(edge.fromNodeId);
+                if (!node) return null;
+                return (
+                  <button
+                    key={`incoming-${edge.edgeId}-${index}`}
+                    className={styles.relatedItem}
+                    onClick={() => onNodeSelect?.(node.nodeId)}
+                  >
+                    <span className={styles.relatedItemName}>{node.displayName}</span>
+                    <Badge size="small" appearance="outline">{edge.edgeType}</Badge>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {nodeEdges.outgoing.length > 0 && (
+            <div className={styles.relatedGroup}>
+              <div className={styles.relatedGroupLabel}>{t("LineageDetail_OutgoingConnections", "Outgoing ({count})", { count: nodeEdges.outgoing.length })}</div>
+              {nodeEdges.outgoing.map((edge, index) => {
+                const node = nodeById.get(edge.toNodeId);
+                if (!node) return null;
+                return (
+                  <button
+                    key={`outgoing-${edge.edgeId}-${index}`}
+                    className={styles.relatedItem}
+                    onClick={() => onNodeSelect?.(node.nodeId)}
+                  >
+                    <span className={styles.relatedItemName}>{node.displayName}</span>
+                    <Badge size="small" appearance="outline">{edge.edgeType}</Badge>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Main properties card ── */}
       <div className={styles.card}>
@@ -529,8 +644,134 @@ export function LineageDetailView({
         </div>
       )}
 
+      {/* ── Direct neighbors list (always visible) ── */}
+      {rel.directNeighbors.nodes.length > 0 && (
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>
+            {t("LineageDetail_DirectConnections", "Direct connections")} ({rel.directNeighbors.nodes.length})
+          </div>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
+            {t("LineageDetail_ConnectionsHint", "Click a node to navigate to it in the graph")}
+          </Text>
+          
+          {(() => {
+            const grouped = new Map<string, LineageViewerNode[]>();
+            for (const n of rel.directNeighbors.nodes) {
+              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
+              grouped.get(n.entityType)!.push(n);
+            }
+            return Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
+              <div key={entityType} className={styles.relatedGroup}>
+                <div className={styles.relatedGroupLabel}>
+                  {getEntityTypeLabel(entityType)} ({groupNodes.length})
+                </div>
+                {groupNodes.map((node) => (
+                  <button
+                    key={node.nodeId}
+                    type="button"
+                    className={`${styles.relatedItem}${node.nodeId === selectedNodeId ? ` ${styles.relatedItemSelected}` : ""}`}
+                    onClick={() => onNodeSelect?.(node.nodeId)}
+                  >
+                    <span className={styles.relatedItemName} title={node.displayName}>
+                      {node.displayName}
+                    </span>
+                    {node.tableName && (
+                      <span className={styles.relatedItemSub}>{node.tableName}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ));
+          })()}
+        </div>
+      )}
+
+      {/* ── Used by list (incoming dependencies) ── */}
+      {rel.usedBy && rel.usedBy.nodes.length > 0 && (
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>
+            {t("LineageDetail_UsedBy", "Used by")} ({rel.usedBy.nodes.length})
+          </div>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
+            {t("LineageDetail_UsedByHint", "Nodes that depend on or reference this node")}
+          </Text>
+          
+          {(() => {
+            const grouped = new Map<string, LineageViewerNode[]>();
+            for (const n of rel.usedBy.nodes) {
+              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
+              grouped.get(n.entityType)!.push(n);
+            }
+            return Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
+              <div key={entityType} className={styles.relatedGroup}>
+                <div className={styles.relatedGroupLabel}>
+                  {getEntityTypeLabel(entityType)} ({groupNodes.length})
+                </div>
+                {groupNodes.map((node) => (
+                  <button
+                    key={node.nodeId}
+                    type="button"
+                    className={`${styles.relatedItem}${node.nodeId === selectedNodeId ? ` ${styles.relatedItemSelected}` : ""}`}
+                    onClick={() => onNodeSelect?.(node.nodeId)}
+                  >
+                    <span className={styles.relatedItemName} title={node.displayName}>
+                      {node.displayName}
+                    </span>
+                    {node.tableName && (
+                      <span className={styles.relatedItemSub}>{node.tableName}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ));
+          })()}
+        </div>
+      )}
+
+      {/* ── Uses list (outgoing dependencies) ── */}
+      {rel.uses && rel.uses.nodes.length > 0 && (
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>
+            {t("LineageDetail_Uses", "Uses")} ({rel.uses.nodes.length})
+          </div>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalXS }}>
+            {t("LineageDetail_UsesHint", "Nodes that this node depends on or references")}
+          </Text>
+          
+          {(() => {
+            const grouped = new Map<string, LineageViewerNode[]>();
+            for (const n of rel.uses.nodes) {
+              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
+              grouped.get(n.entityType)!.push(n);
+            }
+            return Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
+              <div key={entityType} className={styles.relatedGroup}>
+                <div className={styles.relatedGroupLabel}>
+                  {getEntityTypeLabel(entityType)} ({groupNodes.length})
+                </div>
+                {groupNodes.map((node) => (
+                  <button
+                    key={node.nodeId}
+                    type="button"
+                    className={`${styles.relatedItem}${node.nodeId === selectedNodeId ? ` ${styles.relatedItemSelected}` : ""}`}
+                    onClick={() => onNodeSelect?.(node.nodeId)}
+                  >
+                    <span className={styles.relatedItemName} title={node.displayName}>
+                      {node.displayName}
+                    </span>
+                    {node.tableName && (
+                      <span className={styles.relatedItemSub}>{node.tableName}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ));
+          })()}
+        </div>
+      )}
+
       {/* ── Related nodes panel (shown when a metric chip is active) ── */}
-      {activeRelated && activeRelated.nodes.length > 0 && (
+      {activeRelated && activeRelated.nodes.length > 0 && activeMetric !== "directNeighbors" && activeMetric !== "usedBy" && activeMetric !== "uses" && (
         <div className={styles.relatedPanel}>
           <div className={styles.relatedPanelHeader}>
             <div>

@@ -17,7 +17,7 @@ import {
 import type { Node, Edge, NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ChevronRightFilled, SaveRegular, TargetArrowRegular } from "@fluentui/react-icons";
-import { Switch, Text, tokens, Button } from "@fluentui/react-components";
+import { Switch, Text, tokens, Button, Slider, Label } from "@fluentui/react-components";
 import dagre from "dagre";
 import { toPng } from "html-to-image";
 
@@ -909,6 +909,7 @@ function LineageGraphInner({
 }: LineageGraphViewProps) {
   const expandedGroups = externalExpandedGroups ?? new Set<string>();
   const [useTableColors, setUseTableColors] = useState(true);
+  const [focusZoom, setFocusZoom] = useState(0.8);
   const { getNode, setCenter } = useReactFlow();
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
@@ -1009,10 +1010,10 @@ function LineageGraphInner({
     if (focusNodeId) {
       const node = getNode(focusNodeId);
       if (node?.position) {
-        setCenter(node.position.x + (node.width ?? 200) / 2, node.position.y + (node.height ?? 80) / 2, { zoom: 1.2, duration: 400 });
+        setCenter(node.position.x + (node.width ?? 200) / 2, node.position.y + (node.height ?? 80) / 2, { zoom: focusZoom, duration: 400 });
       }
     }
-  }, [focusNodeId, getNode, setCenter, nodes]);
+  }, [focusNodeId, getNode, setCenter, nodes, focusZoom]);
 
   const handleNodeClick = useCallback(
     (_evt: React.MouseEvent, node: Node) => {
@@ -1087,6 +1088,36 @@ function LineageGraphInner({
             borderRadius: "var(--borderRadiusMedium, 6px)",
           }}
         />
+        
+        {/* Settings Panel */}
+        <Panel position="bottom-left" style={{ margin: 10 }}>
+          <div
+            style={{
+              background: "var(--colorNeutralBackground1, #fff)",
+              padding: "12px",
+              borderRadius: "var(--borderRadiusMedium, 6px)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+              minWidth: "220px",
+            }}
+          >
+            <Label size="small" weight="semibold" style={{ display: "block", marginBottom: "8px" }}>
+              Focus Zoom Level
+            </Label>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <Slider
+                min={0.3}
+                max={2.0}
+                step={0.1}
+                value={focusZoom}
+                onChange={(_, data) => setFocusZoom(data.value)}
+                style={{ flex: 1 }}
+              />
+              <Text size={200} style={{ minWidth: "35px", color: tokens.colorNeutralForeground2 }}>
+                {focusZoom.toFixed(1)}x
+              </Text>
+            </div>
+          </div>
+        </Panel>
         
         {/* Export and Trace Panel */}
         <Panel position="top-left" style={{ margin: 10 }}>

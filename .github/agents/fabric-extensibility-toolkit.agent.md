@@ -17,7 +17,25 @@ Your job is to help create and maintain custom Microsoft Fabric workloads that a
 - When platform behavior or requirements are uncertain, validate against current Microsoft documentation before implementation.
 
 ## Scope
-- Custom workload architecture and implementation
+- Custom workload architecture and implementation// Added to imports
+import { ..., useReactFlow, ... } from "@xyflow/react";
+
+// Inside LineageGraphInner component
+const { getNode, setCenter } = useReactFlow();
+
+// New useEffect for centering
+useEffect(() => {
+  if (focusNodeId) {
+    const node = getNode(focusNodeId);
+    if (node?.position) {
+      setCenter(
+        node.position.x + (node.width ?? 200) / 2,
+        node.position.y + (node.height ?? 80) / 2,
+        { zoom: 1.2, duration: 400 }
+      );
+    }
+  }
+}, [focusNodeId, getNode, setCenter, nodes]);
 - Item creation and item editor patterns
 - Manifest, routing, and registration updates
 - Build/run/deploy/publish workflow updates

@@ -799,8 +799,6 @@ export function LineageWorkbenchItemLineageView({
         continue;
       }
 
-      const depFrom = dep.fullobjectname || dep.objectname;
-      const depTo = dep.referencedfullobjectname || dep.referencedobjectname;
       createdDeps++;
       if (createdDeps <= 3) {
         console.log("[LineageView] Created dependency edge:", {
@@ -811,7 +809,7 @@ export function LineageWorkbenchItemLineageView({
         });
       }
       result.push({
-        edgeId: `dep:${dep.model_id}|${depFrom}-${depTo}`,
+        edgeId: `dep:${fromNodeId}→${toNodeId}`,
         fromNodeId,
         toNodeId,
         edgeType: "dependency",
@@ -1537,6 +1535,7 @@ export function LineageWorkbenchItemLineageView({
               <LineageDetailView
                 nodes={nodes}
                 edges={edges}
+                dimensions={activeSnapshot?.dimensions}
                 selectedNodeId={selectedNodeId}
                 requirementsCount={lineage?.requirements?.length ?? 0}
                 onOpenRequirementsBoard={onOpenRequirementsBoard}

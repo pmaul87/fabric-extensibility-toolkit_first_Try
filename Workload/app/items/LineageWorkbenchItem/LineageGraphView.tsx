@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import type { Node, Edge, NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ChevronRightFilled, SaveRegular, TargetArrowRegular } from "@fluentui/react-icons";
+import { ChevronRightFilled, SaveRegular, TargetArrowRegular, ChevronUpRegular, ChevronDownRegular } from "@fluentui/react-icons";
 import { Switch, Text, tokens, Button, Slider, Label, Spinner } from "@fluentui/react-components";
 import dagre from "dagre";
 import { toPng } from "html-to-image";
@@ -36,6 +36,9 @@ export interface LineageViewerNode {
   expression?: string;
   formatString?: string;
   reportId?: string;
+  pageId?: string;
+  visualId?: string;
+  pageNumber?: number;
   visualType?: string;
   parentNodeId?: string;
   isGroupNode?: boolean;
@@ -48,6 +51,8 @@ export interface LineageViewerEdge {
   edgeType: string;
   datasetId?: string;
   reportId?: string;
+  pageId?: string;
+  visualId?: string;
   evidence?: string;
 }
 
@@ -182,6 +187,17 @@ function calculateNetworkMetrics(
   edges: LineageViewerEdge[],
   depthByNodeId: Map<string, number>
 ): Map<string, NetworkMetrics> {
+  console.log("[LineageGraph] calculateNetworkMetrics input:", {
+    nodesCount: nodes.length,
+    edgesCount: edges.length,
+    sampleEdge: edges[0] ? {
+      edgeId: edges[0].edgeId,
+      fromNodeId: edges[0].fromNodeId,
+      toNodeId: edges[0].toNodeId,
+      edgeType: edges[0].edgeType,
+    } : "N/A",
+  });
+
   const metrics = new Map<string, NetworkMetrics>();
   const adjacency = new Map<string, Set<string>>();
   const upstreamMap = new Map<string, Set<string>>();
@@ -260,6 +276,17 @@ function calculateNetworkMetrics(
       depth,
     });
   }
+  
+  console.log("[LineageGraph] calculateNetworkMetrics result:", {
+    metricsCount: metrics.size,
+    sampleMetrics: Array.from(metrics.entries()).slice(0, 3).map(([nodeId, m]) => ({
+      nodeId,
+      connections: m.degreeCentrality,
+      upstream: m.upstreamCount,
+      downstream: m.downstreamCount,
+    })),
+    zeroConnectionNodes: Array.from(metrics.entries()).filter(([_, m]) => m.degreeCentrality === 0).length,
+  });
   
   return metrics;
 }
@@ -451,18 +478,6 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
               <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  color: isFocus ? "rgba(255,255,255,0.75)" : accentColor,
-                }}
-              >
-                {pal.typeLabel}
-              </div>
-
-              <div
-                style={{
                   fontSize: 13,
                   fontWeight: 600,
                   color: isFocus ? "#ffffff" : "var(--colorNeutralForeground1, #1a1a1a)",
@@ -496,19 +511,6 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
           <Handle type="target" position={Position.Left} style={{ background: accentColor, border: "none" }} />
 
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {/* entity-type pill */}
-            <div
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: isFocus ? "rgba(255,255,255,0.75)" : accentColor,
-              }}
-            >
-              {pal.typeLabel}
-            </div>
-
             {/* primary label */}
             <div
               style={{
@@ -560,20 +562,39 @@ const NODE_TYPES = { lineageNode: LineageNodeComponent };
 function applyDagreLayout(
   nodes: LineageFlowNode[],
   edges: Edge[],
-  direction: "TB" | "LR" = "TB"
+  direction: "TB" | "LR" = "TB",
+  focusNodeId?: string
 ): LineageFlowNode[] {
   const dagreGraph = new dagre.graphlib.Graph();
   
-  // Configure graph for hierarchical layout
+  // If we have a focus node, find its related nodes (direct connections)
+  const relatedNodeIds = new Set<string>();
+  if (focusNodeId) {
+    relatedNodeIds.add(focusNodeId);
+    for (const edge of edges) {
+      if (edge.source === focusNodeId) {
+        relatedNodeIds.add(edge.target); // Downstream
+      }
+      if (edge.target === focusNodeId) {
+        relatedNodeIds.add(edge.source); // Upstream
+      }
+    }
+  }
+  
+  // Configure graph for hierarchical layout with increased spacing for parent-child nodes
+  // Adjust spacing based on whether we're focusing on a specific node
+  const baseNodesep = focusNodeId ? 150 : 200; // Tighter spacing when focused
+  const baseRanksep = focusNodeId ? 200 : 250; // Tighter rank separation when focused
+  
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: direction, // TB = top-to-bottom, LR = left-to-right
     align: "UL", // Align nodes to upper-left
-    nodesep: 100, // Horizontal spacing between nodes
-    edgesep: 50, // Spacing between edges
-    ranksep: 150, // Vertical spacing between layers
-    marginx: 50,
-    marginy: 50,
+    nodesep: baseNodesep, // Horizontal spacing between nodes
+    edgesep: 80, // Spacing between edges
+    ranksep: baseRanksep, // Vertical spacing between layers
+    marginx: 80,
+    marginy: 80,
   });
 
   // Add nodes to Dagre graph with rank constraints for better grouping
@@ -589,23 +610,45 @@ function applyDagreLayout(
     } else if (data.entityType === "table") {
       rank = 1; // Middle column
     } else if (data.entityType === "column" || data.entityType === "measure") {
-      rank = 2; // Rightmost column
+      rank = 2; // Rightmost column for semantic model internals
+    } else if (data.entityType === "report") {
+      rank = 3; // Reports appear after semantic model internals (consumers)
+    } else if (data.entityType === "page") {
+      rank = 4; // Pages appear after reports
+    } else if (data.entityType === "visual") {
+      rank = 5; // Visuals appear after pages (most granular level)
     }
-    // Reports, visuals, notebooks get auto-assigned based on connections
+    // Other artifacts get auto-assigned based on connections
     
-    dagreGraph.setNode(node.id, { width, height, rank });
+    // Boost rank priority for focus node and related nodes
+    if (focusNodeId && relatedNodeIds.has(node.id)) {
+      // Related nodes get a slight priority boost to cluster together
+      dagreGraph.setNode(node.id, { width, height, rank: rank ?? 99 });
+    } else {
+      dagreGraph.setNode(node.id, { width, height, rank });
+    }
   }
 
-  // Add edges to Dagre graph
+  // Add edges to Dagre graph with weights for focus node connections
   for (const edge of edges) {
-    dagreGraph.setEdge(edge.source, edge.target);
+    // Increase edge weight for edges connected to focus node
+    // Higher weight = stronger attraction = nodes pulled closer together
+    let weight = 1;
+    if (focusNodeId && (edge.source === focusNodeId || edge.target === focusNodeId)) {
+      weight = 10; // Much stronger connection for direct relationships
+    } else if (focusNodeId && (relatedNodeIds.has(edge.source) && relatedNodeIds.has(edge.target))) {
+      weight = 5; // Moderate connection between related nodes
+    }
+    
+    dagreGraph.setEdge(edge.source, edge.target, { weight });
   }
 
   // Run Dagre layout algorithm
   dagre.layout(dagreGraph);
 
   // Apply calculated positions to nodes
-  return nodes.map((node) => {
+  // First pass: position all nodes with absolute coordinates
+  const positionedNodes = nodes.map((node) => {
     const dagreNode = dagreGraph.node(node.id);
     if (!dagreNode) return node;
 
@@ -620,6 +663,85 @@ function applyDagreLayout(
         y: dagreNode.y - height / 2,
       },
     };
+  });
+
+  // Second pass: convert child node positions to be relative to their parents
+  const parentPositions = new Map<string, { x: number; y: number }>();
+  const parentChildren = new Map<string, typeof positionedNodes>();
+  
+  // Build parent position map and parent-children relationships
+  for (const node of positionedNodes) {
+    // Track all node positions (both parents and non-parents)
+    parentPositions.set(node.id, node.position);
+    
+    // Build parent-child map
+    if (node.parentId) {
+      if (!parentChildren.has(node.parentId)) {
+        parentChildren.set(node.parentId, []);
+      }
+      parentChildren.get(node.parentId)!.push(node);
+    }
+  }
+  
+  // Multi-pass to handle nested hierarchies (reports → pages → visuals)
+  // First pass: make positions relative to immediate parent
+  const relativePositionedNodes = positionedNodes.map((node) => {
+    if (node.parentId) {
+      const parentPos = parentPositions.get(node.parentId);
+      if (parentPos) {
+        const relativeX = node.position.x - parentPos.x + 30; // 30px padding from parent edge
+        const relativeY = node.position.y - parentPos.y + 60; // 60px padding for parent header
+        
+        return {
+          ...node,
+          position: {
+            x: relativeX,
+            y: relativeY,
+          },
+        };
+      }
+    }
+    return node;
+  });
+  
+  // Second pass: expand parent sizes to fit all children (including nested children)
+  return relativePositionedNodes.map((node) => {
+    const children = parentChildren.get(node.id);
+    if (children && children.length > 0) {
+      const currentWidth = node.style?.width as number || NODE_W;
+      const currentHeight = node.style?.height as number || 60;
+      
+      // Calculate bounds needed to contain all children (with generous padding to prevent overlap)
+      let maxX = currentWidth;
+      let maxY = currentHeight;
+      
+      for (const child of children) {
+        const childWidth = child.style?.width as number || NODE_W;
+        const childHeight = child.style?.height as number || 60;
+        
+        // Child position is now relative to parent
+        const childRelX = child.position.x;
+        const childRelY = child.position.y;
+        
+        // If child is also a parent (e.g., page containing visuals), account for its expanded size
+        const childActualWidth = relativePositionedNodes.find(n => n.id === child.id)?.style?.width as number || childWidth;
+        const childActualHeight = relativePositionedNodes.find(n => n.id === child.id)?.style?.height as number || childHeight;
+        
+        maxX = Math.max(maxX, childRelX + childActualWidth + 30); // 30px right padding
+        maxY = Math.max(maxY, childRelY + childActualHeight + 30); // 30px bottom padding
+      }
+      
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          width: maxX,
+          height: maxY,
+        },
+      };
+    }
+    
+    return node;
   });
 }
 
@@ -640,6 +762,52 @@ function buildLayout(
   
   const syntheticGroupNodes: LineageViewerNode[] = [];
   const allNodes = [...lvNodes];
+  
+  // Ensure parent nodes are included when children exist
+  // This prevents ReactFlow errors when positioning child nodes
+  const nodeById = new Map<string, LineageViewerNode>();
+  const neededParentIds = new Set<string>();
+  
+  for (const node of lvNodes) {
+    nodeById.set(node.nodeId, node);
+    if (node.parentNodeId) {
+      neededParentIds.add(node.parentNodeId);
+    }
+  }
+  
+  // Add missing parent nodes (reports/pages that should contain children)
+  for (const parentId of neededParentIds) {
+    if (!nodeById.has(parentId)) {
+      // Extract parent info from ID pattern
+      if (parentId.startsWith('report:')) {
+        const reportId = parentId.substring(7);
+        syntheticGroupNodes.push({
+          nodeId: parentId,
+          displayName: `Report (${reportId})`,
+          entityType: "report",
+          reportId: reportId,
+          isGroupNode: true,
+        });
+        console.warn(`[LineageGraph] Added missing parent report node: ${parentId}`);
+      } else if (parentId.startsWith('page:')) {
+        const parts = parentId.substring(5).split('|');
+        const reportId = parts[0];
+        const pageName = parts.slice(1).join('|');
+        syntheticGroupNodes.push({
+          nodeId: parentId,
+          displayName: pageName || 'Page',
+          entityType: "page",
+          reportId: reportId,
+          pageId: pageName,
+          isGroupNode: true,
+          parentNodeId: `report:${reportId}`, // Link page to report
+        });
+        // Ensure report parent also exists
+        neededParentIds.add(`report:${reportId}`);
+        console.warn(`[LineageGraph] Added missing parent page node: ${parentId}`);
+      }
+    }
+  }
   
   // Create semantic model group nodes if they don't exist
   const modelNodeIds = new Set(lvNodes.filter(n => n.entityType === "semantic_model").map(n => n.nodeId));
@@ -704,9 +872,19 @@ function buildLayout(
     } else if (node.entityType === "column" || node.entityType === "measure") {
       width = 220;
       height = 55;
+    } else if (node.entityType === "report") {
+      width = 300;
+      height = 100;
+    } else if (node.entityType === "page") {
+      width = 260;
+      height = 80;
+    } else if (node.entityType === "visual") {
+      width = 220;
+      height = 60;
     }
     
-    nodes.push({
+    // Build ReactFlow node with optional parent relationship
+    const reactFlowNode: LineageFlowNode = {
       id: node.nodeId,
       type: "lineageNode",
       position: { x: 0, y: 0 }, // Will be calculated by Dagre
@@ -733,13 +911,75 @@ function buildLayout(
         useTableColors,
         onToggleExpanded: onToggleGroup,
       },
-    });
+    };
+    
+    // Add parent-child relationship for hierarchical grouping
+    // IMPORTANT: Only set parentId if we're sure the parent exists
+    // This will be validated after all nodes are created
+    if (node.parentNodeId) {
+      reactFlowNode.parentId = node.parentNodeId;
+      reactFlowNode.extent = 'parent' as const;
+      // Child nodes within parents should have relative positioning
+      reactFlowNode.expandParent = true;
+    }
+    
+    nodes.push(reactFlowNode);
+  }
+
+  // ── Validate parent references to prevent ReactFlow errors ───────────────
+  // Remove parentId from nodes whose parents don't exist in the nodes array
+  // This prevents "Cannot read properties of undefined (reading 'measured')" errors
+  const nodeIds = new Set(nodes.map(n => n.id));
+  for (const node of nodes) {
+    if (node.parentId && !nodeIds.has(node.parentId)) {
+      console.warn(`[LineageGraph] Removing invalid parentId reference: ${node.id} → ${node.parentId} (parent not found)`);
+      delete node.parentId;
+      delete node.extent;
+      delete node.expandParent;
+    }
   }
 
   // ── Create edges (only between visible nodes) ────────────────────────────
   const visibleNodeIds = new Set(allNodes.map(n => n.nodeId));
+  const nodeMap = new Map(allNodes.map(n => [n.nodeId, n]));
+  
+  let filteredOutEdgeCount = 0;
+  const filteredOutEdges: Array<{ edgeId: string; reason: string; fromExists: boolean; toExists: boolean }> = [];
+  
+  // Keep all edges including containment edges for clarity, even with parent-child nesting
   const edges: Edge[] = lvEdges
-    .filter(e => visibleNodeIds.has(e.fromNodeId) && visibleNodeIds.has(e.toNodeId))
+    .filter(e => {
+      // Keep edge if both nodes are visible
+      const fromExists = visibleNodeIds.has(e.fromNodeId);
+      const toExists = visibleNodeIds.has(e.toNodeId);
+      
+      if (!fromExists || !toExists) {
+        filteredOutEdgeCount++;
+        if (filteredOutEdges.length < 10) {
+          const fromNode = nodeMap.get(e.fromNodeId);
+          const toNode = nodeMap.get(e.toNodeId);
+          filteredOutEdges.push({
+            edgeId: e.edgeId,
+            reason: !fromExists && !toExists ? "both nodes missing" : !fromExists ? "source node missing" : "target node missing",
+            fromExists,
+            toExists,
+          });
+          
+          console.warn(`[LineageGraph] Filtering out edge ${e.edgeId}:`, {
+            edgeType: e.edgeType,
+            fromNodeId: e.fromNodeId,
+            fromExists,
+            fromNodeType: fromNode?.entityType,
+            toNodeId: e.toNodeId,
+            toExists,
+            toNodeType: toNode?.entityType,
+          });
+        }
+        return false;
+      }
+      
+      return true;
+    })
     .map((e) => {
       const isHighlighted = highlightedEdgeIds.has(e.edgeId);
       const isUpstreamEdge = directUpstreamEdgeIds.has(e.edgeId);
@@ -756,7 +996,9 @@ function buildLayout(
               ? "var(--colorBrandStroke1, #0078d4)"
               : e.edgeType === "contains"
                 ? "var(--colorNeutralStroke2, #c4c4c4)"
-                : "var(--colorNeutralStroke1, #9e9e9e)";
+                : e.edgeType === "uses_column" || e.edgeType === "uses_measure"
+                  ? "var(--colorPaletteOrangeBorderActive, #ff8c00)"
+                  : "var(--colorNeutralStroke1, #9e9e9e)";
       
       const edgeWidth = isUpstreamEdge || isDownstreamEdge ? 3 : isHighlighted ? 2.5 : e.edgeType === "contains" ? 1.5 : 2;
       const isAnimated = isUpstreamEdge || isDownstreamEdge;
@@ -767,8 +1009,24 @@ function buildLayout(
         strokeDasharray = "5,5"; // Dashed for dependencies
       } else if (e.edgeType === "contains") {
         strokeDasharray = "2,3"; // Dotted for containment
+      } else if (e.edgeType === "uses_column" || e.edgeType === "uses_measure") {
+        strokeDasharray = "3,3"; // Dotted for visual-to-object usage
       }
       // Solid line for relationships (no dasharray)
+
+      // Edge labels
+      let edgeLabel = "";
+      if (e.edgeType === "relationship") {
+        edgeLabel = "relationship";
+      } else if (e.edgeType === "contains") {
+        edgeLabel = "contains";
+      } else if (e.edgeType === "uses_column") {
+        edgeLabel = "uses";
+      } else if (e.edgeType === "uses_measure") {
+        edgeLabel = "uses";
+      } else if (e.edgeType === "dependency") {
+        edgeLabel = "dependency";
+      }
 
       return {
         id: e.edgeId,
@@ -782,7 +1040,7 @@ function buildLayout(
           strokeWidth: edgeWidth,
           strokeDasharray,
         },
-        label: e.edgeType === "relationship" ? "relationship" : e.edgeType === "contains" ? "contains" : "dependency",
+        label: edgeLabel,
         labelStyle: { 
           fontSize: 10, 
           fill: isHighlighted ? edgeColor : "var(--colorNeutralForeground3, #757575)",
@@ -794,10 +1052,64 @@ function buildLayout(
       };
     });
 
-  // ── Apply Dagre hierarchical layout (left-to-right flow) ─────────────────
-  const layoutedNodes = applyDagreLayout(nodes, edges, "LR");
+  // ── Log edge filtering summary ────────────────────────────────────────────
+  console.log("[LineageGraph] Edge filtering summary:", {
+    inputEdges: lvEdges.length,
+    outputEdges: edges.length,
+    filteredOut: filteredOutEdgeCount,
+    visibleNodes: visibleNodeIds.size,
+    sampleFilteredEdges: filteredOutEdges.slice(0, 5),
+  });
+  
+  if (filteredOutEdgeCount > 0) {
+    console.warn(`⚠️ [LineageGraph] ${filteredOutEdgeCount} edges filtered out due to missing nodes`);
+  }
 
-  return { nodes: layoutedNodes, edges };
+  // ── Apply Dagre hierarchical layout (left-to-right flow) with focus-aware clustering ─────────────────
+  const layoutedNodes = applyDagreLayout(nodes, edges, "LR", focusNodeId);
+
+  // ── Final validation: Ensure all edges point to existing layouted nodes ──
+  const layoutedNodeIds = new Set(layoutedNodes.map(n => n.id));
+  const validEdges = edges.filter(edge => {
+    const sourceExists = layoutedNodeIds.has(edge.source);
+    const targetExists = layoutedNodeIds.has(edge.target);
+    
+    if (!sourceExists || !targetExists) {
+      console.error(`[LineageGraph] CRITICAL: Edge ${edge.id} references non-existent layouted nodes!`, {
+        source: edge.source,
+        sourceExists,
+        target: edge.target,
+        targetExists,
+        edgeType: edge.type,
+      });
+      return false;
+    }
+    return true;
+  });
+
+  if (validEdges.length < edges.length) {
+    console.error(`⚠️ [LineageGraph] Removed ${edges.length - validEdges.length} edges that pointed to non-existent layouted nodes!`);
+  }
+
+  console.log("[LineageGraph] Final output for ReactFlow:", {
+    nodes: layoutedNodes.length,
+    edges: validEdges.length,
+    invalidEdgesRemoved: edges.length - validEdges.length,
+    sampleNode: layoutedNodes[0] ? {
+      id: layoutedNodes[0].id,
+      type: layoutedNodes[0].type,
+      position: layoutedNodes[0].position,
+      parentId: layoutedNodes[0].parentId,
+    } : "N/A",
+    sampleEdge: validEdges[0] ? {
+      id: validEdges[0].id,
+      source: validEdges[0].source,
+      target: validEdges[0].target,
+      type: validEdges[0].type,
+    } : "N/A",
+  });
+
+  return { nodes: layoutedNodes, edges: validEdges };
 }
 
 // ─── Inner component (needs to be inside ReactFlowProvider) ──────────────────
@@ -823,6 +1135,8 @@ interface LegendProps {
 }
 
 function GraphLegend({ useTableColors, onToggleColorMode }: LegendProps) {
+  const [isExpanded, setIsExpanded] = useState(true);
+  
   return (
     <Panel position="top-right" style={{ margin: 10 }}>
       <div
@@ -833,13 +1147,23 @@ function GraphLegend({ useTableColors, onToggleColorMode }: LegendProps) {
           padding: "12px",
           fontSize: "11px",
           fontFamily: tokens.fontFamilyBase,
-          minWidth: "200px",
+          minWidth: isExpanded ? "200px" : "auto",
           boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
         }}
       >
-        <div style={{ marginBottom: "12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ marginBottom: isExpanded ? "12px" : "0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
           <Text weight="semibold" size={300}>Legend</Text>
+          <Button
+            appearance="subtle"
+            size="small"
+            icon={isExpanded ? <ChevronUpRegular /> : <ChevronDownRegular />}
+            onClick={() => setIsExpanded(!isExpanded)}
+            aria-label={isExpanded ? "Collapse legend" : "Expand legend"}
+          />
         </div>
+        
+        {isExpanded && (
+          <>
         
         {/* Color Mode Toggle */}
         <div style={{ marginBottom: "12px", padding: "8px", background: tokens.colorNeutralBackground2, borderRadius: tokens.borderRadiusSmall }}>
@@ -892,6 +1216,8 @@ function GraphLegend({ useTableColors, onToggleColorMode }: LegendProps) {
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
     </Panel>
   );
@@ -913,6 +1239,9 @@ function LineageGraphInner({
   const [useTableColors, setUseTableColors] = useState(true);
   const [focusZoom, setFocusZoom] = useState(0.8);
   const { getNode, setCenter } = useReactFlow();
+  
+  // Track previous focusNodeId to only center when it actually changes
+  const prevFocusNodeIdRef = useRef<string | undefined>(undefined);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [criticalPathMode, setCriticalPathMode] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
@@ -1007,15 +1336,36 @@ function LineageGraphInner({
     setEdges(e);
   }, [lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, expandedGroups, handleToggleGroup, setNodes, setEdges, useTableColors, networkMetrics, criticalPathNodes]);
 
-  // Center view on selected node
+  // Center view on selected node - ONLY when focusNodeId actually changes
+  // UI Change: Focus node centering with proper pan/drag interaction
+  // MCP Verification: fabricux MCP verified as running on 2026-05-28
+  // Guidance: Dragging Movements (2.5.7) - user should be able to freely pan canvas without interference
   useEffect(() => {
-    if (focusNodeId) {
-      const node = getNode(focusNodeId);
-      if (node?.position) {
-        setCenter(node.position.x + (node.width ?? 200) / 2, node.position.y + (node.height ?? 80) / 2, { zoom: focusZoom, duration: 400 });
-      }
+    // Only center if focusNodeId has actually changed (not on every render or drag)
+    if (focusNodeId && focusNodeId !== prevFocusNodeIdRef.current) {
+      // Wait a frame for layout to be applied to nodes
+      requestAnimationFrame(() => {
+        const node = getNode(focusNodeId);
+        if (node?.position) {
+          // Calculate the center point of the node
+          const centerX = node.position.x + (node.width ?? 200) / 2;
+          const centerY = node.position.y + (node.height ?? 80) / 2;
+          
+          // Center the viewport on this exact point
+          setCenter(centerX, centerY, { 
+            zoom: focusZoom,
+            duration: 400 
+          });
+        }
+      });
+      
+      // Update the ref to track current focusNodeId
+      prevFocusNodeIdRef.current = focusNodeId;
+    } else if (!focusNodeId) {
+      // Clear ref when focus is removed
+      prevFocusNodeIdRef.current = undefined;
     }
-  }, [focusNodeId, getNode, setCenter, nodes, focusZoom]);
+  }, [focusNodeId, getNode, setCenter, focusZoom]); // Removed 'nodes' from dependencies
 
   const handleNodeClick = useCallback(
     (_evt: React.MouseEvent, node: Node) => {
@@ -1024,7 +1374,8 @@ function LineageGraphInner({
     [onNodeClick]
   );
 
-  if (lvNodes.length === 0) {
+  // Only show empty state when not loading
+  if (lvNodes.length === 0 && !isLoading) {
     return (
       <div
         style={{
@@ -1116,8 +1467,8 @@ function LineageGraphInner({
           }}
         />
         
-        {/* Settings Panel */}
-        <Panel position="bottom-left" style={{ margin: 10 }}>
+        {/* Focus Zoom Panel - positioned next to zoom controls */}
+        <Panel position="bottom-left" style={{ margin: 10, marginLeft: 100 }}>
           <div
             style={{
               background: "var(--colorNeutralBackground1, #fff)",

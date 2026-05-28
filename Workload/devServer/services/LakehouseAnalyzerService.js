@@ -17,10 +17,36 @@ const sql = require("mssql");
 
 const FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1";
 
-const LINEAGE_REQUIRED_TABLES = ["lineage_graph_nodes", "lineage_graph_edges"];
+// New simplified view-based architecture
+const LINEAGE_REQUIRED_TABLES = ["v_nodes", "v_edges"];
 const LINEAGE_OPTIONAL_TABLES = [
+  // Dimension tables with detailed metadata (support both t_dataset_* and t_datamodel_* naming)
+  "t_dataset_reports",
+  "t_dataset_pages",
+  "t_dataset_visuals",
+  "t_dataset_semantic_models",
+  "t_dataset_tables",
+  "t_dataset_columns",
+  "t_dataset_measures",
+  "t_dataset_measure",
+  "t_dataset_relationships",
+  "t_dataset_lakehouses",
+  "t_dataset_warehouses",
+  "t_datamodel_reports",
+  "t_datamodel_pages",
+  "t_datamodel_visuals",
+  "t_datamodel_semantic_models",
+  "t_datamodel_tables",
+  "t_datamodel_columns",
+  "t_datamodel_measures",
+  "t_datamodel_relationships",
+  "t_datamodel_lakehouses",
+  "t_datamodel_warehouses",
+  // Legacy tables (kept for backward compatibility)
   "lineage_reports",
+  "lineage_report_pages",
   "lineage_report_visuals",
+  "lineage_report_semantic_model_objects",
   "lineage_semantic_models",
   "lineage_semantic_model_tables",
   "lineage_semantic_model_columns",
@@ -30,7 +56,6 @@ const LINEAGE_OPTIONAL_TABLES = [
   "lineage_lakehouses",
   "lineage_warehouses",
   "workspace_artifacts",
-  "lineage_graph_nodes_enriched",
 ];
 
 // ---------------------------------------------------------------------------
@@ -808,36 +833,94 @@ class LakehouseAnalyzerService {
     );
     diagnostics.push(...queryDiagnostics);
 
-    const nodes = Array.isArray(output.lineage_graph_nodes) ? output.lineage_graph_nodes : [];
-    const edges = Array.isArray(output.lineage_graph_edges) ? output.lineage_graph_edges : [];
+    const nodes = Array.isArray(output.v_nodes) ? output.v_nodes : [];
+    const edges = Array.isArray(output.v_edges) ? output.v_edges : [];
 
     if (nodes.length === 0 && edges.length === 0) {
-      diagnostics.push("lineage_graph_nodes and lineage_graph_edges returned no rows.");
+      diagnostics.push("v_nodes and v_edges returned no rows.");
     }
 
     const dimensions = {
-      reports: output.lineage_reports || [],
-      reportVisuals: output.lineage_report_visuals || [],
-      semanticModels: output.lineage_semantic_models || [],
-      smTables: output.lineage_semantic_model_tables || [],
-      smColumns: output.lineage_semantic_model_columns || [],
-      smMeasures: output.lineage_semantic_model_measures || [],
-      smRelationships: output.lineage_semantic_model_relationships || [],
+      // New dimension tables (support both t_dataset_* and t_datamodel_* naming)
+      reports: output.t_dataset_reports || output.t_datamodel_reports || output.lineage_reports || [],
+      pages: output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
+      visuals: output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
+      semanticModels: output.t_dataset_semantic_models || output.t_datamodel_semantic_models || output.lineage_semantic_models || [],
+      tables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
+      columns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
+      measures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],
+      relationships: output.t_dataset_relationships || output.t_datamodel_relationships || output.lineage_semantic_model_relationships || [],
+      lakehouses: output.t_dataset_lakehouses || output.t_datamodel_lakehouses || output.lineage_lakehouses || [],
+      warehouses: output.t_dataset_warehouses || output.t_datamodel_warehouses || output.warehouses || [],
+      // Legacy aliases (for backward compatibility with old saved data)
+      reportPages: output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
+      reportVisuals: output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
+      smTables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
+      smColumns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
+      smMeasures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],
+      smRelationships: output.t_dataset_relationships || output.t_datamodel_relationships || output.lineage_semantic_model_relationships || [],
       smDependencies: output.lineage_semantic_model_dependencies || [],
-      lakehouses: output.lineage_lakehouses || [],
-      warehouses: output.lineage_warehouses || [],
       workspaceArtifacts: output.workspace_artifacts || [],
-      enrichedNodes: output.lineage_graph_nodes_enriched || [],
     };
 
     console.log("[LakehouseAnalyzer] Dimensions summary:", {
+      nodes: nodes.length,
+      edges: edges.length,
+      // New property names
+      reports: dimensions.reports.length,
+      pages: dimensions.pages.length,
+      visuals: dimensions.visuals.length,
       semanticModels: dimensions.semanticModels.length,
+      tables: dimensions.tables.length,
+      columns: dimensions.columns.length,
+      measures: dimensions.measures.length,
+      relationships: dimensions.relationships.length,
+      lakehouses: dimensions.lakehouses.length,
+      warehouses: dimensions.warehouses.length,
+      // Legacy aliases for verification
       smTables: dimensions.smTables.length,
       smColumns: dimensions.smColumns.length,
       smMeasures: dimensions.smMeasures.length,
-      smRelationships: dimensions.smRelationships.length,
-      smDependencies: dimensions.smDependencies.length,
     });
+
+    // Log sample data for debugging
+    if (nodes.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample node:", nodes[0]);
+    }
+    if (edges.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample edge:", edges[0]);
+    }
+    if (dimensions.pages.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample page:", dimensions.pages[0]);
+    }
+    if (dimensions.visuals.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample visual:", dimensions.visuals[0]);
+    }
+    // Log datamodel samples (focus on dataset/datamodel first)
+    if (dimensions.semanticModels.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample semantic model:", {
+        record: dimensions.semanticModels[0],
+        availableFields: Object.keys(dimensions.semanticModels[0]),
+      });
+    }
+    if (dimensions.tables.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample table:", {
+        record: dimensions.tables[0],
+        availableFields: Object.keys(dimensions.tables[0]),
+      });
+    }
+    if (dimensions.columns.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample column:", {
+        record: dimensions.columns[0],
+        availableFields: Object.keys(dimensions.columns[0]),
+      });
+    }
+    if (dimensions.measures.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample measure:", {
+        record: dimensions.measures[0],
+        availableFields: Object.keys(dimensions.measures[0]),
+      });
+    }
 
     return {
       graphId: "lineage_graph",

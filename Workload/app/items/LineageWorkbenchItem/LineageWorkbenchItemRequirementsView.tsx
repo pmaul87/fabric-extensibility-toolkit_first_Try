@@ -20,7 +20,6 @@ import {
 import { ItemEditorDefaultView, useViewNavigation } from "../../components/ItemEditor";
 import type { Requirement, RequirementStatus, RequirementPriority } from "../RequirementBoardItem";
 import { PRIORITY_CONFIG, KANBAN_COLUMNS, SCOPE_CONFIG, RequirementDialog } from "../RequirementBoardItem";
-// Removed: import type { LineageViewerItemDefinition } from "../LineageViewerItem/LineageViewerItemDefinition";
 
 // ---------------------------------------------------------------------------
 // Styles

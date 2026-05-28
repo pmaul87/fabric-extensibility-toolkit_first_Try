@@ -1,5 +1,3 @@
-// Removed: import type { LineageViewerItemDefinition } from "../LineageViewerItem/LineageViewerItemDefinition";
-
 /**
  * Unified definition for the Lineage Workbench item.
  * All lineage-related state — extraction config, lineage graph, and requirements —

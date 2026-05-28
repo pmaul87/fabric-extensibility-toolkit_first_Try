@@ -309,24 +309,44 @@ function createMockSnapshot() {
     generatedAtUtc: new Date().toISOString(),
     nodes: [
       { nodeId: "sm:mock_model", displayName: "Sales Model", entityType: "semantic_model" },
+      { nodeId: "report:mock_report", displayName: "Sales Dashboard", entityType: "report", datasetId: "mock_model", isGroupNode: true },
+      { nodeId: "page:mock_report|ReportSection1", displayName: "Overview", entityType: "page", reportId: "mock_report", pageNumber: 1, parentNodeId: "report:mock_report", isGroupNode: true },
+      { nodeId: "page:mock_report|ReportSection2", displayName: "Details", entityType: "page", reportId: "mock_report", pageNumber: 2, parentNodeId: "report:mock_report", isGroupNode: true },
+      { nodeId: "visual:mock_report|ReportSection1|VisualContainer1", displayName: "Sales Chart", entityType: "visual", pageId: "ReportSection1", reportId: "mock_report", visualType: "clusteredColumnChart", parentNodeId: "page:mock_report|ReportSection1" },
+      { nodeId: "visual:mock_report|ReportSection1|VisualContainer2", displayName: "Sales KPI", entityType: "visual", pageId: "ReportSection1", reportId: "mock_report", visualType: "card", parentNodeId: "page:mock_report|ReportSection1" },
+      { nodeId: "visual:mock_report|ReportSection2|VisualContainer3", displayName: "Sales Table", entityType: "visual", pageId: "ReportSection2", reportId: "mock_report", visualType: "tableEx", parentNodeId: "page:mock_report|ReportSection2" },
       { nodeId: "table:mock_model|Sales", displayName: "Sales", entityType: "table" },
       { nodeId: "table:mock_model|Date", displayName: "Date", entityType: "table" },
       { nodeId: "col:mock_model|Sales|Amount", displayName: "Amount", entityType: "column" },
       { nodeId: "measure:mock_model|Sales|Total Sales", displayName: "Total Sales", entityType: "measure" },
     ],
     edges: [
-      { fromNodeId: "table:mock_model|Sales", toNodeId: "table:mock_model|Date", edgeType: "relationship" },
-      { fromNodeId: "measure:mock_model|Sales|Total Sales", toNodeId: "col:mock_model|Sales|Amount", edgeType: "dependency" },
+      { edgeId: "sm-report:mock_model→mock_report", fromNodeId: "sm:mock_model", toNodeId: "report:mock_report", edgeType: "uses" },
+      // Note: report→page and page→visual edges are represented by parentNodeId relationships, not explicit edges
+      { edgeId: "rel:Sales_Date", fromNodeId: "table:mock_model|Sales", toNodeId: "table:mock_model|Date", edgeType: "relationship" },
+      { edgeId: "dep:Total_Sales→Amount", fromNodeId: "measure:mock_model|Sales|Total Sales", toNodeId: "col:mock_model|Sales|Amount", edgeType: "dependency" },
+      // Visual → Column/Measure edges (new in v_edges schema)
+      { edgeId: "visual-uses-measure:VisualContainer1→Total_Sales", fromNodeId: "visual:mock_report|ReportSection1|VisualContainer1", toNodeId: "measure:mock_model|Sales|Total Sales", edgeType: "uses_measure" },
+      { edgeId: "visual-uses-column:VisualContainer1→Amount", fromNodeId: "visual:mock_report|ReportSection1|VisualContainer1", toNodeId: "col:mock_model|Sales|Amount", edgeType: "uses_column" },
+      { edgeId: "visual-uses-measure:VisualContainer2→Total_Sales", fromNodeId: "visual:mock_report|ReportSection1|VisualContainer2", toNodeId: "measure:mock_model|Sales|Total Sales", edgeType: "uses_measure" },
+      { edgeId: "visual-uses-column:VisualContainer3→Amount", fromNodeId: "visual:mock_report|ReportSection2|VisualContainer3", toNodeId: "col:mock_model|Sales|Amount", edgeType: "uses_column" },
     ],
     dimensions: {
-      semanticModels: [{ model_id: "mock_model", model_name: "Sales Model" }],
-      smTables: [
-        { model_id: "mock_model", name: "Sales", ishidden: false },
-        { model_id: "mock_model", name: "Date", ishidden: false },
+      reports: [{ uid: "mock|mock_report", report_id: "mock_report", report_name: "Sales Dashboard", dataset_id: "mock_model" }],
+      pages: [] as any[],  // Empty to simulate real scenario where pages are derived from visuals
+      visuals: [
+        { uid: "mock|mock_report|VisualContainer1|ReportSection1", visual_name: "VisualContainer1", title: "Sales Chart", page_name: "ReportSection1", page_display_name: "Overview", report_id: "mock_report", type: "clusteredColumnChart" },
+        { uid: "mock|mock_report|VisualContainer2|ReportSection1", visual_name: "VisualContainer2", title: "Sales KPI", page_name: "ReportSection1", page_display_name: "Overview", report_id: "mock_report", type: "card" },
+        { uid: "mock|mock_report|VisualContainer3|ReportSection2", visual_name: "VisualContainer3", title: "Sales Table", page_name: "ReportSection2", page_display_name: "Details", report_id: "mock_report", type: "tableEx" },
       ],
-      smColumns: [{ model_id: "mock_model", table: "Sales", name: "Amount", datatype: "decimal" }],
-      smMeasures: [{ model_id: "mock_model", table: "Sales", name: "Total Sales", expression: "SUM(Sales[Amount])" }],
-      smRelationships: [{ model_id: "mock_model", name: "Sales_Date", fromtable: "Sales", totable: "Date" }],
+      semanticModels: [{ uid: "mock|mock_model", model_id: "mock_model", model_name: "Sales Model" }],
+      tables: [
+        { uid: "mock|mock_model|Sales", model_id: "mock_model", name: "Sales", ishidden: false },
+        { uid: "mock|mock_model|Date", model_id: "mock_model", name: "Date", ishidden: false },
+      ],
+      columns: [{ uid: "mock|mock_model|Sales|Amount", model_id: "mock_model", table: "Sales", name: "Amount", datatype: "decimal" }],
+      measures: [{ uid: "mock|mock_model|Sales|Total Sales", model_id: "mock_model", table: "Sales", name: "Total Sales", expression: "SUM(Sales[Amount])" }],
+      relationships: [{ uid: "mock|mock_model|Sales_Date", model_id: "mock_model", name: "Sales_Date", fromtable: "Sales", totable: "Date" }],
       smDependencies: [{ model_id: "mock_model", objectname: "Total Sales", objecttype: "Measure", tablename: "Sales", referencedobjectname: "Amount", referencedobjecttype: "Column", referencedtablename: "Sales" }],
     },
   };
@@ -557,10 +577,25 @@ export function LineageWorkbenchItemLineageView({
           hasNodes: !!snapshot?.nodes?.length,
           hasEdges: !!snapshot?.edges?.length,
           hasDimensions: !!snapshot?.dimensions,
-          semanticModelCount: snapshot?.dimensions?.semanticModels?.length || 0,
-          smTableCount: snapshot?.dimensions?.smTables?.length || 0,
-          smColumnCount: snapshot?.dimensions?.smColumns?.length || 0,
-          smMeasureCount: snapshot?.dimensions?.smMeasures?.length || 0,
+          // IMPORTANT: Check edges data
+          nodesCount: snapshot?.nodes?.length || 0,
+          edgesCount: snapshot?.edges?.length || 0,
+          edgesIsArray: Array.isArray(snapshot?.edges),
+          edgesValue: snapshot?.edges,
+          sampleEdge: snapshot?.edges?.[0] ? snapshot.edges[0] : "N/A - v_edges table is empty",
+          // New property names (primary)
+          semanticModels: snapshot?.dimensions?.semanticModels?.length || 0,
+          tables: snapshot?.dimensions?.tables?.length || 0,
+          columns: snapshot?.dimensions?.columns?.length || 0,
+          measures: snapshot?.dimensions?.measures?.length || 0,
+          relationships: snapshot?.dimensions?.relationships?.length || 0,
+          // Legacy property names (fallback)
+          smTables: snapshot?.dimensions?.smTables?.length || 0,
+          smColumns: snapshot?.dimensions?.smColumns?.length || 0,
+          smMeasures: snapshot?.dimensions?.smMeasures?.length || 0,
+          // Sample field names for debugging
+          sampleSemanticModel: snapshot?.dimensions?.semanticModels?.[0] ? Object.keys(snapshot.dimensions.semanticModels[0]) : "N/A",
+          sampleTable: snapshot?.dimensions?.tables?.[0] ? Object.keys(snapshot.dimensions.tables[0]) : "N/A",
         });
         onLineageChange({
           ...(lineage ?? {}),
@@ -594,6 +629,8 @@ export function LineageWorkbenchItemLineageView({
               "Failed to load lineage data: {{error}}", { error: errorMsg })
           );
         }
+      } finally {
+        setIsLoadingGraph(false);
       }
     };
 
@@ -611,285 +648,755 @@ export function LineageWorkbenchItemLineageView({
       nodes: [], 
       edges: [], 
       dimensions: {
+        reports: [],
+        pages: [],
+        visuals: [],
         semanticModels: [],
-        smTables: [],
-        smColumns: [],
-        smMeasures: [],
-        smRelationships: [],
+        tables: [],
+        columns: [],
+        measures: [],
+        relationships: [],
+        lakehouses: [],
+        warehouses: [],
         smDependencies: [],
+        workspaceArtifacts: [],
       }
     };
   }, [dataSourceMode, lineage]);
 
-  // ── Node & edge normalization ─────────────────────────────────────────────
-  // Builds the graph at runtime from the semantic model dimension tables.
+  // ── Node & edge normalization (simplified view-based architecture) ──────────
+  // Builds graph from v_nodes (with parent_node relationships) and v_edges (with lineage_id lookups)
   const nodes: LineageViewerNode[] = useMemo(() => {
+    const rawNodes = Array.isArray(activeSnapshot?.nodes) ? activeSnapshot.nodes : [];
     const dimensions = activeSnapshot?.dimensions ?? {};
-    const smModels = Array.isArray(dimensions?.semanticModels) ? dimensions.semanticModels : [];
-    const smTables = Array.isArray(dimensions?.smTables) ? dimensions.smTables : [];
-    const smColumns = Array.isArray(dimensions?.smColumns) ? dimensions.smColumns : [];
-    const smMeasures = Array.isArray(dimensions?.smMeasures) ? dimensions.smMeasures : [];
 
-    console.log("[LineageView] Building nodes from dimensions:", {
-      modelsCount: smModels.length,
-      tablesCount: smTables.length,
-      columnsCount: smColumns.length,
-      measuresCount: smMeasures.length,
+    console.log("[LineageView] Building nodes from v_nodes:", {
+      rawNodesCount: rawNodes.length,
+      dimensionsAvailable: Object.keys(dimensions),
     });
 
-    // Deduplicate dimension data using Map (dimension tables may have duplicate rows)
-    const uniqueModels = new Map<string, any>();
-    const uniqueTables = new Map<string, any>();
-    const uniqueColumns = new Map<string, any>();
-    const uniqueMeasures = new Map<string, any>();
+    // Build dimension lookup maps for enrichment (using uid from composite key implementation)
+    const reportsByUid = new Map<string, any>();
+    const pagesByUid = new Map<string, any>();
+    const visualsByUid = new Map<string, any>();
+    const semanticModelsByUid = new Map<string, any>();
+    const tablesByUid = new Map<string, any>();
+    const columnsByUid = new Map<string, any>();
+    const measuresByUid = new Map<string, any>();
+    const lakehousesByUid = new Map<string, any>();
+    const warehousesByUid = new Map<string, any>();
 
-    for (const model of smModels) {
-      if (model.model_id) {
-        uniqueModels.set(model.model_id, model);
-      }
+    // Log dimension table structure for diagnostics
+    if (dimensions.tables && dimensions.tables.length > 0) {
+      console.log("[LineageView] 📋 Dimension Table Structure (tables):", {
+        count: dimensions.tables.length,
+        availableFields: Object.keys(dimensions.tables[0]),
+        sampleRecord: dimensions.tables[0],
+      });
+    }
+    if (dimensions.columns && dimensions.columns.length > 0) {
+      console.log("[LineageView] 📋 Dimension Table Structure (columns):", {
+        count: dimensions.columns.length,
+        availableFields: Object.keys(dimensions.columns[0]),
+        sampleRecord: dimensions.columns[0],
+      });
+    }
+    if (dimensions.measures && dimensions.measures.length > 0) {
+      console.log("[LineageView] 📋 Dimension Table Structure (measures):", {
+        count: dimensions.measures.length,
+        availableFields: Object.keys(dimensions.measures[0]),
+        sampleRecord: dimensions.measures[0],
+      });
     }
 
-    for (const table of smTables) {
-      if (table.model_id && table.name) {
-        const key = `${table.model_id}|${table.name}`;
-        uniqueTables.set(key, table);
-      }
+    // Populate lookup maps with flexible uid field detection (prioritizing LineageTag)
+    for (const r of (dimensions.reports || [])) {
+      const uid = r.LineageTag || r.lineageTag || r.lineage_tag || r.uid || r.data_uid || r.report_uid;
+      if (uid) reportsByUid.set(uid, r);
+    }
+    for (const p of (dimensions.pages || [])) {
+      const uid = p.LineageTag || p.lineageTag || p.lineage_tag || p.uid || p.data_uid || p.page_uid;
+      if (uid) pagesByUid.set(uid, p);
+    }
+    for (const v of (dimensions.visuals || [])) {
+      const uid = v.LineageTag || v.lineageTag || v.lineage_tag || v.uid || v.data_uid || v.visual_uid;
+      if (uid) visualsByUid.set(uid, v);
+    }
+    for (const m of (dimensions.semanticModels || [])) {
+      const uid = m.LineageTag || m.lineageTag || m.lineage_tag || m.uid || m.data_uid || m.model_uid || m.dataset_uid;
+      if (uid) semanticModelsByUid.set(uid, m);
+    }
+    for (const t of (dimensions.tables || [])) {
+      const uid = t.LineageTag || t.lineageTag || t.lineage_tag || t.uid || t.data_uid || t.table_uid;
+      if (uid) tablesByUid.set(uid, t);
+    }
+    for (const c of (dimensions.columns || [])) {
+      const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
+      if (uid) columnsByUid.set(uid, c);
+    }
+    for (const m of (dimensions.measures || [])) {
+      const uid = m.LineageTag || m.lineageTag || m.lineage_tag || m.uid || m.data_uid || m.measure_uid;
+      if (uid) measuresByUid.set(uid, m);
+    }
+    for (const lh of (dimensions.lakehouses || [])) {
+      const uid = lh.LineageTag || lh.lineageTag || lh.lineage_tag || lh.uid || lh.data_uid || lh.lakehouse_uid;
+      if (uid) lakehousesByUid.set(uid, lh);
+    }
+    for (const wh of (dimensions.warehouses || [])) {
+      const uid = wh.LineageTag || wh.lineageTag || wh.lineage_tag || wh.uid || wh.data_uid || wh.warehouse_uid;
+      if (uid) warehousesByUid.set(uid, wh);
     }
 
-    for (const col of smColumns) {
-      if (col.model_id && col.table && col.name) {
-        const key = `${col.model_id}|${col.table}|${col.name}`;
-        uniqueColumns.set(key, col);
-      }
-    }
-
-    for (const measure of smMeasures) {
-      if (measure.model_id && measure.table && measure.name) {
-        const key = `${measure.model_id}|${measure.table}|${measure.name}`;
-        uniqueMeasures.set(key, measure);
-      }
-    }
-
-    console.log("[LineageView] After deduplication:", {
-      uniqueModels: uniqueModels.size,
-      uniqueTables: uniqueTables.size,
-      uniqueColumns: uniqueColumns.size,
-      uniqueMeasures: uniqueMeasures.size,
+    console.log("[LineageView] Dimension lookup maps built:", {
+      reports: reportsByUid.size,
+      pages: pagesByUid.size,
+      visuals: visualsByUid.size,
+      semanticModels: semanticModelsByUid.size,
+      tables: tablesByUid.size,
+      columns: columnsByUid.size,
+      measures: measuresByUid.size,
+      lakehouses: lakehousesByUid.size,
+      warehouses: warehousesByUid.size,
+      // Sample UIDs for debugging
+      sampleSemanticModelUid: semanticModelsByUid.size > 0 ? Array.from(semanticModelsByUid.keys())[0] : "N/A",
+      sampleTableUid: tablesByUid.size > 0 ? Array.from(tablesByUid.keys())[0] : "N/A",
+      sampleColumnUid: columnsByUid.size > 0 ? Array.from(columnsByUid.keys())[0] : "N/A",
+      sampleMeasureUid: measuresByUid.size > 0 ? Array.from(measuresByUid.keys())[0] : "N/A",
     });
 
     const result: LineageViewerNode[] = [];
-
-    for (const model of uniqueModels.values()) {
-      result.push({
-        nodeId: `sm:${model.model_id}`,
-        displayName: model.model_name || model.dataset_name || `Model (${model.model_id})`,
-        entityType: "semantic_model",
-        isGroupNode: true,
-        datasetId: model.model_id,
-        modelName: model.model_name,
+    let enrichedCount = 0;
+    let notEnrichedCount = 0;
+    let noDataUidCount = 0;
+    
+    // Log first raw node to see available fields
+    if (rawNodes.length > 0) {
+      console.log("[LineageView] Sample raw node structure:", {
+        availableFields: Object.keys(rawNodes[0]),
+        sampleNode: rawNodes[0],
       });
     }
+    
+    // Helper function to construct UID from raw node based on available fields
+    const constructUid = (rawNode: any, nodeType: string): string | undefined => {
+      // Try LineageTag as primary key first (user-specified)
+      if (rawNode.LineageTag) return rawNode.LineageTag;
+      if (rawNode.lineageTag) return rawNode.lineageTag;
+      if (rawNode.lineage_tag) return rawNode.lineage_tag;
+      
+      // Fallback to direct uid/data_uid fields
+      if (rawNode.data_uid) return rawNode.data_uid;
+      if (rawNode.uid) return rawNode.uid;
+      
+      // Auto-detect workspace/model/entity identifiers (flexible field names)
+      const workspaceId = rawNode.workspace_id || rawNode.workspaceId || rawNode.WorkspaceId;
+      const modelId = rawNode.model_id || rawNode.modelId || rawNode.dataset_id || rawNode.datasetId;
+      
+      // Construct UID based on entity type and available fields
+      switch (nodeType?.toLowerCase()) {
+        case 'column': {
+          const tableName = rawNode.table_name || rawNode.tableName || rawNode.TableName;
+          const columnName = rawNode.column_name || rawNode.columnName || rawNode.ColumnName || rawNode.node_name;
+          if (workspaceId && modelId && tableName && columnName) {
+            return `${workspaceId}|${modelId}|${tableName}|${columnName}`;
+          }
+          break;
+        }
+        case 'measure': {
+          const measureName = rawNode.measure_name || rawNode.measureName || rawNode.MeasureName || rawNode.node_name;
+          if (workspaceId && modelId && measureName) {
+            return `${workspaceId}|${modelId}|${measureName}`;
+          }
+          break;
+        }
+        case 'table': {
+          const tableName = rawNode.table_name || rawNode.tableName || rawNode.TableName || rawNode.node_name;
+          if (workspaceId && modelId && tableName) {
+            return `${workspaceId}|${modelId}|${tableName}`;
+          }
+          break;
+        }
+        case 'semantic_model':
+        case 'dataset': {
+          if (workspaceId && modelId) {
+            return `${workspaceId}|${modelId}`;
+          }
+          break;
+        }
+        case 'report': {
+          const reportId = rawNode.report_id || rawNode.reportId || rawNode.ReportId;
+          if (workspaceId && reportId) {
+            return `${workspaceId}|${reportId}`;
+          }
+          break;
+        }
+        case 'page': {
+          const reportId = rawNode.report_id || rawNode.reportId;
+          const pageName = rawNode.page_name || rawNode.pageName || rawNode.PageName || rawNode.node_name;
+          if (workspaceId && reportId && pageName) {
+            return `${workspaceId}|${reportId}|${pageName}`;
+          }
+          break;
+        }
+        case 'visual': {
+          const reportId = rawNode.report_id || rawNode.reportId;
+          const pageName = rawNode.page_name || rawNode.pageName;
+          const visualName = rawNode.visual_name || rawNode.visualName || rawNode.VisualName || rawNode.node_name;
+          if (workspaceId && reportId && pageName && visualName) {
+            return `${workspaceId}|${reportId}|${pageName}|${visualName}`;
+          }
+          break;
+        }
+      }
+      
+      return undefined;
+    };
+    
+    // Convert v_nodes to LineageViewerNode with enrichment from dimension tables
+    for (const rawNode of rawNodes) {
+      // Primary column names from user's v_nodes schema: node_id, parent_node, node_name, dataset_id, node_type
+      const nodeId = rawNode.node_id || rawNode.nodeId;
+      const nodeName = rawNode.node_name || rawNode.name || rawNode.displayName;
+      const nodeType = rawNode.node_type || rawNode.entityType;
+      const parentNode = rawNode.parent_node || rawNode.parentNodeId;
+      const datasetId = rawNode.dataset_id || rawNode.datasetId;
+      
+      // Construct UID adaptively based on available fields
+      let dataUid = constructUid(rawNode, nodeType);
+      if (!dataUid) {
+        noDataUidCount++;
+      }
+      
+      if (!nodeId) {
+        console.warn("[LineageView] Skipping node with missing node_id:", rawNode);
+        continue;
+      }
 
-    for (const table of uniqueTables.values()) {
-      result.push({
-        nodeId: `table:${table.model_id}|${table.name}`,
-        displayName: table.name,
-        entityType: "table",
-        tableName: table.name,
-        datasetId: table.model_id,
-        parentNodeId: `sm:${table.model_id}`,
-        objectSubtype: table.ishidden ? "hidden" : undefined,
-      });
+      // Enrich node with details from dimension tables using data_uid
+      let enrichedNode: LineageViewerNode = {
+        nodeId,
+        displayName: nodeName || nodeId,  // Use nodeName as initial fallback
+        entityType: nodeType || "unknown",
+        parentNodeId: parentNode || undefined,
+        datasetId: datasetId || undefined,  // Include dataset_id from v_nodes
+        isGroupNode: false,  // Will be determined by checking if any nodes have this as parent
+      };
+
+      // Look up additional details from dimension tables based on node type
+      let detailRecord: any = null;
+      let wasEnriched = false;
+      if (dataUid) {
+        switch (nodeType) {
+          case "report":
+            detailRecord = reportsByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.reportId = detailRecord.report_id || detailRecord.reportId;
+              enrichedNode.datasetId = detailRecord.dataset_id || detailRecord.datasetId;
+              // Try multiple field name variations for display name
+              enrichedNode.displayName = 
+                detailRecord.report_name || 
+                detailRecord.reportName || 
+                detailRecord.display_name || 
+                detailRecord.displayName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              wasEnriched = true;
+            }
+            break;
+          
+          case "page":
+            detailRecord = pagesByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.reportId = detailRecord.report_id || detailRecord.reportId;
+              enrichedNode.pageNumber = detailRecord.page_number || detailRecord.pageNumber;
+              // Try multiple field name variations
+              enrichedNode.displayName = 
+                detailRecord.page_display_name || 
+                detailRecord.pageDisplayName || 
+                detailRecord.display_name || 
+                detailRecord.displayName || 
+                detailRecord.page_name || 
+                detailRecord.pageName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              wasEnriched = true;
+            }
+            break;
+          
+          case "visual":
+            detailRecord = visualsByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.reportId = detailRecord.report_id || detailRecord.reportId;
+              enrichedNode.pageId = detailRecord.page_name || detailRecord.pageName;
+              enrichedNode.visualType = detailRecord.type || detailRecord.visual_type || detailRecord.visualType;
+              // Try multiple field name variations
+              enrichedNode.displayName = 
+                detailRecord.title || 
+                detailRecord.visual_title || 
+                detailRecord.visualTitle || 
+                detailRecord.display_name || 
+                detailRecord.displayName || 
+                detailRecord.visual_name || 
+                detailRecord.visualName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              wasEnriched = true;
+            }
+            break;
+          
+          case "semantic_model":
+            detailRecord = semanticModelsByUid.get(dataUid);
+            if (detailRecord) {
+              // Try multiple field name variations
+              enrichedNode.displayName = 
+                detailRecord.model_name || 
+                detailRecord.modelName || 
+                detailRecord.dataset_name || 
+                detailRecord.datasetName || 
+                detailRecord.display_name || 
+                detailRecord.displayName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              wasEnriched = true;
+            }
+            break;
+          
+          case "table":
+            detailRecord = tablesByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.table_name || 
+                detailRecord.tableName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              wasEnriched = true;
+            }
+            break;
+          
+          case "column":
+            detailRecord = columnsByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.column_name || 
+                detailRecord.columnName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              enrichedNode.dataType = detailRecord.datatype || detailRecord.data_type || detailRecord.dataType;
+              wasEnriched = true;
+            }
+            break;
+          
+          case "measure":
+            detailRecord = measuresByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.measure_name || 
+                detailRecord.measureName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              enrichedNode.expression = detailRecord.expression;
+              wasEnriched = true;
+            }
+            break;
+
+          case "lakehouse":
+            detailRecord = lakehousesByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.lakehouse_name || 
+                detailRecord.lakehouseName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              wasEnriched = true;
+            }
+            break;
+
+          case "warehouse":
+            detailRecord = warehousesByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.warehouse_name || 
+                detailRecord.warehouseName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              wasEnriched = true;
+            }
+            break;
+        }
+      }
+
+      if (wasEnriched) {
+        enrichedCount++;
+        // Log first 3 successful enrichments for debugging
+        if (enrichedCount <= 3) {
+          console.log("[LineageView] Successfully enriched node:", {
+            nodeId,
+            nodeType,
+            dataUid,
+            displayName: enrichedNode.displayName,
+            detailRecordFields: detailRecord ? Object.keys(detailRecord) : "N/A",
+          });
+        }
+      } else {
+        notEnrichedCount++;
+        // Log first 5 nodes that couldn't be enriched for debugging
+        if (notEnrichedCount <= 5) {
+          console.warn("[LineageView] Could not enrich node:", {
+            nodeId,
+            nodeType,
+            dataUid,
+            nodeName,
+            displayName: enrichedNode.displayName,
+            dimensionRecordFound: !!detailRecord,
+            availableKeys: detailRecord ? Object.keys(detailRecord) : "N/A",
+            rawNodeFields: Object.keys(rawNode),
+          });
+        }
+      }
+
+      result.push(enrichedNode);
     }
 
-    for (const col of uniqueColumns.values()) {
-      result.push({
-        nodeId: `col:${col.model_id}|${col.table}|${col.name}`,
-        displayName: col.name,
-        entityType: "column",
-        tableName: col.table,
-        datasetId: col.model_id,
-        dataType: col.datatype || undefined,
-        expression: col.expression || undefined,
-        objectName: col.name,
-        objectSubtype: col.ishidden ? "hidden" : undefined,
-        parentNodeId: `table:${col.model_id}|${col.table}`,
-      });
+    // Determine which nodes are group nodes (have children)
+    const parentNodeIds = new Set(result.map(n => n.parentNodeId).filter(Boolean));
+    for (const node of result) {
+      if (parentNodeIds.has(node.nodeId)) {
+        node.isGroupNode = true;
+      }
     }
 
-    for (const measure of uniqueMeasures.values()) {
-      result.push({
-        nodeId: `measure:${measure.model_id}|${measure.table}|${measure.name}`,
-        displayName: measure.name,
-        entityType: "measure",
-        tableName: measure.table,
-        datasetId: measure.model_id,
-        expression: measure.expression || undefined,
-        formatString: measure.formatstring || undefined,
-        objectName: measure.name,
-        parentNodeId: `table:${measure.model_id}|${measure.table}`,
-      });
+    console.log("[LineageView] Converted v_nodes to LineageViewerNode:", {
+      totalNodes: result.length,
+      enrichedCount,
+      notEnrichedCount,
+      noDataUidCount,
+      uidConstructionAttempted: noDataUidCount,
+      enrichmentRate: result.length > 0 ? `${Math.round(enrichedCount / result.length * 100)}%` : "N/A",
+      groupNodes: result.filter(n => n.isGroupNode).length,
+      rootNodes: result.filter(n => !n.parentNodeId).length,
+      withParent: result.filter(n => n.parentNodeId).length,
+    });
+    
+    console.log("[LineageView] 📊 Schema Detection Summary:", {
+      message: "The system automatically adapted to your v_nodes structure",
+      detectedFields: rawNodes.length > 0 ? Object.keys(rawNodes[0]) : [],
+      uidStrategy: "Primary key: LineageTag (with fallback to data_uid/uid or constructed UIDs)",
+      enrichmentSuccess: `${enrichedCount}/${result.length} nodes enriched with dimension data`,
+    });
+
+    // Log parent-child hierarchy for debugging
+    const parentChildMap = new Map<string, string[]>();
+    for (const node of result) {
+      if (node.parentNodeId) {
+        const children = parentChildMap.get(node.parentNodeId) || [];
+        children.push(node.nodeId);
+        parentChildMap.set(node.parentNodeId, children);
+      }
     }
+    console.log("[LineageView] Parent-child relationships:", {
+      parentsWithChildren: parentChildMap.size,
+      exampleHierarchy: Array.from(parentChildMap.entries()).slice(0, 3).map(([parent, children]) => ({
+        parent,
+        childrenCount: children.length,
+        children: children.slice(0, 3),
+      })),
+    });
 
     return result;
   }, [activeSnapshot]);
 
   const edges: LineageViewerEdge[] = useMemo(() => {
+    const rawEdges = Array.isArray(activeSnapshot?.edges) ? activeSnapshot.edges : [];
     const dimensions = activeSnapshot?.dimensions ?? {};
-    const smRelationships = Array.isArray(dimensions?.smRelationships) ? dimensions.smRelationships : [];
-    const smDependencies = Array.isArray(dimensions?.smDependencies) ? dimensions.smDependencies : [];
-    const smColumns = Array.isArray(dimensions?.smColumns) ? dimensions.smColumns : [];
-    const smMeasures = Array.isArray(dimensions?.smMeasures) ? dimensions.smMeasures : [];
 
-    // Deduplicate relationships and dependencies
-    const uniqueRelationships = new Map<string, any>();
-    const uniqueDependencies = new Map<string, any>();
-
-    for (const rel of smRelationships) {
-      if (rel.model_id && rel.fromtable && rel.totable) {
-        const relName = rel.name || `${rel.fromtable}_${rel.totable}`;
-        const key = `${rel.model_id}|${relName}`;
-        uniqueRelationships.set(key, rel);
-      }
-    }
-
-    for (const dep of smDependencies) {
-      if (dep.model_id && dep.objectname && dep.referencedobjectname) {
-        const depFrom = dep.fullobjectname || dep.objectname;
-        const depTo = dep.referencedfullobjectname || dep.referencedobjectname;
-        const key = `${dep.model_id}|${depFrom}|${depTo}|${dep.objecttype}|${dep.referencedobjecttype}`;
-        uniqueDependencies.set(key, dep);
-      }
-    }
-
-    console.log("[LineageView] Building edges from dimensions:", {
-      relationshipsCount: smRelationships.length,
-      dependenciesCount: smDependencies.length,
-      uniqueRelationships: uniqueRelationships.size,
-      uniqueDependencies: uniqueDependencies.size,
+    console.log("[LineageView] Building edges from v_edges:", {
+      rawEdgesCount: rawEdges.length,
+      sampleRawEdge: rawEdges[0] ? {
+        ...rawEdges[0],
+        availableFields: Object.keys(rawEdges[0]),
+      } : "N/A",
+      detectedFieldMapping: rawEdges[0] ? {
+        edgeId: rawEdges[0].dependency_pk ? "dependency_pk" : 
+                rawEdges[0].edge_id ? "edge_id" : 
+                rawEdges[0].edgeId ? "edgeId" : 
+                rawEdges[0].LineageTag ? "LineageTag" : "AUTO_CONSTRUCTED",
+        fromNodeId: rawEdges[0].node_id ? "node_id (NEW SCHEMA)" : 
+                    rawEdges[0].from_node ? "from_node" : 
+                    rawEdges[0].fromNodeId ? "fromNodeId" : 
+                    rawEdges[0].object_lineage_id ? "object_lineage_id" : 
+                    rawEdges[0].objectLineageId ? "objectLineageId" : "NOT_FOUND",
+        toNodeId: rawEdges[0].referenced_node_id ? "referenced_node_id (NEW SCHEMA)" : 
+                  rawEdges[0].to_node ? "to_node" : 
+                  rawEdges[0].toNodeId ? "toNodeId" : 
+                  rawEdges[0].referenced_object_key ? "referenced_object_key" : 
+                  rawEdges[0].refernced_object_key ? "refernced_object_key (TYPO)" : 
+                  rawEdges[0].referenced_object_lineage_id ? "referenced_object_lineage_id" : 
+                  rawEdges[0].referencedObjectLineageId ? "referencedObjectLineageId" : "NOT_FOUND",
+        edgeType: rawEdges[0].edge_type ? "edge_type" : 
+                  rawEdges[0].edgeType ? "edgeType" : 
+                  rawEdges[0].object_type ? "object_type (fallback)" : "DEFAULT",
+      } : "N/A",
     });
 
-    const result: LineageViewerEdge[] = [];
-
-    for (const rel of uniqueRelationships.values()) {
-      const relName = rel.name || `${rel.fromtable}_${rel.totable}`;
-      result.push({
-        edgeId: `rel:${rel.model_id}|${relName}`,
-        fromNodeId: `table:${rel.model_id}|${rel.fromtable}`,
-        toNodeId: `table:${rel.model_id}|${rel.totable}`,
-        edgeType: "relationship",
-        datasetId: rel.model_id,
-      });
+    if (rawEdges.length === 0) {
+      console.warn("⚠️ [LineageView] v_edges table is EMPTY! No lineage connections will be displayed.");
+      console.warn("⚠️ Check your lakehouse to ensure v_edges view/table contains data.");
+      console.warn("⚠️ Required v_edges columns: object_type (or object_lineage_id/from_node), referenced_object_key (or referenced_object_lineage_id/to_node)");
+      console.warn("⚠️ Optional v_edges columns: dependency_pk (or edge_id, will be auto-generated if missing), edge_type, LineageTag, lineage_id");
     }
 
-    let skippedDeps = 0;
-    let createdDeps = 0;
-    for (const dep of uniqueDependencies.values()) {
-      const objectType = String(dep.objecttype || "").toLowerCase();
-      const refType = String(dep.referencedobjecttype || "").toLowerCase();
+    // Build dimension lookup maps for lineage_id enrichment
+    const reportsByUid = new Map<string, any>();
+    const pagesByUid = new Map<string, any>();
+    const visualsByUid = new Map<string, any>();
+    const semanticModelsByUid = new Map<string, any>();
+    const tablesByUid = new Map<string, any>();
+    const columnsByUid = new Map<string, any>();
+    const measuresByUid = new Map<string, any>();
+    const relationshipsByUid = new Map<string, any>();
 
-      const fromNodeId =
-        objectType === "measure" ? `measure:${dep.model_id}|${dep.tablename}|${dep.objectname}`
-        : objectType === "column" ? `col:${dep.model_id}|${dep.tablename}|${dep.objectname}`
-        : objectType === "table" ? `table:${dep.model_id}|${dep.objectname}`
-        : null;
+    // Populate lookup maps with flexible uid field detection (prioritizing LineageTag)
+    for (const r of (dimensions.reports || [])) {
+      const uid = r.LineageTag || r.lineageTag || r.lineage_tag || r.uid || r.data_uid || r.report_uid;
+      if (uid) reportsByUid.set(uid, r);
+    }
+    for (const p of (dimensions.pages || [])) {
+      const uid = p.LineageTag || p.lineageTag || p.lineage_tag || p.uid || p.data_uid || p.page_uid;
+      if (uid) pagesByUid.set(uid, p);
+    }
+    for (const v of (dimensions.visuals || [])) {
+      const uid = v.LineageTag || v.lineageTag || v.lineage_tag || v.uid || v.data_uid || v.visual_uid;
+      if (uid) visualsByUid.set(uid, v);
+    }
+    for (const m of (dimensions.semanticModels || [])) {
+      const uid = m.LineageTag || m.lineageTag || m.lineage_tag || m.uid || m.data_uid || m.model_uid || m.dataset_uid;
+      if (uid) semanticModelsByUid.set(uid, m);
+    }
+    for (const t of (dimensions.tables || [])) {
+      const uid = t.LineageTag || t.lineageTag || t.lineage_tag || t.uid || t.data_uid || t.table_uid;
+      if (uid) tablesByUid.set(uid, t);
+    }
+    for (const c of (dimensions.columns || [])) {
+      const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
+      if (uid) columnsByUid.set(uid, c);
+    }
+    for (const m of (dimensions.measures || [])) {
+      const uid = m.LineageTag || m.lineageTag || m.lineage_tag || m.uid || m.data_uid || m.measure_uid;
+      if (uid) measuresByUid.set(uid, m);
+    }
+    for (const r of (dimensions.relationships || [])) {
+      const uid = r.LineageTag || r.lineageTag || r.lineage_tag || r.uid || r.data_uid || r.relationship_uid;
+      if (uid) relationshipsByUid.set(uid, r);
+    }
 
-      const toNodeId =
-        refType === "measure" ? `measure:${dep.model_id}|${dep.referencedtablename}|${dep.referencedobjectname}`
-        : refType === "column" ? `col:${dep.model_id}|${dep.referencedtablename}|${dep.referencedobjectname}`
-        : refType === "table" ? `table:${dep.model_id}|${dep.referencedobjectname}`
-        : null;
+    const result: LineageViewerEdge[] = [];
+    let enrichedCount = 0;
+    let missingLineageIdCount = 0;
+    let skippedEdgesCount = 0;
 
-      if (!fromNodeId || !toNodeId || fromNodeId === toNodeId) {
-        skippedDeps++;
-        if (skippedDeps <= 3) {
-          console.log("[LineageView] Skipped dependency:", {
-            objectType,
-            refType,
-            fromNodeId,
-            toNodeId,
-            dep,
+    // Convert v_edges to LineageViewerEdge with enrichment from dimension tables
+    for (const rawEdge of rawEdges) {
+      // Primary column names from user's v_edges schema: object_type (info), node_id (TO node), referenced_node_id (FROM node)
+      const fromNodeId = rawEdge.referenced_node_id || rawEdge.from_node || rawEdge.fromNodeId || rawEdge.object_lineage_id || rawEdge.objectLineageId;
+      const toNodeId = rawEdge.node_id || rawEdge.to_node || rawEdge.toNodeId || rawEdge.referenced_object_key || rawEdge.refernced_object_key || rawEdge.referenced_object_lineage_id || rawEdge.referencedObjectLineageId;
+      const edgeType = rawEdge.edge_type || rawEdge.edgeType || rawEdge.object_type || "uses";  // object_type can be used as edge type if edge_type is missing
+      const lineageId = rawEdge.LineageTag || rawEdge.lineageTag || rawEdge.lineage_tag || rawEdge.lineage_id || rawEdge.lineageId;  // Optional UID for dimension lookup
+      
+      // Construct edge ID: Try dependency_pk, then explicit edge_id, then construct from source/target/type
+      let edgeId = rawEdge.dependency_pk || rawEdge.edge_id || rawEdge.edgeId || rawEdge.LineageTag || rawEdge.lineageTag;
+      if (!edgeId && fromNodeId && toNodeId) {
+        edgeId = `${fromNodeId}__${edgeType}__${toNodeId}`;
+      }
+
+      if (!edgeId || !fromNodeId || !toNodeId) {
+        skippedEdgesCount++;
+        if (skippedEdgesCount <= 3) {
+          console.warn("[LineageView] Skipping edge with missing required fields:", {
+            rawEdge,
+            availableColumns: Object.keys(rawEdge),
+            detectedValues: { edgeId, fromNodeId, toNodeId },
+            missingFields: [
+              !edgeId ? "edgeId (dependency_pk/edge_id or auto-constructed)" : null,
+              !fromNodeId ? "fromNodeId (referenced_node_id/from_node)" : null,
+              !toNodeId ? "toNodeId (node_id/to_node)" : null,
+            ].filter(Boolean),
           });
         }
         continue;
       }
 
-      createdDeps++;
-      if (createdDeps <= 3) {
-        console.log("[LineageView] Created dependency edge:", {
-          fromNodeId,
-          toNodeId,
-          objectType,
-          refType,
-        });
-      }
-      result.push({
-        edgeId: `dep:${fromNodeId}→${toNodeId}`,
+      // Create base edge
+      const edge: LineageViewerEdge = {
+        edgeId,
         fromNodeId,
         toNodeId,
-        edgeType: "dependency",
-        datasetId: dep.model_id,
-      });
+        edgeType,
+      };
+
+      // Enrich edge with details from dimension tables using lineage_id
+      if (lineageId) {
+        let detailRecord: any = null;
+        
+        // Try to find the detail record in appropriate dimension table based on edge type
+        switch (edgeType) {
+          case "uses":
+          case "uses_dataset":
+            // Report → Semantic Model relationship
+            detailRecord = reportsByUid.get(lineageId) || semanticModelsByUid.get(lineageId);
+            if (detailRecord) {
+              edge.datasetId = detailRecord.dataset_id || detailRecord.model_id;
+              edge.reportId = detailRecord.report_id;
+              enrichedCount++;
+            }
+            break;
+
+          case "contains":
+            // Parent → Child containment (report→page, page→visual, table→column/measure)
+            detailRecord = pagesByUid.get(lineageId) || 
+                          visualsByUid.get(lineageId) || 
+                          columnsByUid.get(lineageId) || 
+                          measuresByUid.get(lineageId);
+            if (detailRecord) {
+              edge.reportId = detailRecord.report_id;
+              edge.pageId = detailRecord.page_name;
+              edge.visualId = detailRecord.visual_name;
+              edge.datasetId = detailRecord.model_id;
+              enrichedCount++;
+            }
+            break;
+
+          case "uses_column":
+          case "uses_measure":
+            // Visual/Report → Column/Measure usage
+            detailRecord = columnsByUid.get(lineageId) || measuresByUid.get(lineageId);
+            if (detailRecord) {
+              edge.datasetId = detailRecord.model_id;
+              // Note: Additional details (name, table) available via lineage_id lookup in dimension tables
+              enrichedCount++;
+            }
+            break;
+
+          case "relationship":
+            // Table → Table relationship
+            detailRecord = relationshipsByUid.get(lineageId);
+            if (detailRecord) {
+              edge.datasetId = detailRecord.model_id;
+              // Note: Relationship name available via lineage_id lookup in dimension tables
+              enrichedCount++;
+            }
+            break;
+
+          case "dependency":
+            // Measure/Column → Measure/Column dependency
+            detailRecord = measuresByUid.get(lineageId) || columnsByUid.get(lineageId);
+            if (detailRecord) {
+              edge.datasetId = detailRecord.model_id;
+              enrichedCount++;
+            }
+            break;
+
+          default:
+            // Unknown edge type, try all dimension tables
+            detailRecord = reportsByUid.get(lineageId) ||
+                          pagesByUid.get(lineageId) ||
+                          visualsByUid.get(lineageId) ||
+                          semanticModelsByUid.get(lineageId) ||
+                          tablesByUid.get(lineageId) ||
+                          columnsByUid.get(lineageId) ||
+                          measuresByUid.get(lineageId) ||
+                          relationshipsByUid.get(lineageId);
+            if (detailRecord) {
+              enrichedCount++;
+            }
+        }
+
+        if (!detailRecord) {
+          missingLineageIdCount++;
+          if (missingLineageIdCount <= 5) {
+            console.warn("[LineageView] Could not find dimension record for lineage_id:", {
+              lineageId,
+              edgeType,
+              fromNodeId,
+              toNodeId,
+            });
+          }
+        }
+      }
+
+      result.push(edge);
     }
 
-    console.log("[LineageView] Dependency edge summary:", {
-      uniqueDependencies: uniqueDependencies.size,
-      createdDeps,
-      skippedDeps,
+    console.log("[LineageView] Converted v_edges to LineageViewerEdge:", {
       totalEdges: result.length,
+      skippedEdges: skippedEdgesCount,
+      enrichedWithDetails: enrichedCount,
+      missingLineageId: missingLineageIdCount,
+      edgeTypes: Array.from(new Set(result.map(e => e.edgeType))),
+      sampleEdge: result[0] || "N/A",
     });
 
-    // Add structural "contains" edges: table → column and table → measure
-    let containsEdges = 0;
-    const uniqueColumns = new Map<string, any>();
-    const uniqueMeasures = new Map<string, any>();
-    
-    for (const col of smColumns) {
-      if (col.model_id && col.table && col.name) {
-        const key = `${col.model_id}|${col.table}|${col.name}`;
-        uniqueColumns.set(key, col);
-      }
+    if (skippedEdgesCount > 0) {
+      console.warn(`⚠️ [LineageView] Skipped ${skippedEdgesCount} edges due to missing required fields (dependency_pk/edge_id, object_type/from_node, or referenced_object_key/to_node)`);
     }
-    
-    for (const measure of smMeasures) {
-      if (measure.model_id && measure.table && measure.name) {
-        const key = `${measure.model_id}|${measure.table}|${measure.name}`;
-        uniqueMeasures.set(key, measure);
-      }
-    }
-    
-    for (const col of uniqueColumns.values()) {
-      const tableNodeId = `table:${col.model_id}|${col.table}`;
-      const colNodeId = `col:${col.model_id}|${col.table}|${col.name}`;
-      result.push({
-        edgeId: `contains:${tableNodeId}→${colNodeId}`,
-        fromNodeId: tableNodeId,
-        toNodeId: colNodeId,
-        edgeType: "contains",
-        datasetId: col.model_id,
-      });
-      containsEdges++;
-    }
-    
-    for (const measure of uniqueMeasures.values()) {
-      const tableNodeId = `table:${measure.model_id}|${measure.table}`;
-      const measureNodeId = `measure:${measure.model_id}|${measure.table}|${measure.name}`;
-      result.push({
-        edgeId: `contains:${tableNodeId}→${measureNodeId}`,
-        fromNodeId: tableNodeId,
-        toNodeId: measureNodeId,
-        edgeType: "contains",
-        datasetId: measure.model_id,
-      });
-      containsEdges++;
-    }
-    
-    console.log("[LineageView] Added containment edges:", {
-      containsEdges,
-      totalEdgesWithContains: result.length,
-    });
 
-    return result;
+    // Validate edges - ensure both nodes exist
+    const nodeIds = new Set(nodes.map(n => n.nodeId));
+    const validEdges: LineageViewerEdge[] = [];
+    let invalidEdgeCount = 0;
+    
+    // Add comprehensive diagnostics for edge validation
+    if (result.length > 0 && nodes.length > 0) {
+      console.log("[LineageView] Edge validation diagnostics:", {
+        totalNodesInGraph: nodes.length,
+        totalEdgesBeforeValidation: result.length,
+        sampleNodeIds: Array.from(nodeIds).slice(0, 5),
+        sampleEdgeFromIds: result.slice(0, 5).map(e => e.fromNodeId),
+        sampleEdgeToIds: result.slice(0, 5).map(e => e.toNodeId),
+      });
+    }
+    
+    for (const edge of result) {
+      const fromExists = nodeIds.has(edge.fromNodeId);
+      const toExists = nodeIds.has(edge.toNodeId);
+      
+      if (!fromExists || !toExists) {
+        invalidEdgeCount++;
+        if (invalidEdgeCount <= 5) {
+          console.warn("[LineageView] ❌ Filtering edge with non-existent node reference:", {
+            edgeId: edge.edgeId,
+            fromNodeId: edge.fromNodeId,
+            fromExists,
+            toNodeId: edge.toNodeId,
+            toExists,
+            hint: !fromExists ? `Node '${edge.fromNodeId}' not found in v_nodes` : `Node '${edge.toNodeId}' not found in v_nodes`,
+          });
+        }
+      } else {
+        validEdges.push(edge);
+      }
+    }
+
+    if (invalidEdgeCount > 0) {
+      console.warn(`⚠️ [LineageView] Filtered out ${invalidEdgeCount}/${result.length} edges pointing to non-existent nodes`);
+      console.warn(`💡 This usually means the node IDs in v_edges (object_type/referenced_object_key) don't match the node_id values in v_nodes.`);
+      console.warn(`💡 Check the browser console logs above to see sample node IDs vs edge node references.`);
+    }
+
+    // Log sample edges for debugging
+    if (validEdges.length > 0) {
+      console.log("[LineageView] Sample valid edges:", validEdges.slice(0, 3));
+    }
+
+    return validEdges;
   }, [activeSnapshot]);
 
   const entityTypes = useMemo(() => {
@@ -910,7 +1417,16 @@ export function LineageWorkbenchItemLineageView({
 
   const filteredEdges: LineageViewerEdge[] = useMemo(() => {
     const ids = new Set(filtered.map((n) => n.nodeId));
-    return edges.filter((e) => ids.has(e.fromNodeId) && ids.has(e.toNodeId));
+    const result = edges.filter((e) => ids.has(e.fromNodeId) && ids.has(e.toNodeId));
+    
+    console.log("[LineageView] filteredEdges:", {
+      totalEdges: edges.length,
+      filteredEdges: result.length,
+      filteredNodesCount: ids.size,
+      edgesFilteredOut: edges.length - result.length,
+    });
+    
+    return result;
   }, [edges, filtered]);
 
   const {
@@ -956,6 +1472,13 @@ export function LineageWorkbenchItemLineageView({
       // For full mode, use filtered edges (both endpoints must be in filtered set)
       const limitedEdges = filteredEdges.filter((e) => limitedNodeIds.has(e.fromNodeId) && limitedNodeIds.has(e.toNodeId));
 
+      console.log("[LineageView] graphNodes/graphEdges (full mode):", {
+        limitedNodes: limitedNodes.length,
+        limitedEdges: limitedEdges.length,
+        filteredEdges: filteredEdges.length,
+        parentNodesAdded: parentIds.size,
+      });
+
       return {
         graphNodes: limitedNodes,
         graphEdges: limitedEdges,
@@ -986,75 +1509,79 @@ export function LineageWorkbenchItemLineageView({
       adjacency.get(edge.toNodeId)!.push(edge.fromNodeId);
     }
 
-    // BFS traversal through ALL nodes (not just filtered ones)
-    // In filter mode, limit to 2 hops (direct neighbors + their neighbors)
-    const maxDepth = graphDisplayMode === "filter" ? 2 : Infinity;
+    // Build directed upstream and downstream maps
+    const upstreamMap = new Map<string, string[]>();
+    const downstreamMap = new Map<string, string[]>();
+    for (const edge of edges) {
+      if (!upstreamMap.has(edge.toNodeId)) upstreamMap.set(edge.toNodeId, []);
+      upstreamMap.get(edge.toNodeId)!.push(edge.fromNodeId);
+      if (!downstreamMap.has(edge.fromNodeId)) downstreamMap.set(edge.fromNodeId, []);
+      downstreamMap.get(edge.fromNodeId)!.push(edge.toNodeId);
+    }
+
+    // BFS traversal: collect upstream and downstream separately, then combine
+    const maxDepth = graphDisplayMode === "filter" ? 3 : Infinity;
     const visited = new Set<string>([selectedNodeId]);
     const depthMap = new Map<string, number>([[selectedNodeId, 0]]);
-    const queue: string[] = [selectedNodeId];
     
-    while (queue.length > 0 && visited.size < graphNodeLimit) {
-      const current = queue.shift()!;
+    // Traverse upstream (dependencies)
+    const upstreamQueue: string[] = [selectedNodeId];
+    while (upstreamQueue.length > 0 && visited.size < graphNodeLimit) {
+      const current = upstreamQueue.shift()!;
       const currentDepth = depthMap.get(current) || 0;
-      
-      // Skip if we've reached max depth
       if (currentDepth >= maxDepth) continue;
       
-      const neighbors = adjacency.get(current) ?? [];
-      for (const neighbor of neighbors) {
+      const upstreamNeighbors = upstreamMap.get(current) ?? [];
+      for (const neighbor of upstreamNeighbors) {
         if (visited.has(neighbor)) continue;
         visited.add(neighbor);
         depthMap.set(neighbor, currentDepth + 1);
-        queue.push(neighbor);
+        upstreamQueue.push(neighbor);
         if (visited.size >= graphNodeLimit) break;
       }
     }
     
-    console.log("[LineageView] Filter mode BFS:", {
-      mode: graphDisplayMode,
-      maxDepth,
-      visitedCount: visited.size,
-      selectedNode: selectedNodeId,
+    // Traverse downstream (dependents)
+    const downstreamQueue: string[] = [selectedNodeId];
+    while (downstreamQueue.length > 0 && visited.size < graphNodeLimit) {
+      const current = downstreamQueue.shift()!;
+      const currentDepth = depthMap.get(current) || 0;
+      if (currentDepth >= maxDepth) continue;
+      
+      const downstreamNeighbors = downstreamMap.get(current) ?? [];
+      for (const neighbor of downstreamNeighbors) {
+        if (visited.has(neighbor)) continue;
+        visited.add(neighbor);
+        depthMap.set(neighbor, currentDepth + 1);
+        downstreamQueue.push(neighbor);
+        if (visited.size >= graphNodeLimit) break;
+      }
+    }
+    
+    // Filter nodes to those we visited
+    const focusedNodes = nodes.filter((n) => visited.has(n.nodeId));
+    
+    // For focused mode, use ALL edges (not just filtered ones)
+    const focusedEdges = edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));
+
+    console.log("[LineageView] graphNodes/graphEdges (focused mode):", {
+      focusedNodes: focusedNodes.length,
+      focusedEdges: focusedEdges.length,
+      visitedNodes: visited.size,
+      totalEdges: edges.length,
     });
 
-    // In filter mode, only show visited nodes. In highlight mode, show all filtered nodes
-    let limitedNodes = graphDisplayMode === "filter" 
-      ? nodes.filter((n) => visited.has(n.nodeId))  // Filter: only visited nodes
-      : filtered;  // Highlight: show all filtered nodes but highlight visited ones
-    
-    // IMPORTANT: Always include parent semantic model containers when their children are visible
-    const limitedNodeIds = new Set(limitedNodes.map(n => n.nodeId));
-    const parentIds = new Set<string>();
-    for (const node of limitedNodes) {
-      if (node.parentNodeId && !limitedNodeIds.has(node.parentNodeId)) {
-        parentIds.add(node.parentNodeId);
-      }
-    }
-    
-    // Add parent nodes from full nodes list
-    for (const parentId of parentIds) {
-      const parentNode = nodes.find(n => n.nodeId === parentId);
-      if (parentNode) {
-        limitedNodes.push(parentNode);
-      }
-    }
-    
-    // In filter mode, only include edges between visited nodes. In highlight mode, use filtered edges
-    const limitedEdges = graphDisplayMode === "filter"
-      ? edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId))
-      : filteredEdges;
-    
     return {
-      graphNodes: limitedNodes,
-      graphEdges: limitedEdges,
-      hiddenNodeCount: Math.max(0, nodes.length - limitedNodes.length),
-      hiddenEdgeCount: Math.max(0, edges.length - limitedEdges.length),
+      graphNodes: focusedNodes,
+      graphEdges: focusedEdges,
+      hiddenNodeCount: Math.max(0, nodes.length - focusedNodes.length),
+      hiddenEdgeCount: Math.max(0, edges.length - focusedEdges.length),
       requiresSelection: false,
     };
   }, [filtered, filteredEdges, nodes, edges, graphNodeLimit, graphScope, selectedNodeId, graphDisplayMode]);
 
   // ── BFS highlight map ─────────────────────────────────────────────────────
-  const { depthByNodeId, highlightedNodeIds, highlightedEdgeIds } = useMemo(() => {
+  const { depthByNodeId, highlightedNodeIds, highlightedEdgeIds} = useMemo(() => {
     const depthMap = new Map<string, number>();
     const hlNodes = new Set<string>();
     const hlEdges = new Set<string>();
@@ -1338,6 +1865,19 @@ export function LineageWorkbenchItemLineageView({
           </MessageBar>
         )}
         
+        {nodes.length > 0 && edges.length === 0 && !loadError && !isLoadingGraph && (
+          <MessageBar intent="warning">
+            <MessageBarBody>
+              <Text weight="semibold">v_edges table is empty or edges are invalid</Text>
+              <br />
+              Your lakehouse has {nodes.length} nodes but no valid edges (lineage connections). 
+              Check that your <strong>v_edges</strong> view/table contains data where node IDs match <strong>v_nodes.node_id</strong>: 
+              <strong>node_id</strong> (from node) and <strong>referenced_node_id</strong> (to node) must reference existing node_id values. 
+              Optional columns: <strong>object_type</strong> (edge type/info), edge_type, dependency_pk (edge ID). Check browser console (F12) for detailed diagnostics.
+            </MessageBarBody>
+          </MessageBar>
+        )}
+        
         {nodes.length === 0 && (isLoadingGraph || shouldLoadData) ? (
           <div
             style={{
@@ -1406,15 +1946,34 @@ export function LineageWorkbenchItemLineageView({
                   fillHeight={tableFills}
                   customHeight={tableExpanded && !tableFills ? tableHeight : undefined}
                 >
-                  <LineageTableView
-                    nodes={filtered}
-                    edges={filteredEdges}
-                    selectedNodeId={selectedNodeId}
-                    onNodeSelect={(id) => {
-                      setSelectedNodeId(id);
-                      if (!detailExpanded) setDetailExpanded(true);
-                    }}
-                  />
+                  {isLoadingGraph ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        height: "100%",
+                        padding: tokens.spacingVerticalXXL,
+                        gap: tokens.spacingVerticalM,
+                        flexDirection: "column",
+                      }}
+                    >
+                      <Spinner size="medium" />
+                      <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
+                        {t("LineageWorkbench_LoadingTable", "Loading nodes and edges...")}
+                      </Text>
+                    </div>
+                  ) : (
+                    <LineageTableView
+                      nodes={filtered}
+                      edges={filteredEdges}
+                      selectedNodeId={selectedNodeId}
+                      onNodeSelect={(id) => {
+                        setSelectedNodeId(id);
+                        if (!detailExpanded) setDetailExpanded(true);
+                      }}
+                    />
+                  )}
                 </CollapsiblePanel>
                 
                 {tableExpanded && graphExpanded && !tableFills && (
@@ -1520,15 +2079,34 @@ export function LineageWorkbenchItemLineageView({
                       <span>{t("LineageWorkbench_Panel_Table", "Table")}</span>
                       <span>{filtered.length}</span>
                     </div>
-                    <LineageTableView
-                      nodes={filtered}
-                      edges={filteredEdges}
-                      selectedNodeId={selectedNodeId}
-                      onNodeSelect={(id) => {
-                        setSelectedNodeId(id);
-                        if (!detailExpanded) setDetailExpanded(true);
-                      }}
-                    />
+                    {isLoadingGraph ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          height: "100%",
+                          padding: tokens.spacingVerticalXXL,
+                          gap: tokens.spacingVerticalM,
+                          flexDirection: "column",
+                        }}
+                      >
+                        <Spinner size="medium" />
+                        <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
+                          {t("LineageWorkbench_LoadingTable", "Loading nodes and edges...")}
+                        </Text>
+                      </div>
+                    ) : (
+                      <LineageTableView
+                        nodes={filtered}
+                        edges={filteredEdges}
+                        selectedNodeId={selectedNodeId}
+                        onNodeSelect={(id) => {
+                          setSelectedNodeId(id);
+                          if (!detailExpanded) setDetailExpanded(true);
+                        }}
+                      />
+                    )}
                   </div>
 
                   <div className={exploreLayout === "side-by-side" ? styles.splitDividerVertical : styles.splitDividerHorizontal} />

@@ -1460,11 +1460,16 @@ export function LineageDetailView({
                     href={card.value} 
                     target="_blank" 
                     rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(card.value, '_blank', 'noopener,noreferrer');
+                    }}
                     style={{ 
                       color: tokens.colorBrandForeground1, 
                       textDecoration: "none",
                       fontSize: tokens.fontSizeBase200,
-                      fontWeight: tokens.fontWeightSemibold
+                      fontWeight: tokens.fontWeightSemibold,
+                      cursor: "pointer"
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
                     onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}

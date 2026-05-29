@@ -247,11 +247,14 @@ export function LineageDetailView({
       case "measure": {
         const measureUid = selectedNode.nodeId.replace(/^measure:/, "");
         const measureDetails = dimensions?.measures?.find((m: any) => 
+          m.measure_pk === measureUid || 
           m.uid === measureUid || 
           (m.measure_name === selectedNode.displayName && m.table === selectedNode.tableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
+          m.model_id === selectedNode.datasetId || 
+          m.uid === selectedNode.datasetId || 
+          m.model_pk === selectedNode.datasetId
         );
         
         // Try multiple field name variations for expression and format
@@ -264,6 +267,9 @@ export function LineageDetailView({
         
         console.log("[LineageDetail] Measure metadata lookup:", {
           measureUid,
+          searchingFor: { measure_pk: measureUid, uid: measureUid, measure_name: selectedNode.displayName, table: selectedNode.tableName },
+          totalMeasuresInDimensions: dimensions?.measures?.length || 0,
+          sampleMeasure: dimensions?.measures?.[0],
           foundMeasureDetails: !!measureDetails,
           measureFields: measureDetails ? Object.keys(measureDetails) : [],
           measureDetailsRaw: measureDetails,
@@ -290,11 +296,14 @@ export function LineageDetailView({
       case "column": {
         const columnUid = selectedNode.nodeId.replace(/^col(umn)?:/, "");
         const columnDetails = dimensions?.columns?.find((c: any) => 
+          c.column_pk === columnUid || 
           c.uid === columnUid || 
           (c.column_name === selectedNode.displayName && c.table === selectedNode.tableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
+          m.model_id === selectedNode.datasetId || 
+          m.uid === selectedNode.datasetId || 
+          m.model_pk === selectedNode.datasetId
         );
         
         // Try multiple field name variations for expression and format
@@ -332,6 +341,7 @@ export function LineageDetailView({
         // Lookup visual details from dimensions
         const visualUid = selectedNode.nodeId.replace(/^visual:/, "");
         const visualDetails = dimensions?.visuals?.find((v: any) => 
+          v.visual_pk === visualUid || 
           v.uid === visualUid || 
           v.visual_uid === visualUid ||
           (v.visual_name === selectedNode.visualId && v.report_id === selectedNode.reportId)
@@ -340,7 +350,9 @@ export function LineageDetailView({
           p.page_name === selectedNode.pageId && p.report_id === selectedNode.reportId
         );
         const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.report_id === selectedNode.reportId || r.uid === selectedNode.reportId
+          r.report_id === selectedNode.reportId || 
+          r.uid === selectedNode.reportId || 
+          r.report_pk === selectedNode.reportId
         );
         return [
           { label: t("LineageDetail_VisualType", "Visual type"), value: selectedNode.visualType || visualDetails?.type },
@@ -355,7 +367,9 @@ export function LineageDetailView({
       case "report": {
         const reportUid = selectedNode.nodeId.replace(/^report:/, "");
         const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.uid === reportUid || r.report_id === selectedNode.reportId
+          r.report_pk === reportUid || 
+          r.uid === reportUid || 
+          r.report_id === selectedNode.reportId
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
           m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
@@ -373,11 +387,14 @@ export function LineageDetailView({
       case "page": {
         const pageUid = selectedNode.nodeId.replace(/^page:/, "");
         const pageDetails = dimensions?.pages?.find((p: any) => 
+          p.page_pk === pageUid || 
           p.uid === pageUid || 
           (p.page_name === selectedNode.pageId && p.report_id === selectedNode.reportId)
         );
         const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.report_id === selectedNode.reportId || r.uid === selectedNode.reportId
+          r.report_id === selectedNode.reportId || 
+          r.uid === selectedNode.reportId || 
+          r.report_pk === selectedNode.reportId
         );
         return [
           { label: t("LineageDetail_PageNumber", "Page number"), value: selectedNode.pageNumber?.toString() || pageDetails?.page_number?.toString() },
@@ -391,11 +408,14 @@ export function LineageDetailView({
       case "table": {
         const tableUid = selectedNode.nodeId.replace(/^table:/, "");
         const tableDetails = dimensions?.tables?.find((t: any) => 
+          t.table_pk === tableUid || 
           t.uid === tableUid || 
           (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
+          m.model_id === selectedNode.datasetId || 
+          m.uid === selectedNode.datasetId || 
+          m.model_pk === selectedNode.datasetId
         );
         
         console.log("[LineageDetail] Table metadata lookup:", {

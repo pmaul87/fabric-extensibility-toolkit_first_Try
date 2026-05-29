@@ -280,14 +280,19 @@ export function LineageDetailView({
           format,
         });
         
+        // Check KPI status
+        const isKPI = !!(measureDetails?.kpistatus || measureDetails?.kpi_status || measureDetails?.isKPI);
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || measureDetails?.name },
+          { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || measureDetails?.datatype },
           { label: t("LineageDetail_Format", "Format"), value: format },
           { label: t("LineageDetail_Expression", "Expression"), value: expression },
-          { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || measureDetails?.datatype },
+          { label: t("LineageDetail_DisplayFolder", "Display folder"), value: measureDetails?.displayfolder || measureDetails?.display_folder },
+          { label: t("LineageDetail_IsKPI", "Is KPI"), value: isKPI ? "Yes" : undefined },
           { label: t("LineageDetail_Hidden", "Hidden"), value: measureDetails?.ishidden ? "Yes" : "No" },
           { label: t("LineageDetail_Description", "Description"), value: measureDetails?.description },
           ...common,
@@ -323,15 +328,23 @@ export function LineageDetailView({
           format,
         });
         
+        // Check if calculated column
+        const isCalculated = !!(expression || columnDetails?.type === "Calculated" || columnDetails?.column_type === "Calculated");
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || columnDetails?.name },
+          { label: t("LineageDetail_ColumnType", "Column type"), value: isCalculated ? "Calculated" : "Data" },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || columnDetails?.datatype },
           { label: t("LineageDetail_Format", "Format"), value: format },
+          { label: t("LineageDetail_DataCategory", "Data category"), value: columnDetails?.datacategory || columnDetails?.data_category },
           { label: t("LineageDetail_Expression", "Expression"), value: expression },
-          { label: t("LineageDetail_SortOrder", "Sort order"), value: columnDetails?.sortbycolumnid ? "Sorted" : undefined },
+          { label: t("LineageDetail_SourceColumn", "Source column"), value: columnDetails?.sourcecolumn || columnDetails?.source_column },
+          { label: t("LineageDetail_Aggregation", "Aggregation"), value: columnDetails?.summarizebydefault !== false ? (columnDetails?.aggregation || columnDetails?.defaultaggregation || "Sum") : "None" },
+          { label: t("LineageDetail_SortOrder", "Sort by column"), value: columnDetails?.sortbycolumn || columnDetails?.sortbycolumnid },
+          { label: t("LineageDetail_DisplayFolder", "Display folder"), value: columnDetails?.displayfolder || columnDetails?.display_folder },
           { label: t("LineageDetail_Hidden", "Hidden"), value: columnDetails?.ishidden ? "Yes" : "No" },
           { label: t("LineageDetail_Description", "Description"), value: columnDetails?.description },
           ...common,
@@ -425,13 +438,25 @@ export function LineageDetailView({
           tableDetailsRaw: tableDetails,
         });
         
+        // Storage mode
+        const storageMode = tableDetails?.mode || tableDetails?.storage_mode || tableDetails?.storagemode;
+        
+        // Check if calculated table
+        const isCalculated = !!(tableDetails?.type === "Calculated" || tableDetails?.table_type === "Calculated" || tableDetails?.expression);
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName ?? selectedNode.displayName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
+          { label: t("LineageDetail_TableType", "Table type"), value: isCalculated ? "Calculated" : "Data" },
           { label: t("LineageDetail_Source", "Source"), value: tableDetails?.sourcetype || tableDetails?.source_type },
+          { label: t("LineageDetail_StorageMode", "Storage mode"), value: storageMode },
           { label: t("LineageDetail_Columns", "Column count"), value: tableDetails?.column_count?.toString() },
           { label: t("LineageDetail_Measures", "Measure count"), value: tableDetails?.measure_count?.toString() },
+          { label: t("LineageDetail_RowCount", "Row count"), value: tableDetails?.row_count?.toLocaleString() || tableDetails?.rowcount?.toLocaleString() },
+          { label: t("LineageDetail_Partitions", "Partitions"), value: tableDetails?.partition_count?.toString() || tableDetails?.partitioncount?.toString() },
+          { label: t("LineageDetail_RefreshPolicy", "Refresh policy"), value: tableDetails?.refreshpolicy || tableDetails?.refresh_policy },
+          { label: t("LineageDetail_DisplayFolder", "Display folder"), value: tableDetails?.displayfolder || tableDetails?.display_folder },
           { label: t("LineageDetail_Hidden", "Hidden"), value: tableDetails?.ishidden ? "Yes" : "No" },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
           { label: t("LineageDetail_Description", "Description"), value: tableDetails?.description },

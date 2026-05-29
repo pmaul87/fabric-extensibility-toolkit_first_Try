@@ -10,6 +10,7 @@ import {
   AccordionHeader,
   AccordionItem,
   AccordionPanel,
+  Switch,
 } from "@fluentui/react-components";
 import { ArrowRight16Regular, Add16Regular } from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
@@ -207,6 +208,7 @@ export function LineageDetailView({
   const styles = useStyles();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [showAllConnections, setShowAllConnections] = useState(false);
 
   const nodeById = useMemo(() => {
     const m = new Map<string, LineageViewerNode>();
@@ -254,11 +256,13 @@ export function LineageDetailView({
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || measureDetails?.name },
           { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString || measureDetails?.formatstring },
           { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression ?? measureDetails?.expression },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || measureDetails?.datatype },
           { label: t("LineageDetail_Hidden", "Hidden"), value: measureDetails?.ishidden ? "Yes" : "No" },
+          { label: t("LineageDetail_Description", "Description"), value: measureDetails?.description },
           ...common,
         ];
       }
@@ -274,11 +278,14 @@ export function LineageDetailView({
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || columnDetails?.name },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || columnDetails?.datatype },
           { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString || columnDetails?.formatstring },
-          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression ?? columnDetails?.expression },
+          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression || columnDetails?.expression },
+          { label: t("LineageDetail_SortOrder", "Sort order"), value: columnDetails?.sortbycolumnid ? "Sorted" : undefined },
           { label: t("LineageDetail_Hidden", "Hidden"), value: columnDetails?.ishidden ? "Yes" : "No" },
+          { label: t("LineageDetail_Description", "Description"), value: columnDetails?.description },
           ...common,
         ];
       }
@@ -300,6 +307,8 @@ export function LineageDetailView({
           { label: t("LineageDetail_VisualType", "Visual type"), value: selectedNode.visualType || visualDetails?.type },
           { label: t("LineageDetail_Page", "Page"), value: pageDetails?.page_display_name || pageDetails?.displayName || selectedNode.pageId },
           { label: t("LineageDetail_Report", "Report"), value: reportDetails?.report_name || reportDetails?.displayName || selectedNode.reportId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
+          { label: t("LineageDetail_VisualTitle", "Visual title"), value: visualDetails?.title },
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
           ...common,
         ];
@@ -314,8 +323,11 @@ export function LineageDetailView({
         );
         return [
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId || reportDetails?.report_id },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
           { label: t("LineageDetail_Dataset", "Dataset"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Pages", "Pages"), value: reportDetails?.page_count?.toString() },
+          { label: t("LineageDetail_Visuals", "Total visuals"), value: reportDetails?.visual_count?.toString() },
+          { label: t("LineageDetail_Description", "Description"), value: reportDetails?.description },
           ...common,
         ];
       }
@@ -331,6 +343,8 @@ export function LineageDetailView({
         return [
           { label: t("LineageDetail_PageNumber", "Page number"), value: selectedNode.pageNumber?.toString() || pageDetails?.page_number?.toString() },
           { label: t("LineageDetail_Report", "Report"), value: reportDetails?.report_name || reportDetails?.displayName || selectedNode.reportId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
+          { label: t("LineageDetail_Visuals", "Visuals on page"), value: pageDetails?.visual_count?.toString() },
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
           ...common,
         ];
@@ -347,8 +361,13 @@ export function LineageDetailView({
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName ?? selectedNode.displayName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
+          { label: t("LineageDetail_Source", "Source"), value: tableDetails?.sourcetype || tableDetails?.source_type },
+          { label: t("LineageDetail_Columns", "Column count"), value: tableDetails?.column_count?.toString() },
+          { label: t("LineageDetail_Measures", "Measure count"), value: tableDetails?.measure_count?.toString() },
           { label: t("LineageDetail_Hidden", "Hidden"), value: tableDetails?.ishidden ? "Yes" : "No" },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
+          { label: t("LineageDetail_Description", "Description"), value: tableDetails?.description },
           ...common,
         ];
       }
@@ -415,6 +434,54 @@ export function LineageDetailView({
     };
   }, [selectedNodeId, edges]);
 
+  // Compute all transitive upstream/downstream connections using BFS
+  const allTransitiveConnections = useMemo(() => {
+    if (!selectedNode || !showAllConnections) return { upstream: [] as LineageViewerNode[], downstream: [] as LineageViewerNode[] };
+
+    const computeTransitive = (startNodeId: string, direction: "upstream" | "downstream"): LineageViewerNode[] => {
+      const visited = new Set<string>();
+      const queue = [startNodeId];
+      const results: LineageViewerNode[] = [];
+
+      while (queue.length > 0) {
+        const currentNodeId = queue.shift()!;
+        if (visited.has(currentNodeId)) continue;
+        visited.add(currentNodeId);
+
+        // Skip the starting node itself
+        if (currentNodeId !== startNodeId) {
+          const currentNode = nodeById.get(currentNodeId);
+          if (currentNode) {
+            results.push(currentNode);
+          }
+        }
+
+        // Find edges in the specified direction
+        const relevantEdges = edges.filter(e => {
+          if (e.edgeType !== "dependency" && e.edgeType !== "relationship") return false;
+          return direction === "upstream" 
+            ? e.toNodeId === currentNodeId 
+            : e.fromNodeId === currentNodeId;
+        });
+
+        // Add neighbors to queue
+        for (const edge of relevantEdges) {
+          const nextNodeId = direction === "upstream" ? edge.fromNodeId : edge.toNodeId;
+          if (!visited.has(nextNodeId)) {
+            queue.push(nextNodeId);
+          }
+        }
+      }
+
+      return results;
+    };
+
+    return {
+      upstream: computeTransitive(selectedNode.nodeId, "upstream"),
+      downstream: computeTransitive(selectedNode.nodeId, "downstream"),
+    };
+  }, [selectedNode, showAllConnections, nodeById, edges]);
+
   // Classify related nodes by relationship category
   const relations = useMemo(() => {
     if (!selectedNode) return {};
@@ -430,8 +497,9 @@ export function LineageDetailView({
         .map((e) => nodeById.get(side === "from" ? e.fromNodeId : e.toNodeId))
         .filter((n): n is LineageViewerNode => n !== undefined);
 
-    const incoming = neighborsOf(dependencyEdgesOnly.incoming, "from");
-    const outgoing = neighborsOf(dependencyEdgesOnly.outgoing, "to");
+    // Use transitive connections if showAllConnections is true
+    const incoming = showAllConnections ? allTransitiveConnections.upstream : neighborsOf(dependencyEdgesOnly.incoming, "from");
+    const outgoing = showAllConnections ? allTransitiveConnections.downstream : neighborsOf(dependencyEdgesOnly.outgoing, "to");
     const all = [...incoming, ...outgoing];
 
     const byType = (type: string) => all.filter((n) => n.entityType === type);
@@ -441,12 +509,12 @@ export function LineageDetailView({
       connectedMeasures: { label: t("LineageDetail_Measures", "Connected measures"), nodes: byType("measure") },
       connectedVisuals: { label: t("LineageDetail_Visuals", "Connected visuals"), nodes: byType("visual") },
       connectedReports: { label: t("LineageDetail_Reports", "Connected reports"), nodes: byType("report") },
-      directNeighbors: { label: t("LineageDetail_Neighbors", "All direct neighbors"), nodes: all },
-      usedBy: { label: t("LineageDetail_UsedBy", "Used by"), nodes: incoming },
-      uses: { label: t("LineageDetail_Uses", "Uses"), nodes: outgoing },
+      directNeighbors: { label: showAllConnections ? t("LineageDetail_AllConnections", "All connections") : t("LineageDetail_Neighbors", "All direct neighbors"), nodes: all },
+      usedBy: { label: showAllConnections ? t("LineageDetail_AllUsedBy", "All used by (transitive)") : t("LineageDetail_UsedBy", "Used by"), nodes: incoming },
+      uses: { label: showAllConnections ? t("LineageDetail_AllUses", "All uses (transitive)") : t("LineageDetail_Uses", "Uses"), nodes: outgoing },
       filteredBy: { label: t("LineageDetail_FilteredBy", "Filtered by"), nodes: [] }, // Will be populated below
     };
-  }, [selectedNode, nodeEdges, nodeById, t]);
+  }, [selectedNode, nodeEdges, nodeById, t, showAllConnections, allTransitiveConnections]);
 
   // Calculate "Filtered by" relationships
   const filteredByRelations = useMemo(() => {
@@ -1142,17 +1210,47 @@ export function LineageDetailView({
 
 
 
+      {/* ── Connection Depth Toggle ── */}
+      {(rel.usedBy.nodes.length > 0 || rel.uses.nodes.length > 0) && (
+        <div className={styles.card}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: tokens.spacingHorizontalS }}>
+            <div>
+              <Text weight="semibold" size={300}>{t("LineageDetail_ConnectionDepth", "Connection Depth")}</Text>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: tokens.spacingVerticalXXS, display: "block" }}>
+                {showAllConnections 
+                  ? t("LineageDetail_ShowingAll", "Showing all transitive upstream/downstream dependencies")
+                  : t("LineageDetail_ShowingDirect", "Showing only direct connections")}
+              </Text>
+            </div>
+            <Switch
+              checked={showAllConnections}
+              onChange={(_, data) => setShowAllConnections(data.checked)}
+              label={t("LineageDetail_ShowAll", "Show all")}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Direct neighbors list (always visible) ── */}
       {rel.directNeighbors.nodes.length > 0 && (
         <Accordion className={styles.accordionPanel} collapsible>
           <AccordionItem value="direct-neighbors">
             <AccordionHeader>
-              <Text weight="semibold">{t("LineageDetail_DirectConnections", "Direct connections")} ({rel.directNeighbors.nodes.length})</Text>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">
+                  {showAllConnections 
+                    ? t("LineageDetail_AllConnections", "All connections") 
+                    : t("LineageDetail_DirectConnections", "Direct connections")}
+                </Text>
+                <Badge>{rel.directNeighbors.nodes.length}</Badge>
+              </div>
             </AccordionHeader>
             <AccordionPanel>
               <div className={styles.accordionContent}>
               <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {t("LineageDetail_ConnectionsHint", "Click a node to navigate to it in the graph")}
+                {showAllConnections
+                  ? t("LineageDetail_AllConnectionsHint", "All transitive upstream and downstream dependencies. Click to navigate.")
+                  : t("LineageDetail_ConnectionsHint", "Click a node to navigate to it in the graph")}
               </Text>
           
           {(() => {
@@ -1195,12 +1293,17 @@ export function LineageDetailView({
         <Accordion className={styles.accordionPanel} collapsible>
           <AccordionItem value="used-by">
             <AccordionHeader>
-              <Text weight="semibold">{t("LineageDetail_UsedBy", "Used by")} ({rel.usedBy.nodes.length})</Text>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{rel.usedBy.label}</Text>
+                <Badge>{rel.usedBy.nodes.length}</Badge>
+              </div>
             </AccordionHeader>
             <AccordionPanel>
               <div className={styles.accordionContent}>
               <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {t("LineageDetail_UsedByHint", "Nodes that depend on or reference this node")}
+                {showAllConnections
+                  ? t("LineageDetail_AllUsedByHint", "All nodes that transitively depend on or reference this node")
+                  : t("LineageDetail_UsedByHint", "Nodes that depend on or reference this node")}
               </Text>
           
           {(() => {
@@ -1243,12 +1346,17 @@ export function LineageDetailView({
         <Accordion className={styles.accordionPanel} collapsible>
           <AccordionItem value="uses">
             <AccordionHeader>
-              <Text weight="semibold">{t("LineageDetail_Uses", "Uses")} ({rel.uses.nodes.length})</Text>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{rel.uses.label}</Text>
+                <Badge>{rel.uses.nodes.length}</Badge>
+              </div>
             </AccordionHeader>
             <AccordionPanel>
               <div className={styles.accordionContent}>
               <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {t("LineageDetail_UsesHint", "Nodes that this node depends on or references")}
+                {showAllConnections
+                  ? t("LineageDetail_AllUsesHint", "All nodes that this node transitively depends on or references")
+                  : t("LineageDetail_UsesHint", "Nodes that this node depends on or references")}
               </Text>
           
           {(() => {

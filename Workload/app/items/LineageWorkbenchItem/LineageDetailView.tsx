@@ -380,51 +380,88 @@ export function LineageDetailView({
         ];
       }
       case "visual": {
-        // Lookup visual details from dimensions - match visual_pk with raw node_id
-        const visualDetails = dimensions?.visuals?.find((v: any) => 
-          v.visual_pk === selectedNode.nodeId || 
-          v.uid === selectedNode.nodeId || 
-          v.visual_uid === selectedNode.nodeId ||
-          (v.visual_name === selectedNode.visualId && v.report_id === selectedNode.reportId)
+        // Lookup visual details from dimensions using multiple matching strategies
+        // Strategy 1: Match by primary key field
+        let visualDetails = dimensions?.visuals?.find((v: any) => 
+          v.visual_pk === selectedNode.nodeId
         );
+        
+        // Strategy 2: Match by uid/LineageTag (same as node enrichment)
+        if (!visualDetails) {
+          visualDetails = dimensions?.visuals?.find((v: any) => {
+            const uid = v.LineageTag || v.lineageTag || v.lineage_tag || v.uid || v.data_uid || v.visual_uid;
+            return uid === selectedNode.nodeId;
+          });
+        }
+        
+        // Strategy 3: Match by composite key (visual_name + report_id + page_name)
+        if (!visualDetails && selectedNode.visualId) {
+          visualDetails = dimensions?.visuals?.find((v: any) => {
+            const visualName = v.visual_name || v.visualName || v.name;
+            const reportId = v.report_id || v.reportId;
+            const pageName = v.page_name || v.pageName;
+            return visualName === selectedNode.visualId && 
+                   reportId === selectedNode.reportId &&
+                   (!selectedNode.pageId || pageName === selectedNode.pageId);
+          });
+        }
         
         // Debug logging for visual lookup
         console.log("[LineageDetailView] Visual lookup:", {
           nodeId: selectedNode.nodeId,
           visualId: selectedNode.visualId,
           reportId: selectedNode.reportId,
+          pageId: selectedNode.pageId,
           availableVisuals: dimensions?.visuals?.length || 0,
           sampleVisual: dimensions?.visuals?.[0],
+          sampleVisualFields: dimensions?.visuals?.[0] ? Object.keys(dimensions.visuals[0]) : [],
           matchedVisual: visualDetails,
           visualDetailKeys: visualDetails ? Object.keys(visualDetails) : "No match",
         });
         
-        const pageDetails = dimensions?.pages?.find((p: any) => 
-          p.page_name === selectedNode.pageId && p.report_id === selectedNode.reportId
-        );
+        const pageDetails = dimensions?.pages?.find((p: any) => {
+          const pageName = p.page_name || p.pageName || p.name;
+          const reportId = p.report_id || p.reportId;
+          return pageName === selectedNode.pageId && reportId === selectedNode.reportId;
+        });
+        
         const reportDetails = dimensions?.reports?.find((r: any) => 
+          r.report_pk === selectedNode.reportId ||
           r.report_id === selectedNode.reportId || 
-          r.uid === selectedNode.reportId || 
-          r.report_pk === selectedNode.reportId
+          r.uid === selectedNode.reportId ||
+          r.LineageTag === selectedNode.reportId
         );
+        
         return [
-          { label: t("LineageDetail_VisualType", "Visual type"), value: visualDetails?.display_type || visualDetails?.type || selectedNode.visualType },
-          { label: t("LineageDetail_Page", "Page"), value: visualDetails?.Page_display_name || visualDetails?.page_display_name || pageDetails?.page_display_name || pageDetails?.displayName || selectedNode.pageId },
+          { label: t("LineageDetail_VisualType", "Visual type"), value: visualDetails?.display_type || visualDetails?.type || visualDetails?.visual_type || selectedNode.visualType },
+          { label: t("LineageDetail_Page", "Page"), value: visualDetails?.Page_display_name || visualDetails?.page_display_name || pageDetails?.page_display_name || pageDetails?.Page_display_name || pageDetails?.displayName || selectedNode.pageId },
           { label: t("LineageDetail_Report", "Report"), value: reportDetails?.report_name || reportDetails?.displayName || selectedNode.reportId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
-          { label: t("LineageDetail_VisualTitle", "Visual title"), value: visualDetails?.title || visualDetails?.visual_title },
+          { label: t("LineageDetail_VisualTitle", "Visual title"), value: visualDetails?.title || visualDetails?.visual_title || visualDetails?.display_name },
+          { label: t("LineageDetail_VisualName", "Visual name"), value: visualDetails?.visual_name || visualDetails?.name || selectedNode.visualId },
           { label: t("LineageDetail_Hidden", "Hidden"), value: visualDetails?.hidden !== undefined ? (visualDetails.hidden ? "Yes" : "No") : "N/A" },
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
           ...common,
         ];
       }
       case "report": {
-        // Match report_pk directly with node_id
-        const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.report_pk === selectedNode.nodeId || 
-          r.uid === selectedNode.nodeId || 
-          r.report_id === selectedNode.reportId
+        // Match report using multiple strategies
+        let reportDetails = dimensions?.reports?.find((r: any) => 
+          r.report_pk === selectedNode.nodeId
         );
+        
+        if (!reportDetails) {
+          reportDetails = dimensions?.reports?.find((r: any) => {
+            const uid = r.LineageTag || r.lineageTag || r.lineage_tag || r.uid || r.data_uid || r.report_uid;
+            return uid === selectedNode.nodeId;
+          });
+        }
+        
+        if (!reportDetails && selectedNode.reportId) {
+          reportDetails = dimensions?.reports?.find((r: any) => 
+            r.report_id === selectedNode.reportId || r.reportId === selectedNode.reportId
+          );
+        }
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
           m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
         );
@@ -439,12 +476,25 @@ export function LineageDetailView({
         ];
       }
       case "page": {
-        // Match page_pk directly with node_id
-        const pageDetails = dimensions?.pages?.find((p: any) => 
-          p.page_pk === selectedNode.nodeId || 
-          p.uid === selectedNode.nodeId || 
-          (p.page_name === selectedNode.pageId && p.report_id === selectedNode.reportId)
+        // Match page using multiple strategies
+        let pageDetails = dimensions?.pages?.find((p: any) => 
+          p.page_pk === selectedNode.nodeId
         );
+        
+        if (!pageDetails) {
+          pageDetails = dimensions?.pages?.find((p: any) => {
+            const uid = p.LineageTag || p.lineageTag || p.lineage_tag || p.uid || p.data_uid || p.page_uid;
+            return uid === selectedNode.nodeId;
+          });
+        }
+        
+        if (!pageDetails && selectedNode.pageId) {
+          pageDetails = dimensions?.pages?.find((p: any) => {
+            const pageName = p.page_name || p.pageName || p.name;
+            const reportId = p.report_id || p.reportId;
+            return pageName === selectedNode.pageId && reportId === selectedNode.reportId;
+          });
+        }
         const reportDetails = dimensions?.reports?.find((r: any) => 
           r.report_id === selectedNode.reportId || 
           r.uid === selectedNode.reportId || 

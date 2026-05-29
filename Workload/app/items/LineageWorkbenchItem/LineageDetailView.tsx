@@ -1463,8 +1463,8 @@ export function LineageDetailView({
                     style={{ 
                       color: tokens.colorBrandForeground1, 
                       textDecoration: "none",
-                      fontSize: "200",
-                      fontWeight: 600
+                      fontSize: tokens.fontSizeBase200,
+                      fontWeight: tokens.fontWeightSemibold
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
                     onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}

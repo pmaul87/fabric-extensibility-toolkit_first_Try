@@ -282,7 +282,7 @@ export function LineageDetailView({
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || columnDetails?.name },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || columnDetails?.datatype },
           { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString || columnDetails?.formatstring },
-          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression || columnDetails?.expression },
+          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression ?? columnDetails?.expression },
           { label: t("LineageDetail_SortOrder", "Sort order"), value: columnDetails?.sortbycolumnid ? "Sorted" : undefined },
           { label: t("LineageDetail_Hidden", "Hidden"), value: columnDetails?.ishidden ? "Yes" : "No" },
           { label: t("LineageDetail_Description", "Description"), value: columnDetails?.description },

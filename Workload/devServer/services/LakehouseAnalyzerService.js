@@ -867,12 +867,35 @@ class LakehouseAnalyzerService {
     };
 
     // Log which table names were actually found
-    console.log("[LakehouseAnalyzer] Table mapping:", {
-      reports: output.t_report_reports ? "t_report_reports" : output.t_dataset_reports ? "t_dataset_reports" : "none",
-      pages: output.t_report_pages ? "t_report_pages" : output.t_dataset_pages ? "t_dataset_pages" : "none",
-      visuals: output.t_report_visuals ? "t_report_visuals" : output.t_dataset_visuals ? "t_dataset_visuals" : "none",
-      availableTables: Object.keys(output).filter(k => Array.isArray(output[k]) && output[k].length > 0),
+    console.log("[LakehouseAnalyzer] ===== TABLE MAPPING DETAILS =====");
+    console.log("[LakehouseAnalyzer] Reports:", {
+      selected: output.t_report_reports ? "t_report_reports" : output.t_dataset_reports ? "t_dataset_reports" : "none",
+      count: dimensions.reports.length,
+      available: [
+        output.t_report_reports?.length && `t_report_reports(${output.t_report_reports.length})`,
+        output.t_dataset_reports?.length && `t_dataset_reports(${output.t_dataset_reports.length})`,
+        output.t_datamodel_reports?.length && `t_datamodel_reports(${output.t_datamodel_reports.length})`
+      ].filter(Boolean).join(", ") || "none"
     });
+    console.log("[LakehouseAnalyzer] Pages:", {
+      selected: output.t_report_pages ? "t_report_pages" : output.t_dataset_pages ? "t_dataset_pages" : "none",
+      count: dimensions.pages.length,
+      available: [
+        output.t_report_pages?.length && `t_report_pages(${output.t_report_pages.length})`,
+        output.t_dataset_pages?.length && `t_dataset_pages(${output.t_dataset_pages.length})`,
+        output.t_datamodel_pages?.length && `t_datamodel_pages(${output.t_datamodel_pages.length})`
+      ].filter(Boolean).join(", ") || "none"
+    });
+    console.log("[LakehouseAnalyzer] Visuals:", {
+      selected: output.t_report_visuals ? "t_report_visuals" : output.t_dataset_visuals ? "t_dataset_visuals" : output.t_datamodel_visuals ? "t_datamodel_visuals" : "none",
+      count: dimensions.visuals.length,
+      available: [
+        output.t_report_visuals?.length && `t_report_visuals(${output.t_report_visuals.length})`,
+        output.t_dataset_visuals?.length && `t_dataset_visuals(${output.t_dataset_visuals.length})`,
+        output.t_datamodel_visuals?.length && `t_datamodel_visuals(${output.t_datamodel_visuals.length})`
+      ].filter(Boolean).join(", ") || "none"
+    });
+    console.log("[LakehouseAnalyzer] ===== END TABLE MAPPING =====");
 
     console.log("[LakehouseAnalyzer] Dimensions summary:", {
       nodes: nodes.length,

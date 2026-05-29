@@ -387,6 +387,18 @@ export function LineageDetailView({
           v.visual_uid === selectedNode.nodeId ||
           (v.visual_name === selectedNode.visualId && v.report_id === selectedNode.reportId)
         );
+        
+        // Debug logging for visual lookup
+        console.log("[LineageDetailView] Visual lookup:", {
+          nodeId: selectedNode.nodeId,
+          visualId: selectedNode.visualId,
+          reportId: selectedNode.reportId,
+          availableVisuals: dimensions?.visuals?.length || 0,
+          sampleVisual: dimensions?.visuals?.[0],
+          matchedVisual: visualDetails,
+          visualDetailKeys: visualDetails ? Object.keys(visualDetails) : "No match",
+        });
+        
         const pageDetails = dimensions?.pages?.find((p: any) => 
           p.page_name === selectedNode.pageId && p.report_id === selectedNode.reportId
         );
@@ -396,11 +408,12 @@ export function LineageDetailView({
           r.report_pk === selectedNode.reportId
         );
         return [
-          { label: t("LineageDetail_VisualType", "Visual type"), value: selectedNode.visualType || visualDetails?.type },
-          { label: t("LineageDetail_Page", "Page"), value: pageDetails?.page_display_name || pageDetails?.displayName || selectedNode.pageId },
+          { label: t("LineageDetail_VisualType", "Visual type"), value: visualDetails?.display_type || visualDetails?.type || selectedNode.visualType },
+          { label: t("LineageDetail_Page", "Page"), value: visualDetails?.Page_display_name || visualDetails?.page_display_name || pageDetails?.page_display_name || pageDetails?.displayName || selectedNode.pageId },
           { label: t("LineageDetail_Report", "Report"), value: reportDetails?.report_name || reportDetails?.displayName || selectedNode.reportId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
-          { label: t("LineageDetail_VisualTitle", "Visual title"), value: visualDetails?.title },
+          { label: t("LineageDetail_VisualTitle", "Visual title"), value: visualDetails?.title || visualDetails?.visual_title },
+          { label: t("LineageDetail_Hidden", "Hidden"), value: visualDetails?.hidden !== undefined ? (visualDetails.hidden ? "Yes" : "No") : "N/A" },
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
           ...common,
         ];

@@ -584,11 +584,11 @@ function applyDagreLayout(
   // Configure graph for hierarchical layout with increased spacing for parent-child nodes
   // Adjust spacing based on whether we're focusing on a specific node
   const baseNodesep = focusNodeId ? 150 : 200; // Tighter spacing when focused
-  const baseRanksep = focusNodeId ? 200 : 250; // Tighter rank separation when focused
+  const baseRanksep = focusNodeId ? 250 : 300; // Standard rank separation
   
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
-    rankdir: direction, // TB = top-to-bottom, LR = left-to-right
+    rankdir: direction, // Standard LR or TB layout (upstream left, downstream right)
     align: "UL", // Align nodes to upper-left
     nodesep: baseNodesep, // Horizontal spacing between nodes
     edgesep: 80, // Spacing between edges
@@ -647,7 +647,7 @@ function applyDagreLayout(
   dagre.layout(dagreGraph);
 
   // Apply calculated positions to nodes
-  // First pass: position all nodes with absolute coordinates
+  // Standard LR layout: upstream flows left, downstream flows right
   const positionedNodes = nodes.map((node) => {
     const dagreNode = dagreGraph.node(node.id);
     if (!dagreNode) return node;
@@ -656,11 +656,14 @@ function applyDagreLayout(
     const width = node.style?.width as number || NODE_W;
     const height = node.style?.height as number || 60;
 
+    const x = dagreNode.x - width / 2;
+    const y = dagreNode.y - height / 2;
+
     return {
       ...node,
       position: {
-        x: dagreNode.x - width / 2,
-        y: dagreNode.y - height / 2,
+        x,
+        y,
       },
     };
   });
@@ -913,30 +916,11 @@ function buildLayout(
       },
     };
     
-    // Add parent-child relationship for hierarchical grouping
-    // IMPORTANT: Only set parentId if we're sure the parent exists
-    // This will be validated after all nodes are created
-    if (node.parentNodeId) {
-      reactFlowNode.parentId = node.parentNodeId;
-      reactFlowNode.extent = 'parent' as const;
-      // Child nodes within parents should have relative positioning
-      reactFlowNode.expandParent = true;
-    }
+    // NOTE: Parent-child relationships (parentId) are NOT used in graph view
+    // They are only needed for table/tree views
+    // Graph view shows a flat network of nodes with edges showing relationships
     
     nodes.push(reactFlowNode);
-  }
-
-  // ── Validate parent references to prevent ReactFlow errors ───────────────
-  // Remove parentId from nodes whose parents don't exist in the nodes array
-  // This prevents "Cannot read properties of undefined (reading 'measured')" errors
-  const nodeIds = new Set(nodes.map(n => n.id));
-  for (const node of nodes) {
-    if (node.parentId && !nodeIds.has(node.parentId)) {
-      console.warn(`[LineageGraph] Removing invalid parentId reference: ${node.id} → ${node.parentId} (parent not found)`);
-      delete node.parentId;
-      delete node.extent;
-      delete node.expandParent;
-    }
   }
 
   // ── Create edges (only between visible nodes) ────────────────────────────
@@ -1237,11 +1221,13 @@ function LineageGraphInner({
 }: LineageGraphViewProps) {
   const expandedGroups = externalExpandedGroups ?? new Set<string>();
   const [useTableColors, setUseTableColors] = useState(true);
-  const [focusZoom, setFocusZoom] = useState(0.8);
+  const [focusZoom, setFocusZoom] = useState(1.0); // Standard zoom level for better visibility
   const { getNode, setCenter } = useReactFlow();
   
   // Track previous focusNodeId to only center when it actually changes
   const prevFocusNodeIdRef = useRef<string | undefined>(undefined);
+  // Track drag state to prevent auto-centering during drag operations
+  const isDraggingRef = useRef(false);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [criticalPathMode, setCriticalPathMode] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
@@ -1336,36 +1322,57 @@ function LineageGraphInner({
     setEdges(e);
   }, [lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, expandedGroups, handleToggleGroup, setNodes, setEdges, useTableColors, networkMetrics, criticalPathNodes]);
 
-  // Center view on selected node - ONLY when focusNodeId actually changes
-  // UI Change: Focus node centering with proper pan/drag interaction
+  // Center view on selected node
+  // UI Change: Focus node centering with standard LR layout (upstream left, downstream right)
   // MCP Verification: fabricux MCP verified as running on 2026-05-28
   // Guidance: Dragging Movements (2.5.7) - user should be able to freely pan canvas without interference
   useEffect(() => {
-    // Only center if focusNodeId has actually changed (not on every render or drag)
-    if (focusNodeId && focusNodeId !== prevFocusNodeIdRef.current) {
-      // Wait a frame for layout to be applied to nodes
+    // Only center if focusNodeId has actually changed AND not currently dragging
+    if (focusNodeId && focusNodeId !== prevFocusNodeIdRef.current && !isDraggingRef.current) {
+      // Use double requestAnimationFrame to ensure ReactFlow has finished rendering
+      // First RAF: React has committed the DOM changes
+      // Second RAF: Browser has painted and ReactFlow has measured nodes
       requestAnimationFrame(() => {
-        const node = getNode(focusNodeId);
-        if (node?.position) {
-          // Calculate the center point of the node
-          const centerX = node.position.x + (node.width ?? 200) / 2;
-          const centerY = node.position.y + (node.height ?? 80) / 2;
-          
-          // Center the viewport on this exact point
-          setCenter(centerX, centerY, { 
-            zoom: focusZoom,
-            duration: 400 
+        requestAnimationFrame(() => {
+          if (isDraggingRef.current) return;
+
+          const selectedNode = getNode(focusNodeId);
+          if (!selectedNode?.position) {
+            console.warn('[LineageGraphView] Node not found:', focusNodeId);
+            return;
+          }
+
+          // Use node dimensions, fallback to defaults if not yet measured
+          const width = selectedNode.measured?.width ?? selectedNode.width ?? 200;
+          const height = selectedNode.measured?.height ?? selectedNode.height ?? 80;
+
+          // Calculate the center point of the selected node
+          const centerX = selectedNode.position.x + width / 2;
+          const centerY = selectedNode.position.y + height / 2;
+
+          console.log('[LineageGraphView] Centering on node:', {
+            nodeId: focusNodeId,
+            nodeName: (selectedNode.data as LineageNodeData)?.label,
+            position: selectedNode.position,
+            size: { width, height },
+            centerPoint: { x: centerX, y: centerY },
+            zoom: focusZoom
           });
-        }
+
+          // Center the viewport on the selected node
+          setCenter(centerX, centerY, { zoom: focusZoom, duration: 400 });
+        });
       });
       
       // Update the ref to track current focusNodeId
       prevFocusNodeIdRef.current = focusNodeId;
-    } else if (!focusNodeId) {
+    } 
+    
+    if (!focusNodeId) {
       // Clear ref when focus is removed
       prevFocusNodeIdRef.current = undefined;
     }
-  }, [focusNodeId, getNode, setCenter, focusZoom]); // Removed 'nodes' from dependencies
+  }, [focusNodeId, getNode, setCenter, focusZoom]);
 
   const handleNodeClick = useCallback(
     (_evt: React.MouseEvent, node: Node) => {
@@ -1373,6 +1380,18 @@ function LineageGraphInner({
     },
     [onNodeClick]
   );
+
+  // Track drag state to prevent auto-centering interference
+  const handleNodeDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+
+  const handleNodeDragStop = useCallback(() => {
+    // Small delay to ensure drag has fully completed
+    setTimeout(() => {
+      isDraggingRef.current = false;
+    }, 100);
+  }, []);
 
   // Only show empty state when not loading
   if (lvNodes.length === 0 && !isLoading) {
@@ -1427,6 +1446,8 @@ function LineageGraphInner({
         onEdgesChange={onEdgesChange}
         onNodeClick={handleNodeClick}
         onNodeContextMenu={handleNodeContextMenu}
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDragStop={handleNodeDragStop}
         nodeTypes={NODE_TYPES}
         fitView
         fitViewOptions={{ padding: 0.01 }}

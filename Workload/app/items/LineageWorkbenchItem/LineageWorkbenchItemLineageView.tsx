@@ -37,7 +37,7 @@ import type { Requirement } from "../RequirementBoardItem";
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const SIDEBAR_WIDTH = 260;
-const DEFAULT_GRAPH_NODE_LIMIT = 120;
+const DEFAULT_GRAPH_NODE_LIMIT = 80;
 type ExploreLayoutMode = "stacked" | "side-by-side" | "top-bottom";
 
 const useStyles = makeStyles({
@@ -1520,7 +1520,9 @@ export function LineageWorkbenchItemLineageView({
     }
 
     // BFS traversal: collect upstream and downstream separately, then combine
-    const maxDepth = graphDisplayMode === "filter" ? 3 : Infinity;
+    // Depth of 5 allows seeing deeper lineage chains while maintaining directionality
+    // Upstream only follows upstream edges, downstream only follows downstream edges
+    const maxDepth = graphDisplayMode === "filter" ? 5 : Infinity;
     const visited = new Set<string>([selectedNodeId]);
     const depthMap = new Map<string, number>([[selectedNodeId, 0]]);
     
@@ -1560,6 +1562,10 @@ export function LineageWorkbenchItemLineageView({
     
     // Filter nodes to those we visited
     const focusedNodes = nodes.filter((n) => visited.has(n.nodeId));
+    
+    // NOTE: Parent-child relationships are preserved in the node data model
+    // but are NOT rendered as hierarchical nesting in the graph view
+    // The graph view shows a flat network with edges showing relationships
     
     // For focused mode, use ALL edges (not just filtered ones)
     const focusedEdges = edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));

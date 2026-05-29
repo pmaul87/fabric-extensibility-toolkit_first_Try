@@ -254,14 +254,24 @@ export function LineageDetailView({
           m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
         );
         
+        // Try multiple field name variations for expression and format
+        const expression = selectedNode.expression ?? inferredExpression ?? 
+          measureDetails?.expression ?? measureDetails?.Expression ?? 
+          measureDetails?.measure_expression ?? measureDetails?.measureExpression;
+        const format = selectedNode.formatString ?? 
+          measureDetails?.formatstring ?? measureDetails?.formatString ?? 
+          measureDetails?.format_string ?? measureDetails?.format;
+        
         console.log("[LineageDetail] Measure metadata lookup:", {
           measureUid,
           foundMeasureDetails: !!measureDetails,
           measureFields: measureDetails ? Object.keys(measureDetails) : [],
+          measureDetailsRaw: measureDetails,
           foundModelDetails: !!modelDetails,
-          modelFields: modelDetails ? Object.keys(modelDetails) : [],
           workspace_name: modelDetails?.workspace_name,
           description: measureDetails?.description,
+          expression,
+          format,
         });
         
         return [
@@ -269,8 +279,8 @@ export function LineageDetailView({
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || measureDetails?.name },
-          { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString || measureDetails?.formatstring },
-          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression ?? measureDetails?.expression },
+          { label: t("LineageDetail_Format", "Format"), value: format },
+          { label: t("LineageDetail_Expression", "Expression"), value: expression },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || measureDetails?.datatype },
           { label: t("LineageDetail_Hidden", "Hidden"), value: measureDetails?.ishidden ? "Yes" : "No" },
           { label: t("LineageDetail_Description", "Description"), value: measureDetails?.description },
@@ -286,14 +296,32 @@ export function LineageDetailView({
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
           m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
         );
+        
+        // Try multiple field name variations for expression and format
+        const expression = selectedNode.expression ?? inferredExpression ?? 
+          columnDetails?.expression ?? columnDetails?.Expression ?? 
+          columnDetails?.column_expression ?? columnDetails?.columnExpression;
+        const format = selectedNode.formatString ?? 
+          columnDetails?.formatstring ?? columnDetails?.formatString ?? 
+          columnDetails?.format_string ?? columnDetails?.format;
+        
+        console.log("[LineageDetail] Column metadata lookup:", {
+          columnUid,
+          foundColumnDetails: !!columnDetails,
+          columnFields: columnDetails ? Object.keys(columnDetails) : [],
+          columnDetailsRaw: columnDetails,
+          expression,
+          format,
+        });
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || columnDetails?.name },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || columnDetails?.datatype },
-          { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString || columnDetails?.formatstring },
-          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression ?? columnDetails?.expression },
+          { label: t("LineageDetail_Format", "Format"), value: format },
+          { label: t("LineageDetail_Expression", "Expression"), value: expression },
           { label: t("LineageDetail_SortOrder", "Sort order"), value: columnDetails?.sortbycolumnid ? "Sorted" : undefined },
           { label: t("LineageDetail_Hidden", "Hidden"), value: columnDetails?.ishidden ? "Yes" : "No" },
           { label: t("LineageDetail_Description", "Description"), value: columnDetails?.description },
@@ -369,6 +397,14 @@ export function LineageDetailView({
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
           m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
         );
+        
+        console.log("[LineageDetail] Table metadata lookup:", {
+          tableUid,
+          foundTableDetails: !!tableDetails,
+          tableFields: tableDetails ? Object.keys(tableDetails) : [],
+          tableDetailsRaw: tableDetails,
+        });
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName ?? selectedNode.displayName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
@@ -1207,14 +1243,18 @@ export function LineageDetailView({
 
       {/* ── Expression card (for measures and columns with expressions) ── */}
       {(() => {
-        const shouldShow = (selectedNode.entityType === "measure" || selectedNode.entityType === "column") && 
-                           (selectedNode.expression || inferredExpression);
+        // Get expression from typeSpecificFields since it already checks all field variations
+        const expressionField = typeSpecificFields.find(f => f.label === t("LineageDetail_Expression", "Expression"));
+        const expressionValue = expressionField?.value;
+        const shouldShow = (selectedNode.entityType === "measure" || selectedNode.entityType === "column") && !!expressionValue;
+        
         console.log("[LineageDetail] Expression card check:", {
           entityType: selectedNode.entityType,
           hasExpression: !!selectedNode.expression,
           expression: selectedNode.expression,
           hasInferredExpression: !!inferredExpression,
           inferredExpression,
+          expressionFromField: expressionValue,
           shouldShow,
           allFields: Object.keys(selectedNode),
         });
@@ -1223,7 +1263,7 @@ export function LineageDetailView({
         <div className={styles.card}>
           <div className={styles.cardTitle}>{t("LineageDetail_Expression", "Expression")}</div>
           <div className={styles.expressionBlock}>
-            {selectedNode.expression || inferredExpression}
+            {typeSpecificFields.find(f => f.label === t("LineageDetail_Expression", "Expression"))?.value}
           </div>
         </div>
       )}

@@ -255,7 +255,7 @@ export function LineageDetailView({
   }, [selectedNodeId, edges]);
 
   const typeSpecificFields = useMemo(() => {
-    if (!selectedNode) return [] as Array<{ label: string; value?: string }>;
+    if (!selectedNode) return [] as Array<{ label: string; value?: string; isLink?: boolean }>;
 
     const common = [
       { label: t("LineageDetail_ObjectSubtype", "Subtype"), value: selectedNode.objectSubtype },
@@ -440,7 +440,7 @@ export function LineageDetailView({
           { label: t("LineageDetail_VisualTitle", "Visual title"), value: visualDetails?.title || visualDetails?.visual_title || visualDetails?.display_name },
           { label: t("LineageDetail_VisualName", "Visual name"), value: visualDetails?.visual_name || visualDetails?.name || selectedNode.visualId },
           { label: t("LineageDetail_Hidden", "Hidden"), value: visualDetails?.hidden !== undefined ? (visualDetails.hidden ? "Yes" : "No") : "N/A" },
-          { label: t("LineageDetail_URL", "URL"), value: visualDetails?.url || visualDetails?.URL || visualDetails?.link },
+          { label: t("LineageDetail_URL", "URL"), value: visualDetails?.url || visualDetails?.URL || visualDetails?.link, isLink: true },
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
           ...common,
         ];
@@ -565,7 +565,7 @@ export function LineageDetailView({
   }, [selectedNode, inferredExpression, t]);
 
   const selectedInfoCards = useMemo(() => {
-    if (!selectedNode) return [] as Array<{ key: string; label: string; value: string; isCode?: boolean }>;
+    if (!selectedNode) return [] as Array<{ key: string; label: string; value: string; isCode?: boolean; isLink?: boolean }>;
 
     console.log("[LineageDetail] Building selectedInfoCards:", {
       entityType: selectedNode.entityType,
@@ -581,11 +581,13 @@ export function LineageDetailView({
         key: "type",
         label: t("LineageDetail_Type", "Type"),
         value: getEntityTypeLabel(selectedNode.entityType),
+        isLink: false,
       },
       {
         key: "name",
         label: t("LineageDetail_Name", "Name"),
         value: selectedNode.displayName,
+        isLink: false,
       },
       ...typeSpecificFields
         .filter((field) => !!field.value && field.label !== t("LineageDetail_Expression", "Expression")) // Exclude expression from inline display
@@ -593,6 +595,7 @@ export function LineageDetailView({
           key: `meta-${index}-${field.label}`,
           label: field.label,
           value: field.value!,
+          isLink: field.isLink || false,
         })),
     ];
   }, [selectedNode, typeSpecificFields, t]);
@@ -1452,9 +1455,27 @@ export function LineageDetailView({
             <React.Fragment key={card.key}>
               <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
                 <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{card.label}:</Text>
-                <Text size={200} weight="semibold" title={card.value}>
-                  {card.value}
-                </Text>
+                {card.isLink && card.value ? (
+                  <a 
+                    href={card.value} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ 
+                      color: tokens.colorBrandForeground1, 
+                      textDecoration: "none",
+                      fontSize: "200",
+                      fontWeight: 600
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
+                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
+                  >
+                    {card.value}
+                  </a>
+                ) : (
+                  <Text size={200} weight="semibold" title={card.value}>
+                    {card.value}
+                  </Text>
+                )}
               </div>
               {idx < selectedInfoCards.length - 1 && <span className={styles.badgeSeparator}>•</span>}
             </React.Fragment>

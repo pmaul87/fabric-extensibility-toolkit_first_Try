@@ -22,8 +22,11 @@ const LINEAGE_REQUIRED_TABLES = ["v_nodes", "v_edges"];
 const LINEAGE_OPTIONAL_TABLES = [
   // Dimension tables with detailed metadata (support both t_dataset_* and t_datamodel_* naming)
   "t_dataset_reports",
+  "t_report_reports",  // Alternative naming convention
   "t_dataset_pages",
+  "t_report_pages",  // Alternative naming convention
   "t_dataset_visuals",
+  "t_report_visuals",  // Alternative naming convention
   "t_dataset_semantic_models",
   "t_dataset_tables",
   "t_dataset_columns",
@@ -841,10 +844,10 @@ class LakehouseAnalyzerService {
     }
 
     const dimensions = {
-      // New dimension tables (support both t_dataset_* and t_datamodel_* naming)
-      reports: output.t_dataset_reports || output.t_datamodel_reports || output.lineage_reports || [],
-      pages: output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
-      visuals: output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
+      // New dimension tables (support both t_dataset_*, t_report_* and t_datamodel_* naming)
+      reports: output.t_report_reports || output.t_dataset_reports || output.t_datamodel_reports || output.lineage_reports || [],
+      pages: output.t_report_pages || output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
+      visuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
       semanticModels: output.t_dataset_semantic_models || output.t_datamodel_semantic_models || output.lineage_semantic_models || [],
       tables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
       columns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
@@ -853,8 +856,8 @@ class LakehouseAnalyzerService {
       lakehouses: output.t_dataset_lakehouses || output.t_datamodel_lakehouses || output.lineage_lakehouses || [],
       warehouses: output.t_dataset_warehouses || output.t_datamodel_warehouses || output.warehouses || [],
       // Legacy aliases (for backward compatibility with old saved data)
-      reportPages: output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
-      reportVisuals: output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
+      reportPages: output.t_report_pages || output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
+      reportVisuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
       smTables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
       smColumns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
       smMeasures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],
@@ -862,6 +865,37 @@ class LakehouseAnalyzerService {
       smDependencies: output.lineage_semantic_model_dependencies || [],
       workspaceArtifacts: output.workspace_artifacts || [],
     };
+
+    // Log which table names were actually found
+    console.log("[LakehouseAnalyzer] ===== TABLE MAPPING DETAILS =====");
+    console.log("[LakehouseAnalyzer] Reports:", {
+      selected: output.t_report_reports ? "t_report_reports" : output.t_dataset_reports ? "t_dataset_reports" : "none",
+      count: dimensions.reports.length,
+      available: [
+        output.t_report_reports?.length && `t_report_reports(${output.t_report_reports.length})`,
+        output.t_dataset_reports?.length && `t_dataset_reports(${output.t_dataset_reports.length})`,
+        output.t_datamodel_reports?.length && `t_datamodel_reports(${output.t_datamodel_reports.length})`
+      ].filter(Boolean).join(", ") || "none"
+    });
+    console.log("[LakehouseAnalyzer] Pages:", {
+      selected: output.t_report_pages ? "t_report_pages" : output.t_dataset_pages ? "t_dataset_pages" : "none",
+      count: dimensions.pages.length,
+      available: [
+        output.t_report_pages?.length && `t_report_pages(${output.t_report_pages.length})`,
+        output.t_dataset_pages?.length && `t_dataset_pages(${output.t_dataset_pages.length})`,
+        output.t_datamodel_pages?.length && `t_datamodel_pages(${output.t_datamodel_pages.length})`
+      ].filter(Boolean).join(", ") || "none"
+    });
+    console.log("[LakehouseAnalyzer] Visuals:", {
+      selected: output.t_report_visuals ? "t_report_visuals" : output.t_dataset_visuals ? "t_dataset_visuals" : output.t_datamodel_visuals ? "t_datamodel_visuals" : "none",
+      count: dimensions.visuals.length,
+      available: [
+        output.t_report_visuals?.length && `t_report_visuals(${output.t_report_visuals.length})`,
+        output.t_dataset_visuals?.length && `t_dataset_visuals(${output.t_dataset_visuals.length})`,
+        output.t_datamodel_visuals?.length && `t_datamodel_visuals(${output.t_datamodel_visuals.length})`
+      ].filter(Boolean).join(", ") || "none"
+    });
+    console.log("[LakehouseAnalyzer] ===== END TABLE MAPPING =====");
 
     console.log("[LakehouseAnalyzer] Dimensions summary:", {
       nodes: nodes.length,

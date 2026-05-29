@@ -10,8 +10,14 @@ import {
   AccordionHeader,
   AccordionItem,
   AccordionPanel,
+  Switch,
 } from "@fluentui/react-components";
-import { ArrowRight16Regular, Add16Regular } from "@fluentui/react-icons";
+import { 
+  ArrowRight16Regular, 
+  Add16Regular, 
+  ChevronRight16Regular, 
+  ChevronDown16Regular 
+} from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
 import type { Requirement } from "../RequirementBoardItem";
 import { RequirementDialog } from "../RequirementBoardItem";
@@ -207,6 +213,20 @@ export function LineageDetailView({
   const styles = useStyles();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [showAllConnections, setShowAllConnections] = useState(false);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  const toggleNodeExpansion = (nodeId: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  };
 
   const nodeById = useMemo(() => {
     const m = new Map<string, LineageViewerNode>();
@@ -235,7 +255,7 @@ export function LineageDetailView({
   }, [selectedNodeId, edges]);
 
   const typeSpecificFields = useMemo(() => {
-    if (!selectedNode) return [] as Array<{ label: string; value?: string }>;
+    if (!selectedNode) return [] as Array<{ label: string; value?: string; isLink?: boolean }>;
 
     const common = [
       { label: t("LineageDetail_ObjectSubtype", "Subtype"), value: selectedNode.objectSubtype },
@@ -243,112 +263,295 @@ export function LineageDetailView({
 
     switch (selectedNode.entityType) {
       case "measure": {
-        const measureUid = selectedNode.nodeId.replace(/^measure:/, "");
+        // Match measure_pk directly with node_id (no transformation needed)
         const measureDetails = dimensions?.measures?.find((m: any) => 
-          m.uid === measureUid || 
+          m.measure_pk === selectedNode.nodeId || 
+          m.uid === selectedNode.nodeId || 
           (m.measure_name === selectedNode.displayName && m.table === selectedNode.tableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
+          m.model_id === selectedNode.datasetId || 
+          m.uid === selectedNode.datasetId || 
+          m.model_pk === selectedNode.datasetId
         );
+        
+        // Try multiple field name variations for expression and format
+        const expression = selectedNode.expression ?? inferredExpression ?? 
+          measureDetails?.expression ?? measureDetails?.Expression ?? 
+          measureDetails?.measure_expression ?? measureDetails?.measureExpression;
+        const format = selectedNode.formatString ?? 
+          measureDetails?.formatstring ?? measureDetails?.formatString ?? 
+          measureDetails?.format_string ?? measureDetails?.format;
+        
+        console.log("[LineageDetail] Measure metadata lookup:", {
+          nodeId: selectedNode.nodeId,
+          searchingFor: { measure_pk: selectedNode.nodeId, uid: selectedNode.nodeId, measure_name: selectedNode.displayName, table: selectedNode.tableName },
+          totalMeasuresInDimensions: dimensions?.measures?.length || 0,
+          sampleMeasure: dimensions?.measures?.[0],
+          foundMeasureDetails: !!measureDetails,
+          measureFields: measureDetails ? Object.keys(measureDetails) : [],
+          measureDetailsRaw: measureDetails,
+          foundModelDetails: !!modelDetails,
+          workspace_name: modelDetails?.workspace_name,
+          description: measureDetails?.description,
+          expression,
+          format,
+        });
+        
+        // Check KPI status
+        const isKPI = !!(measureDetails?.kpistatus || measureDetails?.kpi_status || measureDetails?.isKPI);
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || measureDetails?.name },
-          { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString || measureDetails?.formatstring },
-          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression ?? measureDetails?.expression },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || measureDetails?.datatype },
+          { label: t("LineageDetail_Format", "Format"), value: format },
+          { label: t("LineageDetail_Expression", "Expression"), value: expression },
+          { label: t("LineageDetail_DisplayFolder", "Display folder"), value: measureDetails?.displayfolder || measureDetails?.display_folder },
+          { label: t("LineageDetail_IsKPI", "Is KPI"), value: isKPI ? "Yes" : undefined },
           { label: t("LineageDetail_Hidden", "Hidden"), value: measureDetails?.ishidden ? "Yes" : "No" },
+          { label: t("LineageDetail_Description", "Description"), value: measureDetails?.description },
           ...common,
         ];
       }
       case "column": {
-        const columnUid = selectedNode.nodeId.replace(/^col(umn)?:/, "");
+        // Match column_pk directly with node_id (no transformation needed)
         const columnDetails = dimensions?.columns?.find((c: any) => 
-          c.uid === columnUid || 
+          c.column_pk === selectedNode.nodeId || 
+          c.uid === selectedNode.nodeId || 
           (c.column_name === selectedNode.displayName && c.table === selectedNode.tableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
+          m.model_id === selectedNode.datasetId || 
+          m.uid === selectedNode.datasetId || 
+          m.model_pk === selectedNode.datasetId
         );
+        
+        // Try multiple field name variations for expression and format
+        const expression = selectedNode.expression ?? inferredExpression ?? 
+          columnDetails?.expression ?? columnDetails?.Expression ?? 
+          columnDetails?.column_expression ?? columnDetails?.columnExpression;
+        const format = selectedNode.formatString ?? 
+          columnDetails?.formatstring ?? columnDetails?.formatString ?? 
+          columnDetails?.format_string ?? columnDetails?.format;
+        
+        console.log("[LineageDetail] Column metadata lookup:", {
+          nodeId: selectedNode.nodeId,
+          selectedNodeFields: Object.keys(selectedNode),
+          selectedNodeFull: selectedNode,
+          searchingFor: { 
+            column_pk: selectedNode.nodeId, 
+            uid: selectedNode.nodeId, 
+            column_name: selectedNode.displayName, 
+            table: selectedNode.tableName 
+          },
+          totalColumnsInDimensions: dimensions?.columns?.length || 0,
+          sampleColumn: dimensions?.columns?.[0],
+          sampleColumnFields: dimensions?.columns?.[0] ? Object.keys(dimensions.columns[0]) : [],
+          foundColumnDetails: !!columnDetails,
+          columnFields: columnDetails ? Object.keys(columnDetails) : [],
+          columnDetailsRaw: columnDetails,
+          expression,
+          format,
+        });
+        
+        // Check if calculated column
+        const isCalculated = !!(expression || columnDetails?.type === "Calculated" || columnDetails?.column_type === "Calculated");
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || columnDetails?.name },
+          { label: t("LineageDetail_ColumnType", "Column type"), value: isCalculated ? "Calculated" : "Data" },
           { label: t("LineageDetail_DataType", "Data type"), value: selectedNode.dataType || columnDetails?.datatype },
-          { label: t("LineageDetail_Format", "Format"), value: selectedNode.formatString || columnDetails?.formatstring },
-          { label: t("LineageDetail_Expression", "Expression"), value: selectedNode.expression ?? inferredExpression ?? columnDetails?.expression },
+          { label: t("LineageDetail_Format", "Format"), value: format },
+          { label: t("LineageDetail_DataCategory", "Data category"), value: columnDetails?.datacategory || columnDetails?.data_category },
+          { label: t("LineageDetail_Expression", "Expression"), value: expression },
+          { label: t("LineageDetail_SourceColumn", "Source column"), value: columnDetails?.sourcecolumn || columnDetails?.source_column },
+          { label: t("LineageDetail_Aggregation", "Aggregation"), value: columnDetails?.summarizebydefault !== false ? (columnDetails?.aggregation || columnDetails?.defaultaggregation || "Sum") : "None" },
+          { label: t("LineageDetail_SortOrder", "Sort by column"), value: columnDetails?.sortbycolumn || columnDetails?.sortbycolumnid },
+          { label: t("LineageDetail_DisplayFolder", "Display folder"), value: columnDetails?.displayfolder || columnDetails?.display_folder },
           { label: t("LineageDetail_Hidden", "Hidden"), value: columnDetails?.ishidden ? "Yes" : "No" },
+          { label: t("LineageDetail_Description", "Description"), value: columnDetails?.description },
           ...common,
         ];
       }
       case "visual": {
-        // Lookup visual details from dimensions
-        const visualUid = selectedNode.nodeId.replace(/^visual:/, "");
-        const visualDetails = dimensions?.visuals?.find((v: any) => 
-          v.uid === visualUid || 
-          v.visual_uid === visualUid ||
-          (v.visual_name === selectedNode.visualId && v.report_id === selectedNode.reportId)
+        // Lookup visual details from dimensions using multiple matching strategies
+        // Strategy 1: Match by primary key field
+        let visualDetails = dimensions?.visuals?.find((v: any) => 
+          v.visual_pk === selectedNode.nodeId
         );
-        const pageDetails = dimensions?.pages?.find((p: any) => 
-          p.page_name === selectedNode.pageId && p.report_id === selectedNode.reportId
-        );
+        
+        // Strategy 2: Match by uid/LineageTag (same as node enrichment)
+        if (!visualDetails) {
+          visualDetails = dimensions?.visuals?.find((v: any) => {
+            const uid = v.LineageTag || v.lineageTag || v.lineage_tag || v.uid || v.data_uid || v.visual_uid;
+            return uid === selectedNode.nodeId;
+          });
+        }
+        
+        // Strategy 3: Match by composite key (visual_name + report_id + page_name)
+        if (!visualDetails && selectedNode.visualId) {
+          visualDetails = dimensions?.visuals?.find((v: any) => {
+            const visualName = v.visual_name || v.visualName || v.name;
+            const reportId = v.report_id || v.reportId;
+            const pageName = v.page_name || v.pageName;
+            return visualName === selectedNode.visualId && 
+                   reportId === selectedNode.reportId &&
+                   (!selectedNode.pageId || pageName === selectedNode.pageId);
+          });
+        }
+        
+        // Debug logging for visual lookup
+        console.log("[LineageDetailView] Visual lookup:", {
+          nodeId: selectedNode.nodeId,
+          visualId: selectedNode.visualId,
+          reportId: selectedNode.reportId,
+          pageId: selectedNode.pageId,
+          availableVisuals: dimensions?.visuals?.length || 0,
+          sampleVisual: dimensions?.visuals?.[0],
+          sampleVisualFields: dimensions?.visuals?.[0] ? Object.keys(dimensions.visuals[0]) : [],
+          matchedVisual: visualDetails,
+          visualDetailKeys: visualDetails ? Object.keys(visualDetails) : "No match",
+        });
+        
+        const pageDetails = dimensions?.pages?.find((p: any) => {
+          const pageName = p.page_name || p.pageName || p.name;
+          const reportId = p.report_id || p.reportId;
+          return pageName === selectedNode.pageId && reportId === selectedNode.reportId;
+        });
+        
         const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.report_id === selectedNode.reportId || r.uid === selectedNode.reportId
+          r.report_pk === selectedNode.reportId ||
+          r.report_id === selectedNode.reportId || 
+          r.uid === selectedNode.reportId ||
+          r.LineageTag === selectedNode.reportId
         );
+        
         return [
-          { label: t("LineageDetail_VisualType", "Visual type"), value: selectedNode.visualType || visualDetails?.type },
-          { label: t("LineageDetail_Page", "Page"), value: pageDetails?.page_display_name || pageDetails?.displayName || selectedNode.pageId },
+          { label: t("LineageDetail_VisualType", "Visual type"), value: visualDetails?.display_type || visualDetails?.type || visualDetails?.visual_type || selectedNode.visualType },
+          { label: t("LineageDetail_Page", "Page"), value: visualDetails?.Page_display_name || visualDetails?.page_display_name || pageDetails?.page_display_name || pageDetails?.Page_display_name || pageDetails?.displayName || selectedNode.pageId },
           { label: t("LineageDetail_Report", "Report"), value: reportDetails?.report_name || reportDetails?.displayName || selectedNode.reportId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
+          { label: t("LineageDetail_VisualTitle", "Visual title"), value: visualDetails?.title || visualDetails?.visual_title || visualDetails?.display_name },
+          { label: t("LineageDetail_VisualName", "Visual name"), value: visualDetails?.visual_name || visualDetails?.name || selectedNode.visualId },
+          { label: t("LineageDetail_Hidden", "Hidden"), value: visualDetails?.hidden !== undefined ? (visualDetails.hidden ? "Yes" : "No") : "N/A" },
+          { label: t("LineageDetail_URL", "URL"), value: visualDetails?.url || visualDetails?.URL || visualDetails?.link, isLink: true },
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
           ...common,
         ];
       }
       case "report": {
-        const reportUid = selectedNode.nodeId.replace(/^report:/, "");
-        const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.uid === reportUid || r.report_id === selectedNode.reportId
+        // Match report using multiple strategies
+        let reportDetails = dimensions?.reports?.find((r: any) => 
+          r.report_pk === selectedNode.nodeId
         );
+        
+        if (!reportDetails) {
+          reportDetails = dimensions?.reports?.find((r: any) => {
+            const uid = r.LineageTag || r.lineageTag || r.lineage_tag || r.uid || r.data_uid || r.report_uid;
+            return uid === selectedNode.nodeId;
+          });
+        }
+        
+        if (!reportDetails && selectedNode.reportId) {
+          reportDetails = dimensions?.reports?.find((r: any) => 
+            r.report_id === selectedNode.reportId || r.reportId === selectedNode.reportId
+          );
+        }
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
           m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
         );
         return [
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId || reportDetails?.report_id },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
           { label: t("LineageDetail_Dataset", "Dataset"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Pages", "Pages"), value: reportDetails?.page_count?.toString() },
+          { label: t("LineageDetail_Visuals", "Total visuals"), value: reportDetails?.visual_count?.toString() },
+          { label: t("LineageDetail_Description", "Description"), value: reportDetails?.description },
           ...common,
         ];
       }
       case "page": {
-        const pageUid = selectedNode.nodeId.replace(/^page:/, "");
-        const pageDetails = dimensions?.pages?.find((p: any) => 
-          p.uid === pageUid || 
-          (p.page_name === selectedNode.pageId && p.report_id === selectedNode.reportId)
+        // Match page using multiple strategies
+        let pageDetails = dimensions?.pages?.find((p: any) => 
+          p.page_pk === selectedNode.nodeId
         );
+        
+        if (!pageDetails) {
+          pageDetails = dimensions?.pages?.find((p: any) => {
+            const uid = p.LineageTag || p.lineageTag || p.lineage_tag || p.uid || p.data_uid || p.page_uid;
+            return uid === selectedNode.nodeId;
+          });
+        }
+        
+        if (!pageDetails && selectedNode.pageId) {
+          pageDetails = dimensions?.pages?.find((p: any) => {
+            const pageName = p.page_name || p.pageName || p.name;
+            const reportId = p.report_id || p.reportId;
+            return pageName === selectedNode.pageId && reportId === selectedNode.reportId;
+          });
+        }
         const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.report_id === selectedNode.reportId || r.uid === selectedNode.reportId
+          r.report_id === selectedNode.reportId || 
+          r.uid === selectedNode.reportId || 
+          r.report_pk === selectedNode.reportId
         );
         return [
           { label: t("LineageDetail_PageNumber", "Page number"), value: selectedNode.pageNumber?.toString() || pageDetails?.page_number?.toString() },
           { label: t("LineageDetail_Report", "Report"), value: reportDetails?.report_name || reportDetails?.displayName || selectedNode.reportId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
+          { label: t("LineageDetail_Visuals", "Visuals on page"), value: pageDetails?.visual_count?.toString() },
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
           ...common,
         ];
       }
       case "table": {
-        const tableUid = selectedNode.nodeId.replace(/^table:/, "");
+        // Match table_pk directly with node_id (no transformation needed)
         const tableDetails = dimensions?.tables?.find((t: any) => 
-          t.uid === tableUid || 
+          t.table_pk === selectedNode.nodeId || 
+          t.uid === selectedNode.nodeId || 
           (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
+          m.model_id === selectedNode.datasetId || 
+          m.uid === selectedNode.datasetId || 
+          m.model_pk === selectedNode.datasetId
         );
+        
+        console.log("[LineageDetail] Table metadata lookup:", {
+          nodeId: selectedNode.nodeId,
+          foundTableDetails: !!tableDetails,
+          tableFields: tableDetails ? Object.keys(tableDetails) : [],
+          tableDetailsRaw: tableDetails,
+        });
+        
+        // Storage mode
+        const storageMode = tableDetails?.mode || tableDetails?.storage_mode || tableDetails?.storagemode;
+        
+        // Check if calculated table
+        const isCalculated = !!(tableDetails?.type === "Calculated" || tableDetails?.table_type === "Calculated" || tableDetails?.expression);
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName ?? selectedNode.displayName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
+          { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
+          { label: t("LineageDetail_TableType", "Table type"), value: isCalculated ? "Calculated" : "Data" },
+          { label: t("LineageDetail_Source", "Source"), value: tableDetails?.sourcetype || tableDetails?.source_type },
+          { label: t("LineageDetail_StorageMode", "Storage mode"), value: storageMode },
+          { label: t("LineageDetail_Columns", "Column count"), value: tableDetails?.column_count?.toString() },
+          { label: t("LineageDetail_Measures", "Measure count"), value: tableDetails?.measure_count?.toString() },
+          { label: t("LineageDetail_RowCount", "Row count"), value: tableDetails?.row_count?.toLocaleString() || tableDetails?.rowcount?.toLocaleString() },
+          { label: t("LineageDetail_Partitions", "Partitions"), value: tableDetails?.partition_count?.toString() || tableDetails?.partitioncount?.toString() },
+          { label: t("LineageDetail_RefreshPolicy", "Refresh policy"), value: tableDetails?.refreshpolicy || tableDetails?.refresh_policy },
+          { label: t("LineageDetail_DisplayFolder", "Display folder"), value: tableDetails?.displayfolder || tableDetails?.display_folder },
           { label: t("LineageDetail_Hidden", "Hidden"), value: tableDetails?.ishidden ? "Yes" : "No" },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName },
+          { label: t("LineageDetail_Description", "Description"), value: tableDetails?.description },
           ...common,
         ];
       }
@@ -362,18 +565,29 @@ export function LineageDetailView({
   }, [selectedNode, inferredExpression, t]);
 
   const selectedInfoCards = useMemo(() => {
-    if (!selectedNode) return [] as Array<{ key: string; label: string; value: string; isCode?: boolean }>;
+    if (!selectedNode) return [] as Array<{ key: string; label: string; value: string; isCode?: boolean; isLink?: boolean }>;
+
+    console.log("[LineageDetail] Building selectedInfoCards:", {
+      entityType: selectedNode.entityType,
+      nodeId: selectedNode.nodeId,
+      typeSpecificFieldsCount: typeSpecificFields.length,
+      typeSpecificFields: typeSpecificFields.map(f => ({ label: f.label, hasValue: !!f.value, value: f.value })),
+      hasDimensions: !!dimensions,
+      dimensionKeys: dimensions ? Object.keys(dimensions) : [],
+    });
 
     return [
       {
         key: "type",
         label: t("LineageDetail_Type", "Type"),
         value: getEntityTypeLabel(selectedNode.entityType),
+        isLink: false,
       },
       {
         key: "name",
         label: t("LineageDetail_Name", "Name"),
         value: selectedNode.displayName,
+        isLink: false,
       },
       ...typeSpecificFields
         .filter((field) => !!field.value && field.label !== t("LineageDetail_Expression", "Expression")) // Exclude expression from inline display
@@ -381,6 +595,7 @@ export function LineageDetailView({
           key: `meta-${index}-${field.label}`,
           label: field.label,
           value: field.value!,
+          isLink: field.isLink || false,
         })),
     ];
   }, [selectedNode, typeSpecificFields, t]);
@@ -415,6 +630,85 @@ export function LineageDetailView({
     };
   }, [selectedNodeId, edges]);
 
+  // Get downstream dependencies for a specific node (for expansion)
+  const getNodeDownstream = (startNodeId: string): LineageViewerNode[] => {
+    const visited = new Set<string>();
+    const queue = [startNodeId];
+    const result: LineageViewerNode[] = [];
+    
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+      
+      // Find all edges where this node is the source (downstream dependencies)
+      const outgoing = edges.filter(e => 
+        e.fromNodeId === currentId && 
+        (e.edgeType === "dependency" || e.edgeType === "relationship")
+      );
+      
+      for (const edge of outgoing) {
+        if (!visited.has(edge.toNodeId)) {
+          const targetNode = nodeById.get(edge.toNodeId);
+          if (targetNode && targetNode.nodeId !== startNodeId) {
+            result.push(targetNode);
+            queue.push(edge.toNodeId);
+          }
+        }
+      }
+    }
+    
+    return result;
+  };
+
+  // Compute all transitive upstream/downstream connections using BFS
+  const allTransitiveConnections = useMemo(() => {
+    if (!selectedNode || !showAllConnections) return { upstream: [] as LineageViewerNode[], downstream: [] as LineageViewerNode[] };
+
+    const computeTransitive = (startNodeId: string, direction: "upstream" | "downstream"): LineageViewerNode[] => {
+      const visited = new Set<string>();
+      const queue = [startNodeId];
+      const results: LineageViewerNode[] = [];
+
+      while (queue.length > 0) {
+        const currentNodeId = queue.shift()!;
+        if (visited.has(currentNodeId)) continue;
+        visited.add(currentNodeId);
+
+        // Skip the starting node itself
+        if (currentNodeId !== startNodeId) {
+          const currentNode = nodeById.get(currentNodeId);
+          if (currentNode) {
+            results.push(currentNode);
+          }
+        }
+
+        // Find edges in the specified direction
+        const relevantEdges = edges.filter(e => {
+          if (e.edgeType !== "dependency" && e.edgeType !== "relationship") return false;
+          return direction === "upstream" 
+            ? e.toNodeId === currentNodeId 
+            : e.fromNodeId === currentNodeId;
+        });
+
+        // Add neighbors to queue
+        for (const edge of relevantEdges) {
+          const nextNodeId = direction === "upstream" ? edge.fromNodeId : edge.toNodeId;
+          if (!visited.has(nextNodeId)) {
+            queue.push(nextNodeId);
+          }
+        }
+      }
+
+      return results;
+    };
+
+    return {
+      upstream: computeTransitive(selectedNode.nodeId, "upstream"),
+      downstream: computeTransitive(selectedNode.nodeId, "downstream"),
+    };
+  }, [selectedNode, showAllConnections, nodeById, edges]);
+
   // Classify related nodes by relationship category
   const relations = useMemo(() => {
     if (!selectedNode) return {};
@@ -430,8 +724,9 @@ export function LineageDetailView({
         .map((e) => nodeById.get(side === "from" ? e.fromNodeId : e.toNodeId))
         .filter((n): n is LineageViewerNode => n !== undefined);
 
-    const incoming = neighborsOf(dependencyEdgesOnly.incoming, "from");
-    const outgoing = neighborsOf(dependencyEdgesOnly.outgoing, "to");
+    // Use transitive connections if showAllConnections is true
+    const incoming = showAllConnections ? allTransitiveConnections.upstream : neighborsOf(dependencyEdgesOnly.incoming, "from");
+    const outgoing = showAllConnections ? allTransitiveConnections.downstream : neighborsOf(dependencyEdgesOnly.outgoing, "to");
     const all = [...incoming, ...outgoing];
 
     const byType = (type: string) => all.filter((n) => n.entityType === type);
@@ -441,12 +736,12 @@ export function LineageDetailView({
       connectedMeasures: { label: t("LineageDetail_Measures", "Connected measures"), nodes: byType("measure") },
       connectedVisuals: { label: t("LineageDetail_Visuals", "Connected visuals"), nodes: byType("visual") },
       connectedReports: { label: t("LineageDetail_Reports", "Connected reports"), nodes: byType("report") },
-      directNeighbors: { label: t("LineageDetail_Neighbors", "All direct neighbors"), nodes: all },
-      usedBy: { label: t("LineageDetail_UsedBy", "Used by"), nodes: incoming },
-      uses: { label: t("LineageDetail_Uses", "Uses"), nodes: outgoing },
+      directNeighbors: { label: showAllConnections ? t("LineageDetail_AllConnections", "All connections") : t("LineageDetail_Neighbors", "All direct neighbors"), nodes: all },
+      usedBy: { label: showAllConnections ? t("LineageDetail_AllUsedBy", "All used by (transitive)") : t("LineageDetail_UsedBy", "Used by"), nodes: incoming },
+      uses: { label: showAllConnections ? t("LineageDetail_AllUses", "All uses (transitive)") : t("LineageDetail_Uses", "Uses"), nodes: outgoing },
       filteredBy: { label: t("LineageDetail_FilteredBy", "Filtered by"), nodes: [] }, // Will be populated below
     };
-  }, [selectedNode, nodeEdges, nodeById, t]);
+  }, [selectedNode, nodeEdges, nodeById, t, showAllConnections, allTransitiveConnections]);
 
   // Calculate "Filtered by" relationships
   const filteredByRelations = useMemo(() => {
@@ -1001,6 +1296,59 @@ export function LineageDetailView({
 
   const rel = relationsWithFilteredBy;
 
+  // Helper function to render connection items with expand capability
+  const renderConnectionItem = (node: LineageViewerNode, depth: number = 0) => {
+    const isExpanded = expandedNodes.has(node.nodeId);
+    const downstream = isExpanded ? getNodeDownstream(node.nodeId) : [];
+    const hasDownstream = downstream.length > 0;
+    const isSelected = node.nodeId === selectedNodeId;
+    
+    return (
+      <div key={node.nodeId} style={{ marginLeft: depth > 0 ? `${depth * 20}px` : 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+          {/* Expand/collapse button */}
+          {depth === 0 && hasDownstream && (
+            <Button
+              appearance="transparent"
+              size="small"
+              icon={isExpanded ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+                toggleNodeExpansion(node.nodeId);
+              }}
+              style={{ minWidth: "24px", padding: "4px" }}
+            />
+          )}
+          {depth === 0 && !hasDownstream && (
+            <div style={{ width: "24px" }} />
+          )}
+          
+          {/* Connection item button */}
+          <button
+            type="button"
+            className={`${styles.connectionItem}${isSelected ? ` ${styles.connectionItemSelected}` : ""}`}
+            onClick={() => onNodeSelect?.(node.nodeId)}
+            style={{ flex: 1 }}
+          >
+            <span className={styles.connectionItemName} title={node.displayName}>
+              {node.displayName}
+            </span>
+            {node.tableName && (
+              <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
+            )}
+          </button>
+        </div>
+        
+        {/* Expanded downstream items */}
+        {isExpanded && downstream.length > 0 && (
+          <div style={{ marginTop: tokens.spacingVerticalXXS }}>
+            {downstream.map(downstreamNode => renderConnectionItem(downstreamNode, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (!selectedNode) {
     return (
       <div className={styles.root}>
@@ -1107,9 +1455,32 @@ export function LineageDetailView({
             <React.Fragment key={card.key}>
               <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
                 <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{card.label}:</Text>
-                <Text size={200} weight="semibold" title={card.value}>
-                  {card.value}
-                </Text>
+                {card.isLink && card.value ? (
+                  <a 
+                    href={card.value} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(card.value, '_blank', 'noopener,noreferrer');
+                    }}
+                    style={{ 
+                      color: tokens.colorBrandForeground1, 
+                      textDecoration: "none",
+                      fontSize: tokens.fontSizeBase200,
+                      fontWeight: tokens.fontWeightSemibold,
+                      cursor: "pointer"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
+                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
+                  >
+                    {card.value}
+                  </a>
+                ) : (
+                  <Text size={200} weight="semibold" title={card.value}>
+                    {card.value}
+                  </Text>
+                )}
               </div>
               {idx < selectedInfoCards.length - 1 && <span className={styles.badgeSeparator}>•</span>}
             </React.Fragment>
@@ -1119,14 +1490,18 @@ export function LineageDetailView({
 
       {/* ── Expression card (for measures and columns with expressions) ── */}
       {(() => {
-        const shouldShow = (selectedNode.entityType === "measure" || selectedNode.entityType === "column") && 
-                           (selectedNode.expression || inferredExpression);
+        // Get expression from typeSpecificFields since it already checks all field variations
+        const expressionField = typeSpecificFields.find(f => f.label === t("LineageDetail_Expression", "Expression"));
+        const expressionValue = expressionField?.value;
+        const shouldShow = (selectedNode.entityType === "measure" || selectedNode.entityType === "column") && !!expressionValue;
+        
         console.log("[LineageDetail] Expression card check:", {
           entityType: selectedNode.entityType,
           hasExpression: !!selectedNode.expression,
           expression: selectedNode.expression,
           hasInferredExpression: !!inferredExpression,
           inferredExpression,
+          expressionFromField: expressionValue,
           shouldShow,
           allFields: Object.keys(selectedNode),
         });
@@ -1135,24 +1510,54 @@ export function LineageDetailView({
         <div className={styles.card}>
           <div className={styles.cardTitle}>{t("LineageDetail_Expression", "Expression")}</div>
           <div className={styles.expressionBlock}>
-            {selectedNode.expression || inferredExpression}
+            {typeSpecificFields.find(f => f.label === t("LineageDetail_Expression", "Expression"))?.value}
           </div>
         </div>
       )}
 
 
 
+      {/* ── Connection Depth Toggle ── */}
+      {(rel.usedBy.nodes.length > 0 || rel.uses.nodes.length > 0) && (
+        <div className={styles.card}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: tokens.spacingHorizontalS }}>
+            <div>
+              <Text weight="semibold" size={300}>{t("LineageDetail_ConnectionDepth", "Connection Depth")}</Text>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: tokens.spacingVerticalXXS, display: "block" }}>
+                {showAllConnections 
+                  ? t("LineageDetail_ShowingAll", "Showing all transitive upstream/downstream dependencies")
+                  : t("LineageDetail_ShowingDirect", "Showing only direct connections")}
+              </Text>
+            </div>
+            <Switch
+              checked={showAllConnections}
+              onChange={(_, data) => setShowAllConnections(data.checked)}
+              label={t("LineageDetail_ShowAll", "Show all")}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Direct neighbors list (always visible) ── */}
       {rel.directNeighbors.nodes.length > 0 && (
         <Accordion className={styles.accordionPanel} collapsible>
           <AccordionItem value="direct-neighbors">
             <AccordionHeader>
-              <Text weight="semibold">{t("LineageDetail_DirectConnections", "Direct connections")} ({rel.directNeighbors.nodes.length})</Text>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">
+                  {showAllConnections 
+                    ? t("LineageDetail_AllConnections", "All connections") 
+                    : t("LineageDetail_DirectConnections", "Direct connections")}
+                </Text>
+                <Badge>{rel.directNeighbors.nodes.length}</Badge>
+              </div>
             </AccordionHeader>
             <AccordionPanel>
               <div className={styles.accordionContent}>
               <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {t("LineageDetail_ConnectionsHint", "Click a node to navigate to it in the graph")}
+                {showAllConnections
+                  ? t("LineageDetail_AllConnectionsHint", "All transitive upstream and downstream dependencies. Click to navigate.")
+                  : t("LineageDetail_ConnectionsHint", "Click a node to navigate to it in the graph")}
               </Text>
           
           {(() => {
@@ -1166,21 +1571,7 @@ export function LineageDetailView({
                 <div className={styles.connectionGroupLabel}>
                   {getEntityTypeLabel(entityType)} ({groupNodes.length})
                 </div>
-                {groupNodes.map((node) => (
-                  <button
-                    key={node.nodeId}
-                    type="button"
-                    className={`${styles.connectionItem}${node.nodeId === selectedNodeId ? ` ${styles.connectionItemSelected}` : ""}`}
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName} title={node.displayName}>
-                      {node.displayName}
-                    </span>
-                    {node.tableName && (
-                      <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-                    )}
-                  </button>
-                ))}
+                {groupNodes.map((node) => renderConnectionItem(node, 0))}
               </div>
             ));
           })()}
@@ -1195,12 +1586,17 @@ export function LineageDetailView({
         <Accordion className={styles.accordionPanel} collapsible>
           <AccordionItem value="used-by">
             <AccordionHeader>
-              <Text weight="semibold">{t("LineageDetail_UsedBy", "Used by")} ({rel.usedBy.nodes.length})</Text>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{rel.usedBy.label}</Text>
+                <Badge>{rel.usedBy.nodes.length}</Badge>
+              </div>
             </AccordionHeader>
             <AccordionPanel>
               <div className={styles.accordionContent}>
               <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {t("LineageDetail_UsedByHint", "Nodes that depend on or reference this node")}
+                {showAllConnections
+                  ? t("LineageDetail_AllUsedByHint", "All nodes that transitively depend on or reference this node")
+                  : t("LineageDetail_UsedByHint", "Nodes that depend on or reference this node")}
               </Text>
           
           {(() => {
@@ -1214,21 +1610,7 @@ export function LineageDetailView({
                 <div className={styles.connectionGroupLabel}>
                   {getEntityTypeLabel(entityType)} ({groupNodes.length})
                 </div>
-                {groupNodes.map((node) => (
-                  <button
-                    key={node.nodeId}
-                    type="button"
-                    className={`${styles.connectionItem}${node.nodeId === selectedNodeId ? ` ${styles.connectionItemSelected}` : ""}`}
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName} title={node.displayName}>
-                      {node.displayName}
-                    </span>
-                    {node.tableName && (
-                      <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-                    )}
-                  </button>
-                ))}
+                {groupNodes.map((node) => renderConnectionItem(node, 0))}
               </div>
             ));
           })()}
@@ -1243,12 +1625,17 @@ export function LineageDetailView({
         <Accordion className={styles.accordionPanel} collapsible>
           <AccordionItem value="uses">
             <AccordionHeader>
-              <Text weight="semibold">{t("LineageDetail_Uses", "Uses")} ({rel.uses.nodes.length})</Text>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{rel.uses.label}</Text>
+                <Badge>{rel.uses.nodes.length}</Badge>
+              </div>
             </AccordionHeader>
             <AccordionPanel>
               <div className={styles.accordionContent}>
               <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {t("LineageDetail_UsesHint", "Nodes that this node depends on or references")}
+                {showAllConnections
+                  ? t("LineageDetail_AllUsesHint", "All nodes that this node transitively depends on or references")
+                  : t("LineageDetail_UsesHint", "Nodes that this node depends on or references")}
               </Text>
           
           {(() => {
@@ -1262,21 +1649,7 @@ export function LineageDetailView({
                 <div className={styles.connectionGroupLabel}>
                   {getEntityTypeLabel(entityType)} ({groupNodes.length})
                 </div>
-                {groupNodes.map((node) => (
-                  <button
-                    key={node.nodeId}
-                    type="button"
-                    className={`${styles.connectionItem}${node.nodeId === selectedNodeId ? ` ${styles.connectionItemSelected}` : ""}` }
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName} title={node.displayName}>
-                      {node.displayName}
-                    </span>
-                    {node.tableName && (
-                      <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-                    )}
-                  </button>
-                ))}
+                {groupNodes.map((node) => renderConnectionItem(node, 0))}
               </div>
             ));
           })()}
@@ -1310,21 +1683,7 @@ export function LineageDetailView({
                 <div className={styles.connectionGroupLabel}>
                   {getEntityTypeLabel(entityType)} ({groupNodes.length})
                 </div>
-                {groupNodes.map((node) => (
-                  <button
-                    key={node.nodeId}
-                    type="button"
-                    className={`${styles.connectionItem}${node.nodeId === selectedNodeId ? ` ${styles.connectionItemSelected}` : ""}`}
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName} title={node.displayName}>
-                      {node.displayName}
-                    </span>
-                    {node.tableName && (
-                      <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-                    )}
-                  </button>
-                ))}
+                {groupNodes.map((node) => renderConnectionItem(node, 0))}
               </div>
             ));
           })()}

@@ -321,6 +321,17 @@ export function LineageDetailView({
         
         console.log("[LineageDetail] Column metadata lookup:", {
           columnUid,
+          selectedNodeFields: Object.keys(selectedNode),
+          selectedNodeFull: selectedNode,
+          searchingFor: { 
+            column_pk: columnUid, 
+            uid: columnUid, 
+            column_name: selectedNode.displayName, 
+            table: selectedNode.tableName 
+          },
+          totalColumnsInDimensions: dimensions?.columns?.length || 0,
+          sampleColumn: dimensions?.columns?.[0],
+          sampleColumnFields: dimensions?.columns?.[0] ? Object.keys(dimensions.columns[0]) : [],
           foundColumnDetails: !!columnDetails,
           columnFields: columnDetails ? Object.keys(columnDetails) : [],
           columnDetailsRaw: columnDetails,

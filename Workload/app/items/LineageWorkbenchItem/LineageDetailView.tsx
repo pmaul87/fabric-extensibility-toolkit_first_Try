@@ -12,7 +12,12 @@ import {
   AccordionPanel,
   Switch,
 } from "@fluentui/react-components";
-import { ArrowRight16Regular, Add16Regular } from "@fluentui/react-icons";
+import { 
+  ArrowRight16Regular, 
+  Add16Regular, 
+  ChevronRight16Regular, 
+  ChevronDown16Regular 
+} from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
 import type { Requirement } from "../RequirementBoardItem";
 import { RequirementDialog } from "../RequirementBoardItem";
@@ -209,6 +214,19 @@ export function LineageDetailView({
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [showAllConnections, setShowAllConnections] = useState(false);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  const toggleNodeExpansion = (nodeId: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  };
 
   const nodeById = useMemo(() => {
     const m = new Map<string, LineageViewerNode>();
@@ -544,6 +562,37 @@ export function LineageDetailView({
       outgoingDependencies: outgoing.filter((e) => e.edgeType === "dependency"),
     };
   }, [selectedNodeId, edges]);
+
+  // Get downstream dependencies for a specific node (for expansion)
+  const getNodeDownstream = (startNodeId: string): LineageViewerNode[] => {
+    const visited = new Set<string>();
+    const queue = [startNodeId];
+    const result: LineageViewerNode[] = [];
+    
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+      
+      // Find all edges where this node is the source (downstream dependencies)
+      const outgoing = edges.filter(e => 
+        e.fromNodeId === currentId && 
+        (e.edgeType === "dependency" || e.edgeType === "relationship")
+      );
+      
+      for (const edge of outgoing) {
+        if (!visited.has(edge.toNodeId)) {
+          const targetNode = nodeById.get(edge.toNodeId);
+          if (targetNode && targetNode.nodeId !== startNodeId) {
+            result.push(targetNode);
+            queue.push(edge.toNodeId);
+          }
+        }
+      }
+    }
+    
+    return result;
+  };
 
   // Compute all transitive upstream/downstream connections using BFS
   const allTransitiveConnections = useMemo(() => {
@@ -1180,6 +1229,59 @@ export function LineageDetailView({
 
   const rel = relationsWithFilteredBy;
 
+  // Helper function to render connection items with expand capability
+  const renderConnectionItem = (node: LineageViewerNode, depth: number = 0) => {
+    const isExpanded = expandedNodes.has(node.nodeId);
+    const downstream = isExpanded ? getNodeDownstream(node.nodeId) : [];
+    const hasDownstream = downstream.length > 0;
+    const isSelected = node.nodeId === selectedNodeId;
+    
+    return (
+      <div key={node.nodeId} style={{ marginLeft: depth > 0 ? `${depth * 20}px` : 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+          {/* Expand/collapse button */}
+          {depth === 0 && hasDownstream && (
+            <Button
+              appearance="transparent"
+              size="small"
+              icon={isExpanded ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+                toggleNodeExpansion(node.nodeId);
+              }}
+              style={{ minWidth: "24px", padding: "4px" }}
+            />
+          )}
+          {depth === 0 && !hasDownstream && (
+            <div style={{ width: "24px" }} />
+          )}
+          
+          {/* Connection item button */}
+          <button
+            type="button"
+            className={`${styles.connectionItem}${isSelected ? ` ${styles.connectionItemSelected}` : ""}`}
+            onClick={() => onNodeSelect?.(node.nodeId)}
+            style={{ flex: 1 }}
+          >
+            <span className={styles.connectionItemName} title={node.displayName}>
+              {node.displayName}
+            </span>
+            {node.tableName && (
+              <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
+            )}
+          </button>
+        </div>
+        
+        {/* Expanded downstream items */}
+        {isExpanded && downstream.length > 0 && (
+          <div style={{ marginTop: tokens.spacingVerticalXXS }}>
+            {downstream.map(downstreamNode => renderConnectionItem(downstreamNode, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (!selectedNode) {
     return (
       <div className={styles.root}>
@@ -1379,21 +1481,7 @@ export function LineageDetailView({
                 <div className={styles.connectionGroupLabel}>
                   {getEntityTypeLabel(entityType)} ({groupNodes.length})
                 </div>
-                {groupNodes.map((node) => (
-                  <button
-                    key={node.nodeId}
-                    type="button"
-                    className={`${styles.connectionItem}${node.nodeId === selectedNodeId ? ` ${styles.connectionItemSelected}` : ""}`}
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName} title={node.displayName}>
-                      {node.displayName}
-                    </span>
-                    {node.tableName && (
-                      <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-                    )}
-                  </button>
-                ))}
+                {groupNodes.map((node) => renderConnectionItem(node, 0))}
               </div>
             ));
           })()}
@@ -1432,21 +1520,7 @@ export function LineageDetailView({
                 <div className={styles.connectionGroupLabel}>
                   {getEntityTypeLabel(entityType)} ({groupNodes.length})
                 </div>
-                {groupNodes.map((node) => (
-                  <button
-                    key={node.nodeId}
-                    type="button"
-                    className={`${styles.connectionItem}${node.nodeId === selectedNodeId ? ` ${styles.connectionItemSelected}` : ""}`}
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName} title={node.displayName}>
-                      {node.displayName}
-                    </span>
-                    {node.tableName && (
-                      <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-                    )}
-                  </button>
-                ))}
+                {groupNodes.map((node) => renderConnectionItem(node, 0))}
               </div>
             ));
           })()}
@@ -1485,21 +1559,7 @@ export function LineageDetailView({
                 <div className={styles.connectionGroupLabel}>
                   {getEntityTypeLabel(entityType)} ({groupNodes.length})
                 </div>
-                {groupNodes.map((node) => (
-                  <button
-                    key={node.nodeId}
-                    type="button"
-                    className={`${styles.connectionItem}${node.nodeId === selectedNodeId ? ` ${styles.connectionItemSelected}` : ""}` }
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName} title={node.displayName}>
-                      {node.displayName}
-                    </span>
-                    {node.tableName && (
-                      <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-                    )}
-                  </button>
-                ))}
+                {groupNodes.map((node) => renderConnectionItem(node, 0))}
               </div>
             ));
           })()}
@@ -1533,21 +1593,7 @@ export function LineageDetailView({
                 <div className={styles.connectionGroupLabel}>
                   {getEntityTypeLabel(entityType)} ({groupNodes.length})
                 </div>
-                {groupNodes.map((node) => (
-                  <button
-                    key={node.nodeId}
-                    type="button"
-                    className={`${styles.connectionItem}${node.nodeId === selectedNodeId ? ` ${styles.connectionItemSelected}` : ""}`}
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName} title={node.displayName}>
-                      {node.displayName}
-                    </span>
-                    {node.tableName && (
-                      <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-                    )}
-                  </button>
-                ))}
+                {groupNodes.map((node) => renderConnectionItem(node, 0))}
               </div>
             ));
           })()}

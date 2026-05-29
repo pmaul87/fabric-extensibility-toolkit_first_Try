@@ -24,6 +24,7 @@ const LINEAGE_OPTIONAL_TABLES = [
   "t_dataset_reports",
   "t_dataset_pages",
   "t_dataset_visuals",
+  "t_report_visuals",  // Alternative naming convention
   "t_dataset_semantic_models",
   "t_dataset_tables",
   "t_dataset_columns",
@@ -844,7 +845,7 @@ class LakehouseAnalyzerService {
       // New dimension tables (support both t_dataset_* and t_datamodel_* naming)
       reports: output.t_dataset_reports || output.t_datamodel_reports || output.lineage_reports || [],
       pages: output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
-      visuals: output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
+      visuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
       semanticModels: output.t_dataset_semantic_models || output.t_datamodel_semantic_models || output.lineage_semantic_models || [],
       tables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
       columns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
@@ -854,7 +855,7 @@ class LakehouseAnalyzerService {
       warehouses: output.t_dataset_warehouses || output.t_datamodel_warehouses || output.warehouses || [],
       // Legacy aliases (for backward compatibility with old saved data)
       reportPages: output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
-      reportVisuals: output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
+      reportVisuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
       smTables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
       smColumns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
       smMeasures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],

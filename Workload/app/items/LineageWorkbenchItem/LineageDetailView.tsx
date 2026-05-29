@@ -253,6 +253,17 @@ export function LineageDetailView({
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
           m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
         );
+        
+        console.log("[LineageDetail] Measure metadata lookup:", {
+          measureUid,
+          foundMeasureDetails: !!measureDetails,
+          measureFields: measureDetails ? Object.keys(measureDetails) : [],
+          foundModelDetails: !!modelDetails,
+          modelFields: modelDetails ? Object.keys(modelDetails) : [],
+          workspace_name: modelDetails?.workspace_name,
+          description: measureDetails?.description,
+        });
+        
         return [
           { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
@@ -382,6 +393,15 @@ export function LineageDetailView({
 
   const selectedInfoCards = useMemo(() => {
     if (!selectedNode) return [] as Array<{ key: string; label: string; value: string; isCode?: boolean }>;
+
+    console.log("[LineageDetail] Building selectedInfoCards:", {
+      entityType: selectedNode.entityType,
+      nodeId: selectedNode.nodeId,
+      typeSpecificFieldsCount: typeSpecificFields.length,
+      typeSpecificFields: typeSpecificFields.map(f => ({ label: f.label, hasValue: !!f.value, value: f.value })),
+      hasDimensions: !!dimensions,
+      dimensionKeys: dimensions ? Object.keys(dimensions) : [],
+    });
 
     return [
       {

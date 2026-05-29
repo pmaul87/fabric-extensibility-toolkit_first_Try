@@ -11,12 +11,20 @@ import {
   AccordionItem,
   AccordionPanel,
   Switch,
+  Dialog,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogActions,
+  DialogContent,
 } from "@fluentui/react-components";
 import { 
   ArrowRight16Regular, 
   Add16Regular, 
   ChevronRight16Regular, 
-  ChevronDown16Regular 
+  ChevronDown16Regular,
+  Eye16Regular,
+  Dismiss16Regular,
 } from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
 import type { Requirement } from "../RequirementBoardItem";
@@ -215,6 +223,7 @@ export function LineageDetailView({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [showAllConnections, setShowAllConnections] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const toggleNodeExpansion = (nodeId: string) => {
     setExpandedNodes(prev => {
@@ -1456,21 +1465,31 @@ export function LineageDetailView({
               <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
                 <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{card.label}:</Text>
                 {card.isLink && card.value ? (
-                  <a 
-                    href={card.value} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ 
-                      color: tokens.colorBrandForeground1, 
-                      textDecoration: "none",
-                      fontSize: tokens.fontSizeBase200,
-                      fontWeight: tokens.fontWeightSemibold
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
-                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
-                  >
-                    {card.value}
-                  </a>
+                  <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                    <a 
+                      href={card.value} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ 
+                        color: tokens.colorBrandForeground1, 
+                        textDecoration: "none",
+                        fontSize: tokens.fontSizeBase200,
+                        fontWeight: tokens.fontWeightSemibold
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
+                      onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
+                    >
+                      {card.value}
+                    </a>
+                    <Button
+                      appearance="subtle"
+                      size="small"
+                      icon={<Eye16Regular />}
+                      onClick={() => setPreviewUrl(card.value)}
+                      title="Preview"
+                      style={{ minWidth: "auto", padding: "2px 4px" }}
+                    />
+                  </div>
                 ) : (
                   <Text size={200} weight="semibold" title={card.value}>
                     {card.value}
@@ -1826,6 +1845,56 @@ export function LineageDetailView({
           setCreateDialogOpen(false);
         }}
       />
+
+      {/* ── URL Preview Dialog ── */}
+      <Dialog open={!!previewUrl} onOpenChange={(_, data) => !data.open && setPreviewUrl(null)}>
+        <DialogSurface style={{ maxWidth: "90vw", maxHeight: "90vh", width: "1200px", height: "800px" }}>
+          <DialogBody>
+            <DialogTitle
+              action={
+                <Button
+                  appearance="subtle"
+                  icon={<Dismiss16Regular />}
+                  onClick={() => setPreviewUrl(null)}
+                />
+              }
+            >
+              {t("LineageDetail_URLPreview", "URL Preview")}
+            </DialogTitle>
+            <DialogContent style={{ padding: 0, height: "calc(100% - 60px)" }}>
+              {previewUrl && (
+                <iframe
+                  src={previewUrl}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    border: "none",
+                    borderRadius: tokens.borderRadiusMedium,
+                  }}
+                  title="URL Preview"
+                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                />
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                appearance="secondary"
+                onClick={() => setPreviewUrl(null)}
+              >
+                {t("Common_Close", "Close")}
+              </Button>
+              <Button
+                appearance="primary"
+                onClick={() => {
+                  if (previewUrl) window.open(previewUrl, "_blank");
+                }}
+              >
+                {t("LineageDetail_OpenInNewTab", "Open in new tab")}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 }

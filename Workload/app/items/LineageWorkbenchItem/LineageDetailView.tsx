@@ -245,10 +245,10 @@ export function LineageDetailView({
 
     switch (selectedNode.entityType) {
       case "measure": {
-        const measureUid = selectedNode.nodeId.replace(/^measure:/, "");
+        // Match measure_pk directly with node_id (no transformation needed)
         const measureDetails = dimensions?.measures?.find((m: any) => 
-          m.measure_pk === measureUid || 
-          m.uid === measureUid || 
+          m.measure_pk === selectedNode.nodeId || 
+          m.uid === selectedNode.nodeId || 
           (m.measure_name === selectedNode.displayName && m.table === selectedNode.tableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
@@ -266,8 +266,8 @@ export function LineageDetailView({
           measureDetails?.format_string ?? measureDetails?.format;
         
         console.log("[LineageDetail] Measure metadata lookup:", {
-          measureUid,
-          searchingFor: { measure_pk: measureUid, uid: measureUid, measure_name: selectedNode.displayName, table: selectedNode.tableName },
+          nodeId: selectedNode.nodeId,
+          searchingFor: { measure_pk: selectedNode.nodeId, uid: selectedNode.nodeId, measure_name: selectedNode.displayName, table: selectedNode.tableName },
           totalMeasuresInDimensions: dimensions?.measures?.length || 0,
           sampleMeasure: dimensions?.measures?.[0],
           foundMeasureDetails: !!measureDetails,
@@ -299,10 +299,10 @@ export function LineageDetailView({
         ];
       }
       case "column": {
-        const columnUid = selectedNode.nodeId.replace(/^col(umn)?:/, "");
+        // Match column_pk directly with node_id (no transformation needed)
         const columnDetails = dimensions?.columns?.find((c: any) => 
-          c.column_pk === columnUid || 
-          c.uid === columnUid || 
+          c.column_pk === selectedNode.nodeId || 
+          c.uid === selectedNode.nodeId || 
           (c.column_name === selectedNode.displayName && c.table === selectedNode.tableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
@@ -320,12 +320,12 @@ export function LineageDetailView({
           columnDetails?.format_string ?? columnDetails?.format;
         
         console.log("[LineageDetail] Column metadata lookup:", {
-          columnUid,
+          nodeId: selectedNode.nodeId,
           selectedNodeFields: Object.keys(selectedNode),
           selectedNodeFull: selectedNode,
           searchingFor: { 
-            column_pk: columnUid, 
-            uid: columnUid, 
+            column_pk: selectedNode.nodeId, 
+            uid: selectedNode.nodeId, 
             column_name: selectedNode.displayName, 
             table: selectedNode.tableName 
           },
@@ -362,12 +362,11 @@ export function LineageDetailView({
         ];
       }
       case "visual": {
-        // Lookup visual details from dimensions
-        const visualUid = selectedNode.nodeId.replace(/^visual:/, "");
+        // Lookup visual details from dimensions - match visual_pk with raw node_id
         const visualDetails = dimensions?.visuals?.find((v: any) => 
-          v.visual_pk === visualUid || 
-          v.uid === visualUid || 
-          v.visual_uid === visualUid ||
+          v.visual_pk === selectedNode.nodeId || 
+          v.uid === selectedNode.nodeId || 
+          v.visual_uid === selectedNode.nodeId ||
           (v.visual_name === selectedNode.visualId && v.report_id === selectedNode.reportId)
         );
         const pageDetails = dimensions?.pages?.find((p: any) => 
@@ -389,10 +388,10 @@ export function LineageDetailView({
         ];
       }
       case "report": {
-        const reportUid = selectedNode.nodeId.replace(/^report:/, "");
+        // Match report_pk directly with node_id
         const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.report_pk === reportUid || 
-          r.uid === reportUid || 
+          r.report_pk === selectedNode.nodeId || 
+          r.uid === selectedNode.nodeId || 
           r.report_id === selectedNode.reportId
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
@@ -409,10 +408,10 @@ export function LineageDetailView({
         ];
       }
       case "page": {
-        const pageUid = selectedNode.nodeId.replace(/^page:/, "");
+        // Match page_pk directly with node_id
         const pageDetails = dimensions?.pages?.find((p: any) => 
-          p.page_pk === pageUid || 
-          p.uid === pageUid || 
+          p.page_pk === selectedNode.nodeId || 
+          p.uid === selectedNode.nodeId || 
           (p.page_name === selectedNode.pageId && p.report_id === selectedNode.reportId)
         );
         const reportDetails = dimensions?.reports?.find((r: any) => 
@@ -430,10 +429,10 @@ export function LineageDetailView({
         ];
       }
       case "table": {
-        const tableUid = selectedNode.nodeId.replace(/^table:/, "");
+        // Match table_pk directly with node_id (no transformation needed)
         const tableDetails = dimensions?.tables?.find((t: any) => 
-          t.table_pk === tableUid || 
-          t.uid === tableUid || 
+          t.table_pk === selectedNode.nodeId || 
+          t.uid === selectedNode.nodeId || 
           (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
@@ -443,7 +442,7 @@ export function LineageDetailView({
         );
         
         console.log("[LineageDetail] Table metadata lookup:", {
-          tableUid,
+          nodeId: selectedNode.nodeId,
           foundTableDetails: !!tableDetails,
           tableFields: tableDetails ? Object.keys(tableDetails) : [],
           tableDetailsRaw: tableDetails,

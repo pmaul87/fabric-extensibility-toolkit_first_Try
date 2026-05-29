@@ -876,7 +876,7 @@ export function LineageWorkbenchItemLineageView({
       let enrichedNode: LineageViewerNode = {
         nodeId,
         displayName: nodeName || nodeId,  // Use nodeName as initial fallback
-        entityType: nodeType || "unknown",
+        entityType: (nodeType || "unknown").toLowerCase(), // Normalize to lowercase for consistent matching
         parentNodeId: parentNode || undefined,
         datasetId: datasetId || undefined,  // Include dataset_id from v_nodes
         isGroupNode: false,  // Will be determined by checking if any nodes have this as parent
@@ -886,7 +886,7 @@ export function LineageWorkbenchItemLineageView({
       let detailRecord: any = null;
       let wasEnriched = false;
       if (dataUid) {
-        switch (nodeType) {
+        switch ((nodeType || "").toLowerCase()) { // Normalize to lowercase for case-insensitive matching
           case "report":
             detailRecord = reportsByUid.get(dataUid);
             if (detailRecord) {

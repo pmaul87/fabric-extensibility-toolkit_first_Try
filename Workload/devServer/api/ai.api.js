@@ -100,20 +100,24 @@ router.get('/api/ai/status', (req, res) => {
     const aiService = getAzureOpenAIService();
     const config = aiService.config;
     const isOpenAICompatible = aiService.isOpenAICompatibleEndpoint();
-    const isAzureAIFoundry = aiService.isAzureAIFoundry();
-    const requiresDeploymentName = !isOpenAICompatible && !isAzureAIFoundry;
+    const isAzureAIFoundryProject = aiService.isAzureAIFoundry();
 
     // Mask sensitive information
     const maskedEndpoint = config.endpoint 
       ? config.endpoint.replace(/https:\/\/([^.]+)\./, 'https://***.')
       : '';
 
+    // Only Azure AI Foundry Project format doesn't require deploymentName
+    const deploymentDisplay = isAzureAIFoundryProject 
+      ? (config.deploymentName || 'N/A (included in project)')
+      : (config.deploymentName || 'Not configured');
+
     res.json({
       configured: aiService.isConfigured(),
       enabled: config.enabled,
       endpointType: aiService.getEndpointType(),
       endpoint: maskedEndpoint,
-      deploymentName: requiresDeploymentName ? (config.deploymentName || 'Not configured') : (config.deploymentName || 'N/A (included in endpoint)'),
+      deploymentName: deploymentDisplay,
       features: {
         queryExplanation: config.enabled
       }

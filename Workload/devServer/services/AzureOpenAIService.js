@@ -44,8 +44,12 @@ class AzureOpenAIService {
    */
   isConfigured() {
     const isOpenAICompatible = this.isOpenAICompatibleEndpoint();
-    const isAzureAIFoundry = this.isAzureAIFoundry();
-    const requiresDeploymentName = !isOpenAICompatible && !isAzureAIFoundry;
+    const isAzureAIFoundryProject = this.isAzureAIFoundry();
+    
+    // OpenAI-Compatible requires deploymentName (used as "model" in request body)
+    // Azure AI Foundry Project doesn't require deploymentName (model is in project config)
+    // Classic Azure OpenAI requires deploymentName (used in URL path)
+    const requiresDeploymentName = !isAzureAIFoundryProject;
     
     return this.config.enabled && 
            this.config.endpoint && 
@@ -167,6 +171,7 @@ Format your response in clear paragraphs without markdown formatting.`;
 
     try {
       const url = this.buildApiUrl();
+      const isOpenAICompatible = this.isOpenAICompatibleEndpoint();
       const isAzureAIFoundry = this.isAzureAIFoundry();
       
       const requestBody = {
@@ -187,10 +192,18 @@ Format your response in clear paragraphs without markdown formatting.`;
         presence_penalty: 0
       };
 
+      // For OpenAI-compatible and Azure AI Foundry endpoints, include model in request body
+      if (isOpenAICompatible || isAzureAIFoundry) {
+        if (this.config.deploymentName) {
+          requestBody.model = this.config.deploymentName;
+        }
+      }
+
       console.log('[AzureOpenAI] Requesting explanation:', {
         endpointType: this.getEndpointType(),
         url: url,
         deployment: this.config.deploymentName || 'N/A',
+        includesModelInBody: isOpenAICompatible || isAzureAIFoundry,
         queryLanguage,
         queryLength: queryText.length,
         context

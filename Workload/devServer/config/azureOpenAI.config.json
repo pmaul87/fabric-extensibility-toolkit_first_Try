@@ -22,11 +22,11 @@
   "comments": {
     "setup": "Create Azure OpenAI resource and deploy a model (gpt-4.1-mini or gpt-4o recommended)",
     "endpointFormats": "Three formats supported:",
-    "format1_OpenAICompatible": "OpenAI-Compatible (Azure AI Foundry): https://RESOURCE.services.ai.azure.com/openai/v1 - deploymentName optional, no apiVersion needed",
-    "format2_AIFoundryProject": "Azure AI Foundry Project: https://RESOURCE.services.ai.azure.com/api/projects/PROJECT - no deploymentName/apiVersion needed",
+    "format1_OpenAICompatible": "OpenAI-Compatible (Azure AI Foundry): https://RESOURCE.services.ai.azure.com/openai/v1 - deploymentName REQUIRED (sent as 'model' in request), no apiVersion needed",
+    "format2_AIFoundryProject": "Azure AI Foundry Project: https://RESOURCE.services.ai.azure.com/api/projects/PROJECT - no deploymentName/apiVersion needed (model in project config)",
     "format3_ClassicAzureOpenAI": "Classic Azure OpenAI: https://RESOURCE.openai.azure.com/ - requires deploymentName and apiVersion",
     "apiKey": "Found in Azure Portal > Azure OpenAI/AI Foundry > Keys and Endpoint",
-    "deploymentName": "Model deployment name (e.g., gpt-4.1-mini). Optional for OpenAI-Compatible and AI Foundry Project formats",
+    "deploymentName": "Model deployment name (e.g., gpt-4.1-mini). REQUIRED for OpenAI-Compatible and Classic Azure OpenAI. Optional for AI Foundry Project",
     "apiVersion": "Required for classic Azure OpenAI (e.g., 2024-08-01-preview). Leave empty for OpenAI-Compatible and AI Foundry formats",
     "temperature": "Lower values (0.0-0.5) for more focused/deterministic explanations"
   }

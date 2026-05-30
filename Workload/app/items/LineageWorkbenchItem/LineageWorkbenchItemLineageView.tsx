@@ -1007,6 +1007,7 @@ export function LineageWorkbenchItemLineageView({
                 nodeName || 
                 nodeId;
               enrichedNode.dataType = detailRecord.datatype || detailRecord.data_type || detailRecord.dataType;
+              enrichedNode.table_sk = detailRecord.table_sk;
               wasEnriched = true;
             }
             break;

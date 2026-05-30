@@ -30,6 +30,7 @@ export interface LineageViewerNode {
   datasetId?: string;
   modelName?: string;
   tableName?: string;
+  table_sk?: string;
   objectName?: string;
   objectSubtype?: string;
   dataType?: string;

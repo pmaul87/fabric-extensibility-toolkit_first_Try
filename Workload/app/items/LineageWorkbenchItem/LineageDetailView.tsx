@@ -1515,6 +1515,98 @@ export function LineageDetailView({
         </div>
       )}
 
+      {/* ── Partitions (for tables) ── */}
+      {(() => {
+        if (selectedNode.entityType !== "table") return false;
+        
+        // Find table_pk from node or from dimension table lookup
+        const tableDetails = dimensions?.tables?.find((t: any) => 
+          t.table_pk === selectedNode.nodeId || 
+          t.uid === selectedNode.nodeId || 
+          (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
+        );
+        const tablePk = tableDetails?.table_pk || selectedNode.nodeId;
+        
+        // Find partitions matching this table
+        const partitions = (dimensions?.partitions || []).filter((p: any) => 
+          p.table_sk === tablePk || p.table_pk === tablePk
+        );
+        
+        console.log("[LineageDetail] Partition lookup:", {
+          entityType: selectedNode.entityType,
+          nodeId: selectedNode.nodeId,
+          tablePk,
+          foundPartitions: partitions.length,
+          partitionsSample: partitions[0],
+        });
+        
+        return partitions.length > 0;
+      })() && (
+        <Accordion className={styles.accordionPanel} collapsible>
+          <AccordionItem value="partitions">
+            <AccordionHeader>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{t("LineageDetail_Partitions", "Partitions")}</Text>
+                <Badge>
+                  {(() => {
+                    const tableDetails = dimensions?.tables?.find((t: any) => 
+                      t.table_pk === selectedNode.nodeId || 
+                      t.uid === selectedNode.nodeId || 
+                      (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
+                    );
+                    const tablePk = tableDetails?.table_pk || selectedNode.nodeId;
+                    const partitions = (dimensions?.partitions || []).filter((p: any) => 
+                      p.table_sk === tablePk || p.table_pk === tablePk
+                    );
+                    return partitions.length;
+                  })()}
+                </Badge>
+              </div>
+            </AccordionHeader>
+            <AccordionPanel>
+              <div className={styles.accordionContent}>
+                {(() => {
+                  const tableDetails = dimensions?.tables?.find((t: any) => 
+                    t.table_pk === selectedNode.nodeId || 
+                    t.uid === selectedNode.nodeId || 
+                    (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
+                  );
+                  const tablePk = tableDetails?.table_pk || selectedNode.nodeId;
+                  const partitions = (dimensions?.partitions || []).filter((p: any) => 
+                    p.table_sk === tablePk || p.table_pk === tablePk
+                  );
+                  
+                  return partitions.map((partition: any, index: number) => (
+                    <div key={`partition-${index}`} className={styles.connectionGroup} style={{ marginBottom: tokens.spacingVerticalM }}>
+                      <div className={styles.connectionGroupLabel}>
+                        {partition.name || partition.partition_name || `Partition ${index + 1}`}
+                      </div>
+                      <div style={{ paddingLeft: tokens.spacingHorizontalM, display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Mode:</Text>
+                          <Text size={200} weight="semibold">{partition.mode || "N/A"}</Text>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Source Type:</Text>
+                          <Text size={200} weight="semibold">{partition.source_type || partition.sourcetype || "N/A"}</Text>
+                        </div>
+                        {partition.query && (
+                          <div style={{ marginTop: tokens.spacingVerticalXXS }}>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Query:</Text>
+                            <div className={styles.expressionBlock} style={{ marginTop: tokens.spacingVerticalXXS }}>
+                              {partition.query}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
+      )}
 
 
       {/* ── Connection Depth Toggle ── */}

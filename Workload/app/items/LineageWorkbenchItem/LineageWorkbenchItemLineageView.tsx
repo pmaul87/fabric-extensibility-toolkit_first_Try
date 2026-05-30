@@ -681,6 +681,7 @@ export function LineageWorkbenchItemLineageView({
     const visualsByUid = new Map<string, any>();
     const semanticModelsByUid = new Map<string, any>();
     const tablesByUid = new Map<string, any>();
+    const partitionsByTablePk = new Map<string, any[]>(); // Array because table can have multiple partitions
     const columnsByUid = new Map<string, any>();
     const measuresByUid = new Map<string, any>();
     const lakehousesByUid = new Map<string, any>();
@@ -708,6 +709,13 @@ export function LineageWorkbenchItemLineageView({
         sampleRecord: dimensions.measures[0],
       });
     }
+    if (dimensions.partitions && dimensions.partitions.length > 0) {
+      console.log("[LineageView] 📋 Dimension Table Structure (partitions):", {
+        count: dimensions.partitions.length,
+        availableFields: Object.keys(dimensions.partitions[0]),
+        sampleRecord: dimensions.partitions[0],
+      });
+    }
 
     // Populate lookup maps with flexible uid field detection (prioritizing LineageTag)
     for (const r of (dimensions.reports || [])) {
@@ -729,6 +737,16 @@ export function LineageWorkbenchItemLineageView({
     for (const t of (dimensions.tables || [])) {
       const uid = t.LineageTag || t.lineageTag || t.lineage_tag || t.uid || t.data_uid || t.table_uid;
       if (uid) tablesByUid.set(uid, t);
+    }
+    // Build partitions lookup by table_pk (multiple partitions per table)
+    for (const p of (dimensions.partitions || [])) {
+      const tablePk = p.table_sk || p.table_pk;
+      if (tablePk) {
+        if (!partitionsByTablePk.has(tablePk)) {
+          partitionsByTablePk.set(tablePk, []);
+        }
+        partitionsByTablePk.get(tablePk)!.push(p);
+      }
     }
     for (const c of (dimensions.columns || [])) {
       const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
@@ -753,6 +771,7 @@ export function LineageWorkbenchItemLineageView({
       visuals: visualsByUid.size,
       semanticModels: semanticModelsByUid.size,
       tables: tablesByUid.size,
+      partitions: partitionsByTablePk.size,
       columns: columnsByUid.size,
       measures: measuresByUid.size,
       lakehouses: lakehousesByUid.size,
@@ -1160,6 +1179,7 @@ export function LineageWorkbenchItemLineageView({
     const visualsByUid = new Map<string, any>();
     const semanticModelsByUid = new Map<string, any>();
     const tablesByUid = new Map<string, any>();
+    const partitionsByTablePk = new Map<string, any[]>(); // Array because table can have multiple partitions
     const columnsByUid = new Map<string, any>();
     const measuresByUid = new Map<string, any>();
     const relationshipsByUid = new Map<string, any>();
@@ -1184,6 +1204,16 @@ export function LineageWorkbenchItemLineageView({
     for (const t of (dimensions.tables || [])) {
       const uid = t.LineageTag || t.lineageTag || t.lineage_tag || t.uid || t.data_uid || t.table_uid;
       if (uid) tablesByUid.set(uid, t);
+    }
+    // Build partitions lookup by table_pk (multiple partitions per table)
+    for (const p of (dimensions.partitions || [])) {
+      const tablePk = p.table_sk || p.table_pk;
+      if (tablePk) {
+        if (!partitionsByTablePk.has(tablePk)) {
+          partitionsByTablePk.set(tablePk, []);
+        }
+        partitionsByTablePk.get(tablePk)!.push(p);
+      }
     }
     for (const c of (dimensions.columns || [])) {
       const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;

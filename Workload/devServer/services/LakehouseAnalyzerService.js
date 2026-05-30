@@ -29,6 +29,7 @@ const LINEAGE_OPTIONAL_TABLES = [
   "t_report_visuals",  // Alternative naming convention
   "t_dataset_semantic_models",
   "t_dataset_tables",
+  "t_dataset_partitions",
   "t_dataset_columns",
   "t_dataset_measures",
   "t_dataset_measure",
@@ -850,6 +851,7 @@ class LakehouseAnalyzerService {
       visuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
       semanticModels: output.t_dataset_semantic_models || output.t_datamodel_semantic_models || output.lineage_semantic_models || [],
       tables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
+      partitions: output.t_dataset_partitions || [],
       columns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
       measures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],
       relationships: output.t_dataset_relationships || output.t_datamodel_relationships || output.lineage_semantic_model_relationships || [],
@@ -894,6 +896,11 @@ class LakehouseAnalyzerService {
         output.t_dataset_visuals?.length && `t_dataset_visuals(${output.t_dataset_visuals.length})`,
         output.t_datamodel_visuals?.length && `t_datamodel_visuals(${output.t_datamodel_visuals.length})`
       ].filter(Boolean).join(", ") || "none"
+    });
+    console.log("[LakehouseAnalyzer] Partitions:", {
+      selected: output.t_dataset_partitions ? "t_dataset_partitions" : "none",
+      count: dimensions.partitions.length,
+      available: output.t_dataset_partitions?.length ? `t_dataset_partitions(${output.t_dataset_partitions.length})` : "none"
     });
     console.log("[LakehouseAnalyzer] ===== END TABLE MAPPING =====");
 

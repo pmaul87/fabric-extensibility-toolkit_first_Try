@@ -1717,7 +1717,8 @@ export function LineageDetailView({
                 <Badge>
                   {(() => {
                     const parentTable = dimensions?.tables?.find((t: any) => 
-                      t.table_pk === selectedNode.table_sk || t.uid === selectedNode.table_sk
+                      (t.table_pk === selectedNode.table_sk || t.uid === selectedNode.table_sk) &&
+                      (t.model_id === selectedNode.datasetId || t.dataset_id === selectedNode.datasetId)
                     );
                     const tablePk = parentTable?.table_pk || parentTable?.uid;
                     const partitions = (dimensions?.partitions || []).filter((p: any) => 
@@ -1735,7 +1736,8 @@ export function LineageDetailView({
                 </Text>
                 {(() => {
                   const parentTable = dimensions?.tables?.find((t: any) => 
-                    t.table_pk === selectedNode.table_sk || t.uid === selectedNode.table_sk
+                    (t.table_pk === selectedNode.table_sk || t.uid === selectedNode.table_sk) &&
+                    (t.model_id === selectedNode.datasetId || t.dataset_id === selectedNode.datasetId)
                   );
                   const tablePk = parentTable?.table_pk || parentTable?.uid;
                   const partitions = (dimensions?.partitions || []).filter((p: any) => 

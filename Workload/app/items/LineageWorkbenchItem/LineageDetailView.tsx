@@ -11,12 +11,20 @@ import {
   AccordionItem,
   AccordionPanel,
   Switch,
+  Dialog,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogContent,
+  DialogActions,
+  Spinner,
 } from "@fluentui/react-components";
 import { 
   ArrowRight16Regular, 
   Add16Regular, 
   ChevronRight16Regular, 
-  ChevronDown16Regular 
+  ChevronDown16Regular,
+  Sparkle16Regular
 } from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
 import type { Requirement } from "../RequirementBoardItem";
@@ -215,6 +223,11 @@ export function LineageDetailView({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [showAllConnections, setShowAllConnections] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [queryExplanationOpen, setQueryExplanationOpen] = useState(false);
+  const [currentQuery, setCurrentQuery] = useState<{ text: string; language: string; context: any } | null>(null);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explanationLoading, setExplanationLoading] = useState(false);
+  const [explanationError, setExplanationError] = useState<string | null>(null);
 
   const toggleNodeExpansion = (nodeId: string) => {
     setExpandedNodes(prev => {
@@ -226,6 +239,44 @@ export function LineageDetailView({
       }
       return next;
     });
+  };
+
+  const handleExplainQuery = async (queryText: string, queryLanguage: string = 'M', context: any = {}) => {
+    setCurrentQuery({ text: queryText, language: queryLanguage, context });
+    setQueryExplanationOpen(true);
+    setExplanation(null);
+    setExplanationError(null);
+    setExplanationLoading(true);
+
+    try {
+      const response = await fetch('/api/ai/explain-query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          queryText,
+          queryLanguage,
+          context
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setExplanation(result.explanation);
+        setExplanationError(null);
+      } else {
+        setExplanation(null);
+        setExplanationError(result.error || 'Failed to generate explanation');
+      }
+    } catch (error) {
+      console.error('[LineageDetail] Failed to explain query:', error);
+      setExplanation(null);
+      setExplanationError('Failed to connect to AI service');
+    } finally {
+      setExplanationLoading(false);
+    }
   };
 
   const nodeById = useMemo(() => {
@@ -1592,8 +1643,26 @@ export function LineageDetailView({
                         </div>
                         {partition.query && (
                           <div style={{ marginTop: tokens.spacingVerticalXXS }}>
-                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Query:</Text>
-                            <div className={styles.expressionBlock} style={{ marginTop: tokens.spacingVerticalXXS }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tokens.spacingVerticalXXS }}>
+                              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Query:</Text>
+                              <Button
+                                size="small"
+                                appearance="subtle"
+                                icon={<Sparkle16Regular />}
+                                onClick={() => handleExplainQuery(
+                                  partition.query,
+                                  partition.source_type?.toUpperCase() === 'SQL' ? 'SQL' : 'M',
+                                  {
+                                    tableName: selectedNode.tableName,
+                                    datasetName: selectedNode.datasetId,
+                                    partitionName: partition.name || partition.partition_name
+                                  }
+                                )}
+                              >
+                                {t("LineageDetail_ExplainQuery", "Explain")}
+                              </Button>
+                            </div>
+                            <div className={styles.expressionBlock}>
                               {partition.query}
                             </div>
                           </div>
@@ -1691,8 +1760,27 @@ export function LineageDetailView({
                         </div>
                         {partition.query && (
                           <div style={{ marginTop: tokens.spacingVerticalXXS }}>
-                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Query:</Text>
-                            <div className={styles.expressionBlock} style={{ marginTop: tokens.spacingVerticalXXS }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tokens.spacingVerticalXXS }}>
+                              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Query:</Text>
+                              <Button
+                                size="small"
+                                appearance="subtle"
+                                icon={<Sparkle16Regular />}
+                                onClick={() => handleExplainQuery(
+                                  partition.query,
+                                  partition.source_type?.toUpperCase() === 'SQL' ? 'SQL' : 'M',
+                                  {
+                                    tableName: selectedNode.tableName,
+                                    columnName: selectedNode.displayName,
+                                    datasetName: selectedNode.datasetId,
+                                    partitionName: partition.name || partition.partition_name
+                                  }
+                                )}
+                              >
+                                {t("LineageDetail_ExplainQuery", "Explain")}
+                              </Button>
+                            </div>
+                            <div className={styles.expressionBlock}>
                               {partition.query}
                             </div>
                           </div>
@@ -2022,6 +2110,68 @@ export function LineageDetailView({
           setCreateDialogOpen(false);
         }}
       />
+
+      <Dialog open={queryExplanationOpen} onOpenChange={(_, data) => setQueryExplanationOpen(data.open)}>
+        <DialogSurface style={{ maxWidth: "800px" }}>
+          <DialogBody>
+            <DialogTitle>
+              {t("LineageDetail_QueryExplanationTitle", "Query Explanation")}
+            </DialogTitle>
+            <DialogContent>
+              {explanationLoading && (
+                <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM, padding: tokens.spacingVerticalL }}>
+                  <Spinner size="small" />
+                  <Text>{t("LineageDetail_GeneratingExplanation", "Generating explanation...")}</Text>
+                </div>
+              )}
+              
+              {!explanationLoading && explanationError && (
+                <div style={{ padding: tokens.spacingVerticalM, color: tokens.colorPaletteRedForeground1 }}>
+                  <Text weight="semibold">{t("LineageDetail_ExplanationError", "Error:")}</Text>
+                  <Text style={{ display: "block", marginTop: tokens.spacingVerticalXS }}>{explanationError}</Text>
+                  {explanationError.includes('not configured') && (
+                    <Text size={200} style={{ display: "block", marginTop: tokens.spacingVerticalS, color: tokens.colorNeutralForeground3 }}>
+                      {t("LineageDetail_ConfigureAzureOpenAI", "Please configure Azure OpenAI credentials in azureOpenAI.config.json")}
+                    </Text>
+                  )}
+                </div>
+              )}
+              
+              {!explanationLoading && !explanationError && explanation && (
+                <div style={{ padding: tokens.spacingVerticalM }}>
+                  <div style={{ 
+                    whiteSpace: "pre-wrap", 
+                    lineHeight: "1.6",
+                    color: tokens.colorNeutralForeground1
+                  }}>
+                    {explanation}
+                  </div>
+                  
+                  {currentQuery && (
+                    <div style={{ 
+                      marginTop: tokens.spacingVerticalL, 
+                      paddingTop: tokens.spacingVerticalM, 
+                      borderTop: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`
+                    }}>
+                      <Text size={200} weight="semibold" style={{ display: "block", marginBottom: tokens.spacingVerticalXS }}>
+                        {t("LineageDetail_OriginalQuery", "Original Query:")}
+                      </Text>
+                      <div className={styles.expressionBlock} style={{ fontSize: tokens.fontSizeBase200 }}>
+                        {currentQuery.text}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" onClick={() => setQueryExplanationOpen(false)}>
+                {t("Common_Close", "Close")}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 }

@@ -43,10 +43,35 @@ class AzureOpenAIService {
    * Check if Azure OpenAI is configured and enabled
    */
   isConfigured() {
+    const isAzureAIFoundry = this.config.endpoint?.includes('services.ai.azure.com/api/projects/');
+    const requiresDeploymentName = !isAzureAIFoundry;
+    
     return this.config.enabled && 
            this.config.endpoint && 
            this.config.apiKey && 
-           this.config.deploymentName;
+           (!requiresDeploymentName || this.config.deploymentName);
+  }
+
+  /**
+   * Detect if the endpoint is Azure AI Foundry or classic Azure OpenAI
+   */
+  isAzureAIFoundry() {
+    return this.config.endpoint?.includes('services.ai.azure.com/api/projects/');
+  }
+
+  /**
+   * Build the API URL based on endpoint type
+   */
+  buildApiUrl() {
+    if (this.isAzureAIFoundry()) {
+      // Azure AI Foundry format: {endpoint}/chat/completions
+      // API version and deployment are not needed in URL
+      return `${this.config.endpoint}/chat/completions`;
+    } else {
+      // Classic Azure OpenAI format: {endpoint}/openai/deployments/{deployment}/chat/completions?api-version={version}
+      const apiVersionParam = this.config.apiVersion ? `?api-version=${this.config.apiVersion}` : '';
+      return `${this.config.endpoint}/openai/deployments/${this.config.deploymentName}/chat/completions${apiVersionParam}`;
+    }
   }
 
   /**
@@ -116,7 +141,8 @@ Format your response in clear paragraphs without markdown formatting.`;
     }
 
     try {
-      const url = `${this.config.endpoint}/openai/deployments/${this.config.deploymentName}/chat/completions?api-version=${this.config.apiVersion}`;
+      const url = this.buildApiUrl();
+      const isAzureAIFoundry = this.isAzureAIFoundry();
       
       const requestBody = {
         messages: [
@@ -137,8 +163,9 @@ Format your response in clear paragraphs without markdown formatting.`;
       };
 
       console.log('[AzureOpenAI] Requesting explanation:', {
-        endpoint: this.config.endpoint,
-        deployment: this.config.deploymentName,
+        endpointType: isAzureAIFoundry ? 'Azure AI Foundry' : 'Azure OpenAI Service',
+        url: url,
+        deployment: this.config.deploymentName || 'N/A (AI Foundry)',
         queryLanguage,
         queryLength: queryText.length,
         context

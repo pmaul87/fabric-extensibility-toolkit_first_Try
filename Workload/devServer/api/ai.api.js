@@ -99,6 +99,7 @@ router.get('/api/ai/status', (req, res) => {
   try {
     const aiService = getAzureOpenAIService();
     const config = aiService.config;
+    const isAzureAIFoundry = aiService.isAzureAIFoundry();
 
     // Mask sensitive information
     const maskedEndpoint = config.endpoint 
@@ -108,8 +109,9 @@ router.get('/api/ai/status', (req, res) => {
     res.json({
       configured: aiService.isConfigured(),
       enabled: config.enabled,
+      endpointType: isAzureAIFoundry ? 'Azure AI Foundry' : 'Azure OpenAI Service',
       endpoint: maskedEndpoint,
-      deploymentName: config.deploymentName || 'Not configured',
+      deploymentName: isAzureAIFoundry ? 'N/A (included in project)' : (config.deploymentName || 'Not configured'),
       features: {
         queryExplanation: config.enabled
       }

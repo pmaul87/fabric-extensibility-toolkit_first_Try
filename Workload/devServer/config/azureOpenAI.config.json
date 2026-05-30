@@ -3,27 +3,30 @@
   "title": "Azure OpenAI Configuration",
   "description": "Configuration for Azure OpenAI integration for query explanation features",
   "azureOpenAI": {
-    "enabled": false,
-    "endpoint": "",
-    "apiKey": "",
-    "deploymentName": "query-explainer",
-    "apiVersion": "2024-08-01-preview",
+    "enabled": true,
+    "endpoint": "https://ai-query-explainer-resource.openai.azure.com/openai/v1",
+    "apiKey": "3aQZDzfujIBPNgDcNKxMOinEeB52hBdhojXt87fcDhPSHfhfMeAkJQQJ99CEACfhMk5XJ3w3AAAAACOGmO26",
+    "deploymentName": "",
+    "apiVersion": "",
     "maxTokens": 1000,
     "temperature": 0.3,
     "timeout": 30000
   },
   "features": {
     "queryExplanation": {
-      "enabled": false,
+      "enabled": true,
       "supportedLanguages": ["M", "SQL", "DAX", "KQL"],
       "maxQueryLength": 10000
     }
   },
   "comments": {
-    "setup": "Customer must create Azure OpenAI resource and deploy a model (gpt-4o recommended)",
-    "endpoint": "Format: https://YOUR-RESOURCE-NAME.openai.azure.com/",
+    "setup": "Create Azure OpenAI resource and deploy a model (gpt-4o recommended)",
+    "endpointTypes": "Two formats supported: Azure AI Foundry (services.ai.azure.com/api/projects/) OR classic Azure OpenAI Service (.openai.azure.com)",
+    "endpoint_AIFoundry": "Format: https://YOUR-RESOURCE.services.ai.azure.com/api/projects/YOUR-PROJECT (deploymentName and apiVersion not needed)",
+    "endpoint_ClassicAOAI": "Format: https://YOUR-RESOURCE.openai.azure.com/ (requires deploymentName and apiVersion)",
     "apiKey": "Found in Azure Portal > Azure OpenAI > Keys and Endpoint",
-    "deploymentName": "The name given to your model deployment in Azure OpenAI Studio",
+    "deploymentName": "Required for classic Azure OpenAI Service. Leave empty for Azure AI Foundry (model is included in project endpoint)",
+    "apiVersion": "Required for classic Azure OpenAI (e.g., 2024-08-01-preview). Leave empty for Azure AI Foundry",
     "temperature": "Lower values (0.0-0.5) for more focused/deterministic explanations"
   }
 }

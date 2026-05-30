@@ -8,7 +8,7 @@
     "apiKey": "3aQZDzfujIBPNgDcNKxMOinEeB52hBdhojXt87fcDhPSHfhfMeAkJQQJ99CEACfhMk5XJ3w3AAAAACOGmO26",
     "deploymentName": "gpt-4.1-mini",
     "apiVersion": "",
-    "maxTokens": 1000,
+    "maxTokens": 500,
     "temperature": 0.3,
     "timeout": 30000
   },
@@ -28,6 +28,7 @@
     "apiKey": "Found in Azure Portal > Azure OpenAI/AI Foundry > Keys and Endpoint",
     "deploymentName": "Model deployment name (e.g., gpt-4.1-mini). REQUIRED for OpenAI-Compatible and Classic Azure OpenAI. Optional for AI Foundry Project",
     "apiVersion": "Required for classic Azure OpenAI (e.g., 2024-08-01-preview). Leave empty for OpenAI-Compatible and AI Foundry formats",
+    "maxTokens": "Maximum tokens for AI response. 500 recommended for concise 1-2 paragraph explanations",
     "temperature": "Lower values (0.0-0.5) for more focused/deterministic explanations"
   }
 }

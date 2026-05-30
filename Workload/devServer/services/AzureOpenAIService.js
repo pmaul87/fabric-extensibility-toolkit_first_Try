@@ -32,7 +32,7 @@ class AzureOpenAIService {
         apiKey: '',
         deploymentName: '',
         apiVersion: '2024-08-01-preview',
-        maxTokens: 1000,
+        maxTokens: 500,
         temperature: 0.3,
         timeout: 30000
       };
@@ -111,25 +111,26 @@ class AzureOpenAIService {
 Your goal is to explain technical queries in simple, non-technical language.
 
 Guidelines:
-1. Explain what data is being retrieved in plain English
-2. Describe any transformations, filters, or joins applied
-3. Highlight potential performance implications if relevant
-4. Keep explanations concise (2-4 paragraphs maximum)
-5. Use business-friendly language, avoid jargon
-6. If the query has issues, mention them constructively
+1. Be concise - provide 1-2 short paragraphs maximum
+2. Focus on WHAT data is being retrieved, not HOW the code works
+3. When explaining column-level queries, specifically explain how that column is populated/calculated
+4. Use business-friendly language, avoid technical jargon
+5. Mention data sources, transformations, and filters in plain terms
+6. If a column is mentioned, focus on what values it contains and where they come from
 
-Format your response in clear paragraphs without markdown formatting.`;
+Format your response in clear, short paragraphs without markdown formatting.`;
   }
 
   /**
    * Build the user prompt with query context
    */
   buildUserPrompt(queryText, queryLanguage, context) {
-    let prompt = `Explain the following ${queryLanguage} query:\n\n${queryText}\n\n`;
+    let prompt = `Explain the following ${queryLanguage} query in 1-2 short paragraphs:\n\n${queryText}\n\n`;
     
     if (context) {
+      prompt += 'Context: ';
       if (context.tableName) {
-        prompt += `Context: This query is used for the table "${context.tableName}"`;
+        prompt += `This query is used for the table "${context.tableName}"`;
       }
       if (context.columnName) {
         prompt += ` in column "${context.columnName}"`;
@@ -138,9 +139,14 @@ Format your response in clear paragraphs without markdown formatting.`;
         prompt += ` within the semantic model "${context.datasetName}"`;
       }
       prompt += '.\n\n';
+      
+      // Add column-specific instruction
+      if (context.columnName) {
+        prompt += `Important: Explain specifically how the column "${context.columnName}" is populated by this query. What values does it contain and where do they come from?\n\n`;
+      }
     }
     
-    prompt += 'Provide a clear, business-friendly explanation of what this query does.';
+    prompt += 'Provide a clear, concise, business-friendly explanation.';
     return prompt;
   }
 

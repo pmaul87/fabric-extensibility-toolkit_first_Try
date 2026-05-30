@@ -43,8 +43,9 @@ class AzureOpenAIService {
    * Check if Azure OpenAI is configured and enabled
    */
   isConfigured() {
-    const isAzureAIFoundry = this.config.endpoint?.includes('services.ai.azure.com/api/projects/');
-    const requiresDeploymentName = !isAzureAIFoundry;
+    const isOpenAICompatible = this.isOpenAICompatibleEndpoint();
+    const isAzureAIFoundry = this.isAzureAIFoundry();
+    const requiresDeploymentName = !isOpenAICompatible && !isAzureAIFoundry;
     
     return this.config.enabled && 
            this.config.endpoint && 
@@ -53,18 +54,42 @@ class AzureOpenAIService {
   }
 
   /**
-   * Detect if the endpoint is Azure AI Foundry or classic Azure OpenAI
+   * Detect if the endpoint uses OpenAI-compatible format (/openai/v1)
+   */
+  isOpenAICompatibleEndpoint() {
+    return this.config.endpoint?.includes('/openai/v1');
+  }
+
+  /**
+   * Detect if the endpoint is Azure AI Foundry project format
    */
   isAzureAIFoundry() {
     return this.config.endpoint?.includes('services.ai.azure.com/api/projects/');
   }
 
   /**
+   * Get the endpoint type as a human-readable string
+   */
+  getEndpointType() {
+    if (this.isOpenAICompatibleEndpoint()) {
+      return 'OpenAI-Compatible (Azure AI Foundry)';
+    } else if (this.isAzureAIFoundry()) {
+      return 'Azure AI Foundry (Project)';
+    } else {
+      return 'Azure OpenAI Service';
+    }
+  }
+
+  /**
    * Build the API URL based on endpoint type
    */
   buildApiUrl() {
-    if (this.isAzureAIFoundry()) {
-      // Azure AI Foundry format: {endpoint}/chat/completions
+    if (this.isOpenAICompatibleEndpoint()) {
+      // OpenAI-compatible format: {endpoint}/chat/completions
+      // Endpoint already includes /openai/v1, just append /chat/completions
+      return `${this.config.endpoint}/chat/completions`;
+    } else if (this.isAzureAIFoundry()) {
+      // Azure AI Foundry project format: {endpoint}/chat/completions
       // API version and deployment are not needed in URL
       return `${this.config.endpoint}/chat/completions`;
     } else {
@@ -163,9 +188,9 @@ Format your response in clear paragraphs without markdown formatting.`;
       };
 
       console.log('[AzureOpenAI] Requesting explanation:', {
-        endpointType: isAzureAIFoundry ? 'Azure AI Foundry' : 'Azure OpenAI Service',
+        endpointType: this.getEndpointType(),
         url: url,
-        deployment: this.config.deploymentName || 'N/A (AI Foundry)',
+        deployment: this.config.deploymentName || 'N/A',
         queryLanguage,
         queryLength: queryText.length,
         context

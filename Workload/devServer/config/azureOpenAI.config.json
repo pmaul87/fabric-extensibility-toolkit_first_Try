@@ -4,9 +4,9 @@
   "description": "Configuration for Azure OpenAI integration for query explanation features",
   "azureOpenAI": {
     "enabled": true,
-    "endpoint": "https://ai-query-explainer-resource.openai.azure.com/openai/v1",
+    "endpoint": "https://ai-query-explainer-resource.services.ai.azure.com/openai/v1",
     "apiKey": "3aQZDzfujIBPNgDcNKxMOinEeB52hBdhojXt87fcDhPSHfhfMeAkJQQJ99CEACfhMk5XJ3w3AAAAACOGmO26",
-    "deploymentName": "",
+    "deploymentName": "gpt-4.1-mini",
     "apiVersion": "",
     "maxTokens": 1000,
     "temperature": 0.3,
@@ -20,13 +20,14 @@
     }
   },
   "comments": {
-    "setup": "Create Azure OpenAI resource and deploy a model (gpt-4o recommended)",
-    "endpointTypes": "Two formats supported: Azure AI Foundry (services.ai.azure.com/api/projects/) OR classic Azure OpenAI Service (.openai.azure.com)",
-    "endpoint_AIFoundry": "Format: https://YOUR-RESOURCE.services.ai.azure.com/api/projects/YOUR-PROJECT (deploymentName and apiVersion not needed)",
-    "endpoint_ClassicAOAI": "Format: https://YOUR-RESOURCE.openai.azure.com/ (requires deploymentName and apiVersion)",
-    "apiKey": "Found in Azure Portal > Azure OpenAI > Keys and Endpoint",
-    "deploymentName": "Required for classic Azure OpenAI Service. Leave empty for Azure AI Foundry (model is included in project endpoint)",
-    "apiVersion": "Required for classic Azure OpenAI (e.g., 2024-08-01-preview). Leave empty for Azure AI Foundry",
+    "setup": "Create Azure OpenAI resource and deploy a model (gpt-4.1-mini or gpt-4o recommended)",
+    "endpointFormats": "Three formats supported:",
+    "format1_OpenAICompatible": "OpenAI-Compatible (Azure AI Foundry): https://RESOURCE.services.ai.azure.com/openai/v1 - deploymentName optional, no apiVersion needed",
+    "format2_AIFoundryProject": "Azure AI Foundry Project: https://RESOURCE.services.ai.azure.com/api/projects/PROJECT - no deploymentName/apiVersion needed",
+    "format3_ClassicAzureOpenAI": "Classic Azure OpenAI: https://RESOURCE.openai.azure.com/ - requires deploymentName and apiVersion",
+    "apiKey": "Found in Azure Portal > Azure OpenAI/AI Foundry > Keys and Endpoint",
+    "deploymentName": "Model deployment name (e.g., gpt-4.1-mini). Optional for OpenAI-Compatible and AI Foundry Project formats",
+    "apiVersion": "Required for classic Azure OpenAI (e.g., 2024-08-01-preview). Leave empty for OpenAI-Compatible and AI Foundry formats",
     "temperature": "Lower values (0.0-0.5) for more focused/deterministic explanations"
   }
 }

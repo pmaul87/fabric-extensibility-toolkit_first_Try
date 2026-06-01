@@ -754,22 +754,26 @@ export function LineageWorkbenchItemLineageView({
       console.log("🔍 [Enrichment Debug] Total columns to index:", (dimensions.columns || []).length);
     }
     
-    let columnsByLineageTag = 0;
-    let columnsByColumnPk = 0;
+    let columnsIndexed = 0;
     for (const c of (dimensions.columns || [])) {
-      const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
-      if (uid) {
-        columnsByUid.set(uid, c);
-        columnsByLineageTag++;
+      // Build UID in node_id format: table_name|column_name|dataset_id
+      const tableName = c.table_name || c.tableName;
+      const columnName = c.column_name || c.columnName;
+      const datasetId = c.dataset_id || c.datasetId;
+      
+      if (tableName && columnName && datasetId) {
+        const nodeIdFormat = `${tableName}|${columnName}|${datasetId}`;
+        columnsByUid.set(nodeIdFormat, c);
+        columnsIndexed++;
       }
-      // ALSO index by column_pk which matches node_id format (table_name|column_name|dataset_id)
+      
+      // Also index by column_pk if it exists and differs from constructed key
       const columnPk = c.column_pk || c.columnPk;
-      if (columnPk) {
+      if (columnPk && columnPk !== `${tableName}|${columnName}|${datasetId}`) {
         columnsByUid.set(columnPk, c);
-        columnsByColumnPk++;
       }
     }
-    console.log(`🔍 [Enrichment Debug] Indexed columns: ${columnsByLineageTag} by lineage_tag, ${columnsByColumnPk} by column_pk, total map size: ${columnsByUid.size}`);
+    console.log(`🔍 [Enrichment Debug] Indexed columns: ${columnsIndexed} using node_id format (table|column|dataset), total map size: ${columnsByUid.size}`);
     for (const m of (dimensions.measures || [])) {
       const uid = m.LineageTag || m.lineageTag || m.lineage_tag || m.uid || m.data_uid || m.measure_uid;
       if (uid) measuresByUid.set(uid, m);
@@ -898,8 +902,15 @@ export function LineageWorkbenchItemLineageView({
       const parentNode = rawNode.parent_node || rawNode.parentNodeId;
       const datasetId = rawNode.dataset_id || rawNode.datasetId;
       
-      // Construct UID adaptively based on available fields
-      let dataUid = constructUid(rawNode, nodeType);
+      // For columns, use node_id directly (format: table_name|column_name|dataset_id)
+      // For other types, construct UID adaptively
+      let dataUid: string | undefined;
+      if ((nodeType || "").toLowerCase() === "column") {
+        dataUid = nodeId; // Use node_id directly for columns
+      } else {
+        dataUid = constructUid(rawNode, nodeType);
+      }
+      
       if (!dataUid) {
         noDataUidCount++;
       }
@@ -1016,21 +1027,8 @@ export function LineageWorkbenchItemLineageView({
             break;
           
           case "column":
-            console.log(`🔍 [Enrichment Debug] Looking up column with dataUid: "${dataUid}", nodeId: "${nodeId}"`);
-            // Try dataUid first (constructUid format), then fall back to nodeId (matches column_pk format)
-            detailRecord = dataUid ? columnsByUid.get(dataUid) : null;
-            if (!detailRecord && nodeId) {
-              console.log(`🔍 [Enrichment Debug] dataUid lookup failed, trying nodeId...`);
-              detailRecord = columnsByUid.get(nodeId);
-            }
-            console.log(`🔍 [Enrichment Debug] Lookup result:`, detailRecord ? "FOUND" : "NOT FOUND");
+            detailRecord = columnsByUid.get(dataUid);
             if (detailRecord) {
-              console.log(`🔍 [Enrichment Debug] Column detail:`, {
-                column_name: detailRecord.column_name || detailRecord.columnName,
-                table_name: detailRecord.table_name || detailRecord.tableName,
-                column_pk: detailRecord.column_pk || detailRecord.columnPk,
-                lineage_tag: detailRecord.lineage_tag || detailRecord.lineageTag
-              });
               enrichedNode.displayName = 
                 detailRecord.column_name || 
                 detailRecord.columnName || 

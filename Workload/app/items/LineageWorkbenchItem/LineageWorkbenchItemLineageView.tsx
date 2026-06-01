@@ -751,6 +751,9 @@ export function LineageWorkbenchItemLineageView({
     for (const c of (dimensions.columns || [])) {
       const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
       if (uid) columnsByUid.set(uid, c);
+      // ALSO index by column_pk which matches node_id format (table_name|column_name|dataset_id)
+      const columnPk = c.column_pk || c.columnPk;
+      if (columnPk) columnsByUid.set(columnPk, c);
     }
     for (const m of (dimensions.measures || [])) {
       const uid = m.LineageTag || m.lineageTag || m.lineage_tag || m.uid || m.data_uid || m.measure_uid;
@@ -1007,6 +1010,7 @@ export function LineageWorkbenchItemLineageView({
                 nodeName || 
                 nodeId;
               enrichedNode.columnName = detailRecord.column_name || detailRecord.columnName; // Store raw column name for filtering
+              enrichedNode.tableName = detailRecord.table_name || detailRecord.tableName; // Store table name for filtering
               enrichedNode.dataType = detailRecord.datatype || detailRecord.data_type || detailRecord.dataType;
               wasEnriched = true;
             }

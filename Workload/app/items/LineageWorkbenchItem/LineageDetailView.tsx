@@ -1809,6 +1809,9 @@ export function LineageDetailView({
         
         console.log("🔍 [Column Lineage Debug] dimensions.columnLineage:", dimensions?.columnLineage);
         console.log("🔍 [Column Lineage Debug] columnLineage array length:", (dimensions?.columnLineage || []).length);
+        if ((dimensions?.columnLineage || []).length > 0) {
+          console.log("🔍 [Column Lineage Debug] Sample columnLineage record:", (dimensions?.columnLineage || [])[0]);
+        }
         
         const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
           const matchesDataset = step.dataset_id === selectedNode.datasetId;

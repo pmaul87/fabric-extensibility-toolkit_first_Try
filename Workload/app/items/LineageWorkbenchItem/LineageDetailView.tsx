@@ -1795,6 +1795,122 @@ export function LineageDetailView({
         </Accordion>
       )}
 
+      {/* ── Column Transformation Steps ── */}
+      {selectedNode.entityType === "column" && (() => {
+        const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
+          const matchesDataset = step.dataset_id === selectedNode.datasetId;
+          const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+          const matchesColumn = step.final_column_name === selectedNode.displayName || 
+                                step.final_column_name === selectedNode.objectName;
+          return matchesDataset && matchesTable && matchesColumn;
+        }).sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0)); // Sort descending (latest first)
+        
+        return transformationSteps.length > 0;
+      })() && (
+        <Accordion className={styles.accordionPanel} collapsible>
+          <AccordionItem value="column-transformations">
+            <AccordionHeader>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{t("LineageDetail_ColumnTransformations", "Transformation Steps")}</Text>
+                <Badge>
+                  {(() => {
+                    const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
+                      const matchesDataset = step.dataset_id === selectedNode.datasetId;
+                      const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+                      const matchesColumn = step.final_column_name === selectedNode.displayName || 
+                                            step.final_column_name === selectedNode.objectName;
+                      return matchesDataset && matchesTable && matchesColumn;
+                    });
+                    return transformationSteps.length;
+                  })()}
+                </Badge>
+              </div>
+            </AccordionHeader>
+            <AccordionPanel>
+              <div className={styles.accordionContent}>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                  {t("LineageDetail_ColumnTransformationsHint", "Power Query (M) transformation steps for column: {{columnName}}", { columnName: selectedNode.displayName })}
+                </Text>
+                {(() => {
+                  const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
+                    const matchesDataset = step.dataset_id === selectedNode.datasetId;
+                    const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+                    const matchesColumn = step.final_column_name === selectedNode.displayName || 
+                                          step.final_column_name === selectedNode.objectName;
+                    return matchesDataset && matchesTable && matchesColumn;
+                  }).sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
+                  
+                  return (
+                    <div style={{ paddingLeft: tokens.spacingHorizontalM }}>
+                      {transformationSteps.map((step: any, index: number) => (
+                        <div key={`transform-step-${index}`} className={styles.connectionGroup} style={{ marginBottom: tokens.spacingVerticalM }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS, marginBottom: tokens.spacingVerticalXXS }}>
+                            <Badge appearance="tint" size="small" style={{ minWidth: "32px", textAlign: "center" }}>
+                              {step.step_order}
+                            </Badge>
+                            <div className={styles.connectionGroupLabel} style={{ flex: 1 }}>
+                              {step.step_name || `Step ${step.step_order}`}
+                            </div>
+                          </div>
+                          
+                          <div style={{ paddingLeft: tokens.spacingHorizontalM, display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Function:</Text>
+                              <Text size={200} weight="semibold">{step.transformation_function || "N/A"}</Text>
+                            </div>
+                            
+                            {step.column_name_at_step && step.column_name_at_step !== selectedNode.displayName && (
+                              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Column name at this step:</Text>
+                                <Text size={200} weight="semibold">{step.column_name_at_step}</Text>
+                              </div>
+                            )}
+                            
+                            {step.affects_entire_table && (
+                              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                                <Text size={200} style={{ color: tokens.colorBrandForeground1 }}>⚡ Affects entire table</Text>
+                              </div>
+                            )}
+                            
+                            {step.step_expression && (
+                              <div style={{ marginTop: tokens.spacingVerticalXXS }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tokens.spacingVerticalXXS }}>
+                                  <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>M Expression:</Text>
+                                  <Button
+                                    size="small"
+                                    appearance="subtle"
+                                    icon={<Sparkle16Regular />}
+                                    onClick={() => handleExplainQuery(
+                                      step.step_expression,
+                                      'M',
+                                      {
+                                        tableName: selectedNode.tableName,
+                                        columnName: selectedNode.displayName,
+                                        datasetName: selectedNode.datasetId,
+                                        stepName: step.step_name
+                                      }
+                                    )}
+                                  >
+                                    {t("LineageDetail_ExplainQuery", "Explain")}
+                                  </Button>
+                                </div>
+                                <div className={styles.expressionBlock}>
+                                  {step.step_expression}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
+      )}
+
 
       {/* ── Connection Depth Toggle ── */}
       {(rel.usedBy.nodes.length > 0 || rel.uses.nodes.length > 0) && (

@@ -1797,13 +1797,42 @@ export function LineageDetailView({
 
       {/* ── Column Transformation Steps ── */}
       {selectedNode.entityType === "column" && (() => {
+        // 🔍 DEBUG: Column Lineage
+        console.log("🔍 [Column Lineage Debug] Selected column entity:", {
+          displayName: selectedNode.displayName,
+          objectName: selectedNode.objectName,
+          tableName: selectedNode.tableName,
+          datasetId: selectedNode.datasetId,
+          entityType: selectedNode.entityType
+        });
+        
+        console.log("🔍 [Column Lineage Debug] dimensions.columnLineage:", dimensions?.columnLineage);
+        console.log("🔍 [Column Lineage Debug] columnLineage array length:", (dimensions?.columnLineage || []).length);
+        
         const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
           const matchesDataset = step.dataset_id === selectedNode.datasetId;
           const matchesTable = step.power_bi_table_name === selectedNode.tableName;
           const matchesColumn = step.final_column_name === selectedNode.displayName || 
                                 step.final_column_name === selectedNode.objectName;
+          
+          // 🔍 DEBUG: Log each step evaluation
+          if (matchesColumn || matchesTable) {
+            console.log("🔍 [Column Lineage Debug] Evaluating step:", {
+              step_name: step.step_name,
+              dataset_id: step.dataset_id,
+              power_bi_table_name: step.power_bi_table_name,
+              final_column_name: step.final_column_name,
+              matchesDataset,
+              matchesTable,
+              matchesColumn,
+              willInclude: matchesDataset && matchesTable && matchesColumn
+            });
+          }
+          
           return matchesDataset && matchesTable && matchesColumn;
         }).sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0)); // Sort descending (latest first)
+        
+        console.log("🔍 [Column Lineage Debug] Filtered transformation steps:", transformationSteps.length, transformationSteps);
         
         return transformationSteps.length > 0;
       })() && (

@@ -904,6 +904,12 @@ class LakehouseAnalyzerService {
       count: dimensions.partitions.length,
       available: output.t_dataset_partitions?.length ? `t_dataset_partitions(${output.t_dataset_partitions.length})` : "none"
     });
+    console.log("[LakehouseAnalyzer] 🔍 Column Lineage:", {
+      selected: output.t_column_lineage ? "t_column_lineage" : "none",
+      count: dimensions.columnLineage.length,
+      available: output.t_column_lineage?.length ? `t_column_lineage(${output.t_column_lineage.length})` : "none",
+      sampleRecord: dimensions.columnLineage.length > 0 ? dimensions.columnLineage[0] : null
+    });
     console.log("[LakehouseAnalyzer] ===== END TABLE MAPPING =====");
 
     console.log("[LakehouseAnalyzer] Dimensions summary:", {

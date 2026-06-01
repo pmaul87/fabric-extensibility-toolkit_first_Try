@@ -1016,8 +1016,13 @@ export function LineageWorkbenchItemLineageView({
             break;
           
           case "column":
-            console.log(`🔍 [Enrichment Debug] Looking up column with dataUid: "${dataUid}"`);
-            detailRecord = columnsByUid.get(dataUid);
+            console.log(`🔍 [Enrichment Debug] Looking up column with dataUid: "${dataUid}", nodeId: "${nodeId}"`);
+            // Try dataUid first (constructUid format), then fall back to nodeId (matches column_pk format)
+            detailRecord = dataUid ? columnsByUid.get(dataUid) : null;
+            if (!detailRecord && nodeId) {
+              console.log(`🔍 [Enrichment Debug] dataUid lookup failed, trying nodeId...`);
+              detailRecord = columnsByUid.get(nodeId);
+            }
             console.log(`🔍 [Enrichment Debug] Lookup result:`, detailRecord ? "FOUND" : "NOT FOUND");
             if (detailRecord) {
               console.log(`🔍 [Enrichment Debug] Column detail:`, {

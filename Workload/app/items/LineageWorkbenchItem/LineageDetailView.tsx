@@ -1853,6 +1853,7 @@ export function LineageDetailView({
                       const matchesDataset = step.dataset_id === selectedNode.datasetId;
                       const matchesTable = step.power_bi_table_name === selectedNode.tableName;
                       const matchesColumn = step.final_column_name === selectedNode.displayName || 
+                                            step.final_column_name === selectedNode.columnName ||
                                             step.final_column_name === selectedNode.objectName;
                       return matchesDataset && matchesTable && matchesColumn;
                     });
@@ -1871,6 +1872,7 @@ export function LineageDetailView({
                     const matchesDataset = step.dataset_id === selectedNode.datasetId;
                     const matchesTable = step.power_bi_table_name === selectedNode.tableName;
                     const matchesColumn = step.final_column_name === selectedNode.displayName || 
+                                          step.final_column_name === selectedNode.columnName ||
                                           step.final_column_name === selectedNode.objectName;
                     return matchesDataset && matchesTable && matchesColumn;
                   }).sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));

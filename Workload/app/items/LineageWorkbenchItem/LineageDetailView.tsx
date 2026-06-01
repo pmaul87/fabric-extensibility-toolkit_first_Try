@@ -1873,9 +1873,6 @@ export function LineageDetailView({
             </AccordionHeader>
             <AccordionPanel>
               <div className={styles.accordionContent}>
-                <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                  {t("LineageDetail_ColumnTransformationsHint", "Power Query (M) transformation steps for column: {{columnName}}", { columnName: selectedNode.displayName })}
-                </Text>
                 {(() => {
                   const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
                     const matchesDataset = step.dataset_id === selectedNode.datasetId;
@@ -1891,65 +1888,58 @@ export function LineageDetailView({
                   }).sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
                   
                   return (
-                    <div style={{ paddingLeft: tokens.spacingHorizontalM }}>
+                    <div style={{ paddingLeft: tokens.spacingHorizontalM, paddingRight: tokens.spacingHorizontalM }}>
                       {transformationSteps.map((step: any, index: number) => (
-                        <div key={`transform-step-${index}`} className={styles.connectionGroup} style={{ marginBottom: tokens.spacingVerticalM }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS, marginBottom: tokens.spacingVerticalXXS }}>
-                            <Badge appearance="tint" size="small" style={{ minWidth: "32px", textAlign: "center" }}>
+                        <div key={`transform-step-${index}`} style={{ marginBottom: tokens.spacingVerticalS, paddingBottom: tokens.spacingVerticalS, borderBottom: `1px solid ${tokens.colorNeutralStroke2}` }}>
+                          {/* Row 1: All step info in one line */}
+                          <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, flexWrap: "wrap", marginBottom: tokens.spacingVerticalXXS }}>
+                            <Badge appearance="tint" size="small" style={{ minWidth: "24px", textAlign: "center" }}>
                               {step.step_order}
                             </Badge>
-                            <div className={styles.connectionGroupLabel} style={{ flex: 1 }}>
-                              {step.step_name || `Step ${step.step_order}`}
-                            </div>
+                            <Text size={200} weight="semibold">{step.step_name || `Step ${step.step_order}`}</Text>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>·</Text>
+                            <Text size={200}>{step.transformation_function || "N/A"}</Text>
+                            {step.column_name_at_step && step.column_name_at_step !== selectedNode.displayName && (
+                              <>
+                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>·</Text>
+                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>as:</Text>
+                                <Text size={200} style={{ fontStyle: "italic" }}>{step.column_name_at_step}</Text>
+                              </>
+                            )}
+                            {step.affects_entire_table && (
+                              <>
+                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>·</Text>
+                                <Text size={200} style={{ color: tokens.colorBrandForeground1 }}>⚡ Table-wide</Text>
+                              </>
+                            )}
+                            {step.step_expression && (
+                              <Button
+                                size="small"
+                                appearance="subtle"
+                                icon={<Sparkle16Regular />}
+                                style={{ marginLeft: "auto" }}
+                                onClick={() => handleExplainQuery(
+                                  step.step_expression,
+                                  'M',
+                                  {
+                                    tableName: selectedNode.tableName,
+                                    columnName: selectedNode.displayName,
+                                    datasetName: selectedNode.datasetId,
+                                    stepName: step.step_name
+                                  }
+                                )}
+                              >
+                                {t("LineageDetail_ExplainQuery", "Explain")}
+                              </Button>
+                            )}
                           </div>
                           
-                          <div style={{ paddingLeft: tokens.spacingHorizontalM, display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
-                              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Function:</Text>
-                              <Text size={200} weight="semibold">{step.transformation_function || "N/A"}</Text>
+                          {/* Row 2: M expression */}
+                          {step.step_expression && (
+                            <div className={styles.expressionBlock} style={{ fontSize: "11px", marginTop: tokens.spacingVerticalXXS }}>
+                              {step.step_expression}
                             </div>
-                            
-                            {step.column_name_at_step && step.column_name_at_step !== selectedNode.displayName && (
-                              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
-                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Column name at this step:</Text>
-                                <Text size={200} weight="semibold">{step.column_name_at_step}</Text>
-                              </div>
-                            )}
-                            
-                            {step.affects_entire_table && (
-                              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
-                                <Text size={200} style={{ color: tokens.colorBrandForeground1 }}>⚡ Affects entire table</Text>
-                              </div>
-                            )}
-                            
-                            {step.step_expression && (
-                              <div style={{ marginTop: tokens.spacingVerticalXXS }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tokens.spacingVerticalXXS }}>
-                                  <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>M Expression:</Text>
-                                  <Button
-                                    size="small"
-                                    appearance="subtle"
-                                    icon={<Sparkle16Regular />}
-                                    onClick={() => handleExplainQuery(
-                                      step.step_expression,
-                                      'M',
-                                      {
-                                        tableName: selectedNode.tableName,
-                                        columnName: selectedNode.displayName,
-                                        datasetName: selectedNode.datasetId,
-                                        stepName: step.step_name
-                                      }
-                                    )}
-                                  >
-                                    {t("LineageDetail_ExplainQuery", "Explain")}
-                                  </Button>
-                                </div>
-                                <div className={styles.expressionBlock}>
-                                  {step.step_expression}
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                          )}
                         </div>
                       ))}
                     </div>

@@ -1816,10 +1816,14 @@ export function LineageDetailView({
         const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
           const matchesDataset = step.dataset_id === selectedNode.datasetId;
           const matchesTable = step.power_bi_table_name === selectedNode.tableName;
-          // Check multiple possible field names for column matching
-          const matchesColumn = step.final_column_name === selectedNode.displayName || 
-                                step.final_column_name === selectedNode.columnName ||
-                                step.final_column_name === selectedNode.objectName;
+          // Check BOTH final_column_name AND column_name_at_step to catch all transformation steps
+          const matchesColumn = 
+            step.final_column_name === selectedNode.displayName || 
+            step.final_column_name === selectedNode.columnName ||
+            step.final_column_name === selectedNode.objectName ||
+            step.column_name_at_step === selectedNode.displayName ||
+            step.column_name_at_step === selectedNode.columnName ||
+            step.column_name_at_step === selectedNode.objectName;
           
           // 🔍 DEBUG: Log each step evaluation
           if (matchesColumn || matchesTable) {
@@ -1828,6 +1832,7 @@ export function LineageDetailView({
               dataset_id: step.dataset_id,
               power_bi_table_name: step.power_bi_table_name,
               final_column_name: step.final_column_name,
+              column_name_at_step: step.column_name_at_step,
               matchesDataset,
               matchesTable,
               matchesColumn,
@@ -1852,9 +1857,13 @@ export function LineageDetailView({
                     const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
                       const matchesDataset = step.dataset_id === selectedNode.datasetId;
                       const matchesTable = step.power_bi_table_name === selectedNode.tableName;
-                      const matchesColumn = step.final_column_name === selectedNode.displayName || 
-                                            step.final_column_name === selectedNode.columnName ||
-                                            step.final_column_name === selectedNode.objectName;
+                      const matchesColumn = 
+                        step.final_column_name === selectedNode.displayName || 
+                        step.final_column_name === selectedNode.columnName ||
+                        step.final_column_name === selectedNode.objectName ||
+                        step.column_name_at_step === selectedNode.displayName ||
+                        step.column_name_at_step === selectedNode.columnName ||
+                        step.column_name_at_step === selectedNode.objectName;
                       return matchesDataset && matchesTable && matchesColumn;
                     });
                     return transformationSteps.length;
@@ -1871,9 +1880,13 @@ export function LineageDetailView({
                   const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
                     const matchesDataset = step.dataset_id === selectedNode.datasetId;
                     const matchesTable = step.power_bi_table_name === selectedNode.tableName;
-                    const matchesColumn = step.final_column_name === selectedNode.displayName || 
-                                          step.final_column_name === selectedNode.columnName ||
-                                          step.final_column_name === selectedNode.objectName;
+                    const matchesColumn = 
+                      step.final_column_name === selectedNode.displayName || 
+                      step.final_column_name === selectedNode.columnName ||
+                      step.final_column_name === selectedNode.objectName ||
+                      step.column_name_at_step === selectedNode.displayName ||
+                      step.column_name_at_step === selectedNode.columnName ||
+                      step.column_name_at_step === selectedNode.objectName;
                     return matchesDataset && matchesTable && matchesColumn;
                   }).sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
                   

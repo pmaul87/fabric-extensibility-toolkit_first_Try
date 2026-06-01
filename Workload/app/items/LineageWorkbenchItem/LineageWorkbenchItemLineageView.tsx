@@ -1006,6 +1006,7 @@ export function LineageWorkbenchItemLineageView({
                 detailRecord.name || 
                 nodeName || 
                 nodeId;
+              enrichedNode.columnName = detailRecord.column_name || detailRecord.columnName; // Store raw column name for filtering
               enrichedNode.dataType = detailRecord.datatype || detailRecord.data_type || detailRecord.dataType;
               wasEnriched = true;
             }

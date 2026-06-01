@@ -1801,6 +1801,7 @@ export function LineageDetailView({
         console.log("🔍 [Column Lineage Debug] Selected column entity:", {
           displayName: selectedNode.displayName,
           objectName: selectedNode.objectName,
+          columnName: selectedNode.columnName,
           tableName: selectedNode.tableName,
           datasetId: selectedNode.datasetId,
           entityType: selectedNode.entityType
@@ -1812,7 +1813,9 @@ export function LineageDetailView({
         const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
           const matchesDataset = step.dataset_id === selectedNode.datasetId;
           const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+          // Check multiple possible field names for column matching
           const matchesColumn = step.final_column_name === selectedNode.displayName || 
+                                step.final_column_name === selectedNode.columnName ||
                                 step.final_column_name === selectedNode.objectName;
           
           // 🔍 DEBUG: Log each step evaluation

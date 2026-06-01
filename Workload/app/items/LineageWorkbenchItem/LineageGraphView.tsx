@@ -31,6 +31,7 @@ export interface LineageViewerNode {
   modelName?: string;
   tableName?: string;
   table_sk?: string;
+  columnName?: string; // Raw column name from dimension table for matching with t_column_lineage
   objectName?: string;
   objectSubtype?: string;
   dataType?: string;

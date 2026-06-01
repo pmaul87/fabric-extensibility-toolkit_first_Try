@@ -748,13 +748,28 @@ export function LineageWorkbenchItemLineageView({
         partitionsByTablePk.get(tablePk)!.push(p);
       }
     }
+    // Debug: Log first column to see available fields
+    if ((dimensions.columns || []).length > 0) {
+      console.log("🔍 [Enrichment Debug] Sample column record:", (dimensions.columns || [])[0]);
+      console.log("🔍 [Enrichment Debug] Total columns to index:", (dimensions.columns || []).length);
+    }
+    
+    let columnsByLineageTag = 0;
+    let columnsByColumnPk = 0;
     for (const c of (dimensions.columns || [])) {
       const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
-      if (uid) columnsByUid.set(uid, c);
+      if (uid) {
+        columnsByUid.set(uid, c);
+        columnsByLineageTag++;
+      }
       // ALSO index by column_pk which matches node_id format (table_name|column_name|dataset_id)
       const columnPk = c.column_pk || c.columnPk;
-      if (columnPk) columnsByUid.set(columnPk, c);
+      if (columnPk) {
+        columnsByUid.set(columnPk, c);
+        columnsByColumnPk++;
+      }
     }
+    console.log(`🔍 [Enrichment Debug] Indexed columns: ${columnsByLineageTag} by lineage_tag, ${columnsByColumnPk} by column_pk, total map size: ${columnsByUid.size}`);
     for (const m of (dimensions.measures || [])) {
       const uid = m.LineageTag || m.lineageTag || m.lineage_tag || m.uid || m.data_uid || m.measure_uid;
       if (uid) measuresByUid.set(uid, m);
@@ -1001,8 +1016,16 @@ export function LineageWorkbenchItemLineageView({
             break;
           
           case "column":
+            console.log(`🔍 [Enrichment Debug] Looking up column with dataUid: "${dataUid}"`);
             detailRecord = columnsByUid.get(dataUid);
+            console.log(`🔍 [Enrichment Debug] Lookup result:`, detailRecord ? "FOUND" : "NOT FOUND");
             if (detailRecord) {
+              console.log(`🔍 [Enrichment Debug] Column detail:`, {
+                column_name: detailRecord.column_name || detailRecord.columnName,
+                table_name: detailRecord.table_name || detailRecord.tableName,
+                column_pk: detailRecord.column_pk || detailRecord.columnPk,
+                lineage_tag: detailRecord.lineage_tag || detailRecord.lineageTag
+              });
               enrichedNode.displayName = 
                 detailRecord.column_name || 
                 detailRecord.columnName || 

@@ -26,7 +26,7 @@ import { toPng } from "html-to-image";
 export interface LineageViewerNode {
   nodeId: string;
   displayName: string;
-  entityType: "report" | "page" | "visual" | "semantic_model" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "warehouse" | "unknown";
+  entityType: "report" | "page" | "visual" | "semantic_model" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "lakehouse_table" | "lakehouse_column" | "warehouse" | "unknown";
   datasetId?: string;
   modelName?: string;
   tableName?: string;
@@ -42,6 +42,8 @@ export interface LineageViewerNode {
   visualId?: string;
   pageNumber?: number;
   visualType?: string;
+  lakehouseId?: string;
+  lakehouseTableId?: string;
   parentNodeId?: string;
   isGroupNode?: boolean;
 }

@@ -36,6 +36,8 @@ const LINEAGE_OPTIONAL_TABLES = [
   "t_dataset_measure",
   "t_dataset_relationships",
   "t_dataset_lakehouses",
+  "t_dataset_lakehouse_tables",
+  "t_dataset_lakehouse_columns",
   "t_dataset_warehouses",
   "t_datamodel_reports",
   "t_datamodel_pages",
@@ -858,6 +860,8 @@ class LakehouseAnalyzerService {
       measures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],
       relationships: output.t_dataset_relationships || output.t_datamodel_relationships || output.lineage_semantic_model_relationships || [],
       lakehouses: output.t_dataset_lakehouses || output.t_datamodel_lakehouses || output.lineage_lakehouses || [],
+      lakehouseTables: output.t_dataset_lakehouse_tables || [],
+      lakehouseColumns: output.t_dataset_lakehouse_columns || [],
       warehouses: output.t_dataset_warehouses || output.t_datamodel_warehouses || output.warehouses || [],
       // Legacy aliases (for backward compatibility with old saved data)
       reportPages: output.t_report_pages || output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
@@ -925,6 +929,8 @@ class LakehouseAnalyzerService {
       measures: dimensions.measures.length,
       relationships: dimensions.relationships.length,
       lakehouses: dimensions.lakehouses.length,
+      lakehouseTables: dimensions.lakehouseTables.length,
+      lakehouseColumns: dimensions.lakehouseColumns.length,
       warehouses: dimensions.warehouses.length,
       // Legacy aliases for verification
       smTables: dimensions.smTables.length,

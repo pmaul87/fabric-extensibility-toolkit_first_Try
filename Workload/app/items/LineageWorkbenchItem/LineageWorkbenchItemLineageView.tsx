@@ -685,6 +685,8 @@ export function LineageWorkbenchItemLineageView({
     const columnsByUid = new Map<string, any>();
     const measuresByUid = new Map<string, any>();
     const lakehousesByUid = new Map<string, any>();
+    const lakehouseTablesByUid = new Map<string, any>();
+    const lakehouseColumnsByUid = new Map<string, any>();
     const warehousesByUid = new Map<string, any>();
 
     // Log dimension table structure for diagnostics
@@ -782,6 +784,14 @@ export function LineageWorkbenchItemLineageView({
       const uid = lh.LineageTag || lh.lineageTag || lh.lineage_tag || lh.uid || lh.data_uid || lh.lakehouse_uid;
       if (uid) lakehousesByUid.set(uid, lh);
     }
+    for (const lht of (dimensions.lakehouseTables || [])) {
+      const uid = lht.LineageTag || lht.lineageTag || lht.lineage_tag || lht.uid || lht.data_uid || lht.lakehouse_table_uid;
+      if (uid) lakehouseTablesByUid.set(uid, lht);
+    }
+    for (const lhc of (dimensions.lakehouseColumns || [])) {
+      const uid = lhc.LineageTag || lhc.lineageTag || lhc.lineage_tag || lhc.uid || lhc.data_uid || lhc.lakehouse_column_uid;
+      if (uid) lakehouseColumnsByUid.set(uid, lhc);
+    }
     for (const wh of (dimensions.warehouses || [])) {
       const uid = wh.LineageTag || wh.lineageTag || wh.lineage_tag || wh.uid || wh.data_uid || wh.warehouse_uid;
       if (uid) warehousesByUid.set(uid, wh);
@@ -797,6 +807,8 @@ export function LineageWorkbenchItemLineageView({
       columns: columnsByUid.size,
       measures: measuresByUid.size,
       lakehouses: lakehousesByUid.size,
+      lakehouseTables: lakehouseTablesByUid.size,
+      lakehouseColumns: lakehouseColumnsByUid.size,
       warehouses: warehousesByUid.size,
       // Sample UIDs for debugging
       sampleSemanticModelUid: semanticModelsByUid.size > 0 ? Array.from(semanticModelsByUid.keys())[0] : "N/A",
@@ -1065,6 +1077,36 @@ export function LineageWorkbenchItemLineageView({
                 detailRecord.name || 
                 nodeName || 
                 nodeId;
+              wasEnriched = true;
+            }
+            break;
+
+          case "lakehouse_table":
+            detailRecord = lakehouseTablesByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.table_name || 
+                detailRecord.tableName || 
+                detailRecord.lakehouse_table_name || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              enrichedNode.lakehouseId = detailRecord.lakehouse_id || detailRecord.lakehouseId;
+              wasEnriched = true;
+            }
+            break;
+
+          case "lakehouse_column":
+            detailRecord = lakehouseColumnsByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.column_name || 
+                detailRecord.columnName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              enrichedNode.lakehouseTableId = detailRecord.lakehouse_table_id || detailRecord.lakehouseTableId;
+              enrichedNode.dataType = detailRecord.datatype || detailRecord.data_type || detailRecord.dataType;
               wasEnriched = true;
             }
             break;

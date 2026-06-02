@@ -250,6 +250,21 @@ export function LineageTableView({
 
   useEffect(() => {
     setCollapsedGroups(new Set(groupedNodes.map((group) => group.groupId)));
+    
+    // Initialize second-level nodes as collapsed by default
+    const parentNodes = new Set<string>();
+    for (const group of groupedNodes) {
+      for (let idx = 0; idx < group.nodes.length; idx++) {
+        const node = group.nodes[idx];
+        const nextNode = group.nodes[idx + 1];
+        const indentDepth = node.depth ?? 0;
+        const hasChildren = nextNode && (nextNode.depth ?? 0) > indentDepth;
+        if (hasChildren) {
+          parentNodes.add(node.nodeId);
+        }
+      }
+    }
+    setCollapsedSecondLevelNodes(parentNodes);
   }, [groupedNodes]);
 
   const toggleGroup = (groupId: string) => {

@@ -348,6 +348,8 @@ export interface LineageNodeData extends Record<string, unknown> {
   isRelated: boolean;
   isDirectUpstream: boolean;
   isDirectDownstream: boolean;
+  isAncestor: boolean;
+  isDescendant: boolean;
   depth: number;
   isGroupNode?: boolean;
   isExpanded?: boolean;
@@ -371,6 +373,8 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
   const isRelated = data.isRelated;
   const isDirectUpstream = data.isDirectUpstream;
   const isDirectDownstream = data.isDirectDownstream;
+  const isAncestor = data.isAncestor;
+  const isDescendant = data.isDescendant;
   const isGroupNode = data.isGroupNode;
   const relatedBg = "var(--colorPaletteLavenderBackground2, #f0e8ff)";
   const relatedBorder = "var(--colorPaletteLavenderBorderActive, #6b4eff)";
@@ -380,6 +384,10 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
   const downstreamBorder = "var(--colorPaletteGreenBorderActive, #2d7d32)";
   const bidirectionalBg = "var(--colorPaletteDarkOrangeBackground2, #ffe8d1)";
   const bidirectionalBorder = "var(--colorPaletteDarkOrangeBorderActive, #b75d00)";
+  const ancestorBg = "var(--colorPaletteRedBackground1, #fef6f6)"; // Lighter red for ancestors
+  const ancestorBorder = "var(--colorPaletteRedBorder2, #e76c6e)"; // Lighter red border
+  const descendantBg = "var(--colorPaletteGreenBackground1, #f5faf7)"; // Lighter green for descendants
+  const descendantBorder = "var(--colorPaletteGreenBorder2, #4caf50)"; // Lighter green border
 
   // Determine base colors (table-based or entity-type based)
   let baseColor = pal;
@@ -396,9 +404,13 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
         ? upstreamBg
         : isDirectDownstream
           ? downstreamBg
-          : isRelated
-            ? relatedBg
-            : baseColor.bg;
+          : isAncestor
+            ? ancestorBg
+            : isDescendant
+              ? descendantBg
+              : isRelated
+                ? relatedBg
+                : baseColor.bg;
   const nodeBorder = isFocus
     ? "var(--colorBrandBackground, #0078d4)"
     : isDirectUpstream && isDirectDownstream
@@ -407,9 +419,13 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
         ? upstreamBorder
         : isDirectDownstream
           ? downstreamBorder
-          : isRelated
-            ? relatedBorder
-            : baseColor.border;
+          : isAncestor
+            ? ancestorBorder
+            : isDescendant
+              ? descendantBorder
+              : isRelated
+                ? relatedBorder
+                : baseColor.border;
   const accentColor = isFocus ? "#fff" : nodeBorder;
   
   // Build enhanced tooltip content with network metrics
@@ -849,6 +865,8 @@ function buildLayout(
   depthByNodeId: Map<string, number>,
   highlightedNodeIds: Set<string>,
   highlightedEdgeIds: Set<string>,
+  allAncestorNodeIds: Set<string>,
+  allDescendantNodeIds: Set<string>,
   expandedGroups: Set<string>,
   onToggleGroup: (groupId: string) => void,
   useTableColors: boolean,
@@ -954,6 +972,8 @@ function buildLayout(
     const isRelated = highlightedNodeIds.has(node.nodeId) && node.nodeId !== focusNodeId;
     const isDirectUpstream = directUpstreamNodeIds.has(node.nodeId);
     const isDirectDownstream = directDownstreamNodeIds.has(node.nodeId);
+    const isAncestor = allAncestorNodeIds.has(node.nodeId) && !isDirectUpstream;
+    const isDescendant = allDescendantNodeIds.has(node.nodeId) && !isDirectDownstream;
     const depth = depthByNodeId.get(node.nodeId) ?? 0;
     const metrics = networkMetrics.get(node.nodeId);
     
@@ -999,6 +1019,8 @@ function buildLayout(
         isRelated,
         isDirectUpstream,
         isDirectDownstream,
+        isAncestor,
+        isDescendant,
         depth,
         isGroupNode: node.isGroupNode,
         childCount: undefined,
@@ -1201,6 +1223,8 @@ interface LineageGraphViewProps {
   depthByNodeId: Map<string, number>;
   highlightedNodeIds?: Set<string>;
   highlightedEdgeIds?: Set<string>;
+  allAncestorNodeIds?: Set<string>;
+  allDescendantNodeIds?: Set<string>;
   expandedGroups?: Set<string>;
   onToggleGroup?: (groupId: string) => void;
   onNodeClick?: (nodeId: string) => void;
@@ -1300,11 +1324,19 @@ function GraphLegend({ useTableColors, onToggleColorMode, hierarchicalGrouping, 
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <div style={{ width: "16px", height: "16px", background: "var(--colorPaletteRedBackground2, #fde7e9)", border: "2px solid var(--colorPaletteRedBorderActive, #d13438)", borderRadius: "3px" }} />
-              <Text size={100}>Upstream</Text>
+              <Text size={100}>Direct Upstream</Text>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <div style={{ width: "16px", height: "16px", background: "var(--colorPaletteGreenBackground2, #e6f4ea)", border: "2px solid var(--colorPaletteGreenBorderActive, #2d7d32)", borderRadius: "3px" }} />
-              <Text size={100}>Downstream</Text>
+              <Text size={100}>Direct Downstream</Text>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ width: "16px", height: "16px", background: "var(--colorPaletteRedBackground1, #fef6f6)", border: "2px solid var(--colorPaletteRedBorder2, #e76c6e)", borderRadius: "3px" }} />
+              <Text size={100}>All Ancestors</Text>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ width: "16px", height: "16px", background: "var(--colorPaletteGreenBackground1, #f5faf7)", border: "2px solid var(--colorPaletteGreenBorder2, #4caf50)", borderRadius: "3px" }} />
+              <Text size={100}>All Descendants</Text>
             </div>
           </div>
         </div>
@@ -1323,6 +1355,8 @@ function LineageGraphInner({
   depthByNodeId,
   highlightedNodeIds,
   highlightedEdgeIds,
+  allAncestorNodeIds,
+  allDescendantNodeIds,
   expandedGroups: externalExpandedGroups,
   onToggleGroup: externalOnToggleGroup,
   onNodeClick,
@@ -1344,6 +1378,8 @@ function LineageGraphInner({
   
   const effectiveHighlightedNodeIds = highlightedNodeIds ?? new Set<string>();
   const effectiveHighlightedEdgeIds = highlightedEdgeIds ?? new Set<string>();
+  const effectiveAllAncestorNodeIds = allAncestorNodeIds ?? new Set<string>();
+  const effectiveAllDescendantNodeIds = allDescendantNodeIds ?? new Set<string>();
   
   // Calculate network metrics (replaces simple centrality)
   const networkMetrics = useMemo(() => 
@@ -1421,19 +1457,19 @@ function LineageGraphInner({
   }, []);
 
   const layout = useMemo(
-    () => buildLayout(lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, expandedGroups, handleToggleGroup, useTableColors, networkMetrics, criticalPathNodes, hierarchicalGrouping),
+    () => buildLayout(lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, effectiveAllAncestorNodeIds, effectiveAllDescendantNodeIds, expandedGroups, handleToggleGroup, useTableColors, networkMetrics, criticalPathNodes, hierarchicalGrouping),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, expandedGroups, handleToggleGroup, useTableColors, networkMetrics, criticalPathNodes, hierarchicalGrouping]
+    [lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, effectiveAllAncestorNodeIds, effectiveAllDescendantNodeIds, expandedGroups, handleToggleGroup, useTableColors, networkMetrics, criticalPathNodes, hierarchicalGrouping]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
 
   useEffect(() => {
-    const { nodes: n, edges: e } = buildLayout(lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, expandedGroups, handleToggleGroup, useTableColors, networkMetrics, criticalPathNodes, hierarchicalGrouping);
+    const { nodes: n, edges: e } = buildLayout(lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, effectiveAllAncestorNodeIds, effectiveAllDescendantNodeIds, expandedGroups, handleToggleGroup, useTableColors, networkMetrics, criticalPathNodes, hierarchicalGrouping);
     setNodes(n);
     setEdges(e);
-  }, [lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, expandedGroups, handleToggleGroup, setNodes, setEdges, useTableColors, networkMetrics, criticalPathNodes, hierarchicalGrouping]);
+  }, [lvNodes, lvEdges, focusNodeId, depthByNodeId, effectiveHighlightedNodeIds, effectiveHighlightedEdgeIds, effectiveAllAncestorNodeIds, effectiveAllDescendantNodeIds, expandedGroups, handleToggleGroup, setNodes, setEdges, useTableColors, networkMetrics, criticalPathNodes, hierarchicalGrouping]);
 
   // Center view on selected node
   // UI Change: Focus node centering with standard LR layout (upstream left, downstream right)

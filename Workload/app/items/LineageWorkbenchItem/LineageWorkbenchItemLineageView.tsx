@@ -1720,6 +1720,50 @@ export function LineageWorkbenchItemLineageView({
     return { depthByNodeId: depthMap, highlightedNodeIds: hlNodes, highlightedEdgeIds: hlEdges };
   }, [selectedNodeId, edges]);
 
+  // ── Compute all ancestors (parents) and descendants (children) ────────────
+  const { allAncestorNodeIds, allDescendantNodeIds } = useMemo(() => {
+    const ancestors = new Set<string>();
+    const descendants = new Set<string>();
+    
+    if (!selectedNodeId) {
+      return { allAncestorNodeIds: ancestors, allDescendantNodeIds: descendants };
+    }
+
+    // Traverse upstream to find all ancestors (parents)
+    const upstreamQueue: string[] = [selectedNodeId];
+    const visitedUpstream = new Set<string>();
+    visitedUpstream.add(selectedNodeId);
+    
+    while (upstreamQueue.length > 0) {
+      const current = upstreamQueue.shift()!;
+      for (const e of edges) {
+        if (e.toNodeId === current && !visitedUpstream.has(e.fromNodeId)) {
+          ancestors.add(e.fromNodeId);
+          visitedUpstream.add(e.fromNodeId);
+          upstreamQueue.push(e.fromNodeId);
+        }
+      }
+    }
+
+    // Traverse downstream to find all descendants (children)
+    const downstreamQueue: string[] = [selectedNodeId];
+    const visitedDownstream = new Set<string>();
+    visitedDownstream.add(selectedNodeId);
+    
+    while (downstreamQueue.length > 0) {
+      const current = downstreamQueue.shift()!;
+      for (const e of edges) {
+        if (e.fromNodeId === current && !visitedDownstream.has(e.toNodeId)) {
+          descendants.add(e.toNodeId);
+          visitedDownstream.add(e.toNodeId);
+          downstreamQueue.push(e.toNodeId);
+        }
+      }
+    }
+
+    return { allAncestorNodeIds: ancestors, allDescendantNodeIds: descendants };
+  }, [selectedNodeId, edges]);
+
   // ── Empty state configuration ─────────────────────────────────────────────
   const emptyStateConfig = useMemo(() => {
     if (dataSourceMode === "actual" && !targetLakehouseId) {
@@ -2256,6 +2300,8 @@ export function LineageWorkbenchItemLineageView({
                         depthByNodeId={depthByNodeId}
                         highlightedNodeIds={highlightedNodeIds}
                         highlightedEdgeIds={highlightedEdgeIds}
+                        allAncestorNodeIds={allAncestorNodeIds}
+                        allDescendantNodeIds={allDescendantNodeIds}
                         expandedGroups={expandedGroups}
                         onToggleGroup={(groupId) => {
                           setExpandedGroups(prev => {

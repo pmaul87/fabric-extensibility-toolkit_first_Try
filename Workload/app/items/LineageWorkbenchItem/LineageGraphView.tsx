@@ -962,10 +962,30 @@ function buildLayout(
         directDownstreamEdgeIds.add(edge.edgeId);
       }
     }
+    
+    console.log("[LineageGraph] Direct connections for focus node:", {
+      focusNodeId,
+      directUpstream: directUpstreamNodeIds.size,
+      directDownstream: directDownstreamNodeIds.size,
+      allAncestors: allAncestorNodeIds.size,
+      allDescendants: allDescendantNodeIds.size,
+      directUpstreamNodes: Array.from(directUpstreamNodeIds).slice(0, 5),
+      directDownstreamNodes: Array.from(directDownstreamNodeIds).slice(0, 5),
+    });
   }
 
   // ── Create flat node list for Dagre (hierarchical layout) ────────────────
   const nodes: LineageFlowNode[] = [];
+  
+  let debugCounts = {
+    focus: 0,
+    directUpstream: 0,
+    directDownstream: 0,
+    ancestor: 0,
+    descendant: 0,
+    related: 0,
+    other: 0,
+  };
   
   for (const node of allNodes) {
     const isFocus = node.nodeId === focusNodeId;
@@ -974,6 +994,16 @@ function buildLayout(
     const isDirectDownstream = directDownstreamNodeIds.has(node.nodeId);
     const isAncestor = allAncestorNodeIds.has(node.nodeId) && !isDirectUpstream;
     const isDescendant = allDescendantNodeIds.has(node.nodeId) && !isDirectDownstream;
+    
+    // Track classification for debugging
+    if (isFocus) debugCounts.focus++;
+    else if (isDirectUpstream) debugCounts.directUpstream++;
+    else if (isDirectDownstream) debugCounts.directDownstream++;
+    else if (isAncestor) debugCounts.ancestor++;
+    else if (isDescendant) debugCounts.descendant++;
+    else if (isRelated) debugCounts.related++;
+    else debugCounts.other++;
+    
     const depth = depthByNodeId.get(node.nodeId) ?? 0;
     const metrics = networkMetrics.get(node.nodeId);
     
@@ -1039,6 +1069,14 @@ function buildLayout(
     
     nodes.push(reactFlowNode);
   }
+  
+  console.log("[LineageGraph] Node classification summary:", {
+    totalNodes: allNodes.length,
+    classifications: debugCounts,
+    focusNode: focusNodeId,
+    sampleAncestor: Array.from(allAncestorNodeIds).find(id => !directUpstreamNodeIds.has(id)),
+    sampleDescendant: Array.from(allDescendantNodeIds).find(id => !directDownstreamNodeIds.has(id)),
+  });
 
   // ── Create edges (only between visible nodes) ────────────────────────────
   const visibleNodeIds = new Set(allNodes.map(n => n.nodeId));

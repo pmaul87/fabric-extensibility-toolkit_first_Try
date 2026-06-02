@@ -724,10 +724,6 @@ function applyDagreLayout(
       const parentPos = adjustedPositions.get(parentId);
       if (!parentPos) continue;
       
-      const parentNode = positionedNodes.find(n => n.id === parentId);
-      const parentWidth = parentNode?.style?.width as number || NODE_W;
-      const parentHeight = parentNode?.style?.height as number || 60;
-      
       // Position children in a tight cluster below/beside the parent
       childIds.forEach((childId, index) => {
         const childNode = positionedNodes.find(n => n.id === childId);

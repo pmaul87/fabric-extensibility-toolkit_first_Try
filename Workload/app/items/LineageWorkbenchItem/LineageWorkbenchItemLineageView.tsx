@@ -1720,72 +1720,6 @@ export function LineageWorkbenchItemLineageView({
     return { depthByNodeId: depthMap, highlightedNodeIds: hlNodes, highlightedEdgeIds: hlEdges };
   }, [selectedNodeId, edges]);
 
-  // ── Compute all ancestors (parents) and descendants (children) ────────────
-  const { allAncestorNodeIds, allDescendantNodeIds } = useMemo(() => {
-    const ancestors = new Set<string>();
-    const descendants = new Set<string>();
-    
-    if (!selectedNodeId) {
-      console.log("[LineageView] No selected node - skipping ancestor/descendant computation");
-      return { allAncestorNodeIds: ancestors, allDescendantNodeIds: descendants };
-    }
-
-    console.log("[LineageView] Computing ancestors/descendants for:", selectedNodeId);
-
-    // Traverse upstream to find all ancestors (parents)
-    const upstreamQueue: string[] = [selectedNodeId];
-    const visitedUpstream = new Set<string>();
-    visitedUpstream.add(selectedNodeId);
-    
-    let upstreamIterations = 0;
-    while (upstreamQueue.length > 0) {
-      const current = upstreamQueue.shift()!;
-      upstreamIterations++;
-      
-      for (const e of edges) {
-        if (e.toNodeId === current && !visitedUpstream.has(e.fromNodeId)) {
-          ancestors.add(e.fromNodeId);
-          visitedUpstream.add(e.fromNodeId);
-          upstreamQueue.push(e.fromNodeId);
-          console.log(`[LineageView]   Found ancestor: ${e.fromNodeId} (from ${current})`);
-        }
-      }
-    }
-
-    // Traverse downstream to find all descendants (children)
-    const downstreamQueue: string[] = [selectedNodeId];
-    const visitedDownstream = new Set<string>();
-    visitedDownstream.add(selectedNodeId);
-    
-    let downstreamIterations = 0;
-    while (downstreamQueue.length > 0) {
-      const current = downstreamQueue.shift()!;
-      downstreamIterations++;
-      
-      for (const e of edges) {
-        if (e.fromNodeId === current && !visitedDownstream.has(e.toNodeId)) {
-          descendants.add(e.toNodeId);
-          visitedDownstream.add(e.toNodeId);
-          downstreamQueue.push(e.toNodeId);
-          console.log(`[LineageView]   Found descendant: ${e.toNodeId} (from ${current})`);
-        }
-      }
-    }
-
-    console.log("[LineageView] Ancestor/Descendant computation complete:", {
-      selectedNode: selectedNodeId,
-      ancestorCount: ancestors.size,
-      descendantCount: descendants.size,
-      upstreamIterations,
-      downstreamIterations,
-      totalEdges: edges.length,
-      ancestors: Array.from(ancestors).slice(0, 5),
-      descendants: Array.from(descendants).slice(0, 5),
-    });
-
-    return { allAncestorNodeIds: ancestors, allDescendantNodeIds: descendants };
-  }, [selectedNodeId, edges]);
-
   // ── Empty state configuration ─────────────────────────────────────────────
   const emptyStateConfig = useMemo(() => {
     if (dataSourceMode === "actual" && !targetLakehouseId) {
@@ -2322,8 +2256,6 @@ export function LineageWorkbenchItemLineageView({
                         depthByNodeId={depthByNodeId}
                         highlightedNodeIds={highlightedNodeIds}
                         highlightedEdgeIds={highlightedEdgeIds}
-                        allAncestorNodeIds={allAncestorNodeIds}
-                        allDescendantNodeIds={allDescendantNodeIds}
                         expandedGroups={expandedGroups}
                         onToggleGroup={(groupId) => {
                           setExpandedGroups(prev => {

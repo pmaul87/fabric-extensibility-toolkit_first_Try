@@ -287,71 +287,6 @@ export function LineageDetailView({
 
   const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : undefined;
 
-  // Compute lineage statistics for the selected node
-  const lineageStats = useMemo(() => {
-    if (!selectedNodeId) {
-      return {
-        directUpstream: 0,
-        directDownstream: 0,
-        totalAncestors: 0,
-        totalDescendants: 0,
-      };
-    }
-
-    // Count direct connections
-    const directUpstream = edges.filter(e => e.toNodeId === selectedNodeId).length;
-    const directDownstream = edges.filter(e => e.fromNodeId === selectedNodeId).length;
-
-    // Compute all ancestors (BFS upstream)
-    const ancestors = new Set<string>();
-    const upstreamQueue: string[] = [selectedNodeId];
-    const visitedUpstream = new Set<string>();
-    visitedUpstream.add(selectedNodeId);
-    
-    while (upstreamQueue.length > 0) {
-      const current = upstreamQueue.shift()!;
-      for (const e of edges) {
-        if (e.toNodeId === current && !visitedUpstream.has(e.fromNodeId)) {
-          ancestors.add(e.fromNodeId);
-          visitedUpstream.add(e.fromNodeId);
-          upstreamQueue.push(e.fromNodeId);
-        }
-      }
-    }
-
-    // Compute all descendants (BFS downstream)
-    const descendants = new Set<string>();
-    const downstreamQueue: string[] = [selectedNodeId];
-    const visitedDownstream = new Set<string>();
-    visitedDownstream.add(selectedNodeId);
-    
-    while (downstreamQueue.length > 0) {
-      const current = downstreamQueue.shift()!;
-      for (const e of edges) {
-        if (e.fromNodeId === current && !visitedDownstream.has(e.toNodeId)) {
-          descendants.add(e.toNodeId);
-          visitedDownstream.add(e.toNodeId);
-          downstreamQueue.push(e.toNodeId);
-        }
-      }
-    }
-
-    console.log("[LineageDetail] Lineage stats for node:", {
-      nodeId: selectedNodeId,
-      directUpstream,
-      directDownstream,
-      totalAncestors: ancestors.size,
-      totalDescendants: descendants.size,
-    });
-
-    return {
-      directUpstream,
-      directDownstream,
-      totalAncestors: ancestors.size,
-      totalDescendants: descendants.size,
-    };
-  }, [selectedNodeId, edges]);
-
   const inferredExpression = useMemo(() => {
     if (!selectedNodeId) {
       return undefined;
@@ -1506,47 +1441,6 @@ export function LineageDetailView({
           </div>
         </div>
       </div>
-
-      {/* ── Lineage Statistics ── */}
-      {selectedNode && (
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>{t("LineageDetail_LineageStats", "Lineage Statistics")}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: tokens.spacingVerticalM, marginTop: tokens.spacingVerticalS }}>
-            <div style={{ padding: tokens.spacingVerticalS, background: tokens.colorNeutralBackground3, borderRadius: tokens.borderRadiusMedium }}>
-              <Text size={100} style={{ color: tokens.colorNeutralForeground3, display: "block", marginBottom: tokens.spacingVerticalXXS }}>
-                {t("LineageDetail_DirectUpstream", "Direct Upstream")}
-              </Text>
-              <Text size={500} weight="bold" style={{ color: tokens.colorPaletteRedForeground1 }}>
-                {lineageStats.directUpstream}
-              </Text>
-            </div>
-            <div style={{ padding: tokens.spacingVerticalS, background: tokens.colorNeutralBackground3, borderRadius: tokens.borderRadiusMedium }}>
-              <Text size={100} style={{ color: tokens.colorNeutralForeground3, display: "block", marginBottom: tokens.spacingVerticalXXS }}>
-                {t("LineageDetail_DirectDownstream", "Direct Downstream")}
-              </Text>
-              <Text size={500} weight="bold" style={{ color: tokens.colorPaletteGreenForeground1 }}>
-                {lineageStats.directDownstream}
-              </Text>
-            </div>
-            <div style={{ padding: tokens.spacingVerticalS, background: tokens.colorNeutralBackground3, borderRadius: tokens.borderRadiusMedium }}>
-              <Text size={100} style={{ color: tokens.colorNeutralForeground3, display: "block", marginBottom: tokens.spacingVerticalXXS }}>
-                {t("LineageDetail_TotalAncestors", "Total Ancestors")}
-              </Text>
-              <Text size={500} weight="bold" style={{ color: tokens.colorPaletteRedForeground2 }}>
-                {lineageStats.totalAncestors}
-              </Text>
-            </div>
-            <div style={{ padding: tokens.spacingVerticalS, background: tokens.colorNeutralBackground3, borderRadius: tokens.borderRadiusMedium }}>
-              <Text size={100} style={{ color: tokens.colorNeutralForeground3, display: "block", marginBottom: tokens.spacingVerticalXXS }}>
-                {t("LineageDetail_TotalDescendants", "Total Descendants")}
-              </Text>
-              <Text size={500} weight="bold" style={{ color: tokens.colorPaletteGreenForeground2 }}>
-                {lineageStats.totalDescendants}
-              </Text>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Connected elements ── */}
       {(nodeEdges.incoming.length > 0 || nodeEdges.outgoing.length > 0) && (

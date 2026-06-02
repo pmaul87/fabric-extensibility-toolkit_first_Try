@@ -245,6 +245,8 @@ export function LineageTableView({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set(groupedNodes.map((group) => group.groupId))
   );
+  
+  const [collapsedSecondLevelNodes, setCollapsedSecondLevelNodes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setCollapsedGroups(new Set(groupedNodes.map((group) => group.groupId)));
@@ -257,6 +259,19 @@ export function LineageTableView({
         next.delete(groupId);
       } else {
         next.add(groupId);
+      }
+      return next;
+    });
+  };
+  
+  const toggleSecondLevelNode = (nodeId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setCollapsedSecondLevelNodes((previous) => {
+      const next = new Set(previous);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
       }
       return next;
     });
@@ -341,6 +356,30 @@ export function LineageTableView({
           {!collapsedGroups.has(group.groupId) && group.nodes.map((node, idx) => {
             const isParentNode = idx === 0;
             const indentDepth = node.depth ?? 0;
+            
+            // Determine if this node has children (next node has greater depth)
+            const nextNode = group.nodes[idx + 1];
+            const hasChildren = nextNode && (nextNode.depth ?? 0) > indentDepth;
+            const isCollapsed = collapsedSecondLevelNodes.has(node.nodeId);
+            
+            // Skip rendering if this node's parent is collapsed
+            if (indentDepth > 0) {
+              // Find the parent by looking backwards for a node with depth = indentDepth - 1
+              for (let i = idx - 1; i >= 0; i--) {
+                const potentialParent = group.nodes[i];
+                const parentDepth = potentialParent.depth ?? 0;
+                if (parentDepth === indentDepth - 1) {
+                  // This is the direct parent
+                  if (collapsedSecondLevelNodes.has(potentialParent.nodeId)) {
+                    return null; // Skip rendering this node
+                  }
+                  break;
+                } else if (parentDepth < indentDepth - 1) {
+                  // We've gone too far back, no direct parent found
+                  break;
+                }
+              }
+            }
 
             return (
               <div
@@ -350,7 +389,22 @@ export function LineageTableView({
                 style={indentDepth > 0 ? { paddingLeft: `calc(${tokens.spacingHorizontalM} + ${indentDepth * 20}px)` } : undefined}
               >
                 <div className={styles.nameCell}>
-                  <Text className={styles.nodeName}>{node.displayName}</Text>
+                  <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                    {hasChildren && (
+                      <span
+                        onClick={(e) => toggleSecondLevelNode(node.nodeId, e)}
+                        style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+                      >
+                        {isCollapsed ? (
+                          <ChevronRightRegular fontSize={14} />
+                        ) : (
+                          <ChevronDownRegular fontSize={14} />
+                        )}
+                      </span>
+                    )}
+                    {!hasChildren && <span style={{ width: "14px" }} />}
+                    <Text className={styles.nodeName}>{node.displayName}</Text>
+                  </div>
                 </div>
                 <Badge appearance="outline" color={isParentNode ? "important" : "informative"}>
                   {node.entityType}

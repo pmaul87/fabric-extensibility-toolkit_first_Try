@@ -1072,7 +1072,38 @@ export function LineageWorkbenchItemLineageView({
       })),
     });
 
-    return result;
+    // Remove dangling semantic-model nodes that have no structural or lineage links.
+    // These often surface as isolated `sm:<datasetId>` entries and break focused view UX.
+    const connectedNodeIds = new Set<string>();
+    const rawEdges = Array.isArray(activeSnapshot?.edges) ? activeSnapshot.edges : [];
+    for (const rawEdge of rawEdges) {
+      const fromNodeId = rawEdge.referenced_node_id || rawEdge.from_node || rawEdge.fromNodeId || rawEdge.object_lineage_id || rawEdge.objectLineageId;
+      const toNodeId = rawEdge.node_id || rawEdge.to_node || rawEdge.toNodeId || rawEdge.referenced_object_key || rawEdge.refernced_object_key || rawEdge.referenced_object_lineage_id || rawEdge.referencedObjectLineageId;
+      if (fromNodeId) connectedNodeIds.add(fromNodeId);
+      if (toNodeId) connectedNodeIds.add(toNodeId);
+    }
+
+    const filteredResult = result.filter((node) => {
+      if (node.entityType !== "semantic_model") return true;
+      if (!node.nodeId.startsWith("sm:")) return true;
+
+      const hasChildren = parentChildMap.has(node.nodeId);
+      const isConnectedByEdge = connectedNodeIds.has(node.nodeId);
+      return hasChildren || isConnectedByEdge;
+    });
+
+    const removedDanglingSemanticModels = result.length - filteredResult.length;
+    if (removedDanglingSemanticModels > 0) {
+      console.warn("[LineageView] Removed dangling semantic_model nodes:", {
+        removedCount: removedDanglingSemanticModels,
+        removedNodeIds: result
+          .filter((node) => !filteredResult.some((kept) => kept.nodeId === node.nodeId))
+          .map((node) => node.nodeId)
+          .slice(0, 10),
+      });
+    }
+
+    return filteredResult;
   }, [activeSnapshot]);
 
   const edges: LineageViewerEdge[] = useMemo(() => {
@@ -1481,6 +1512,31 @@ export function LineageWorkbenchItemLineageView({
     
     // Filter nodes to those we visited
     const focusedNodes = nodes.filter((n) => visited.has(n.nodeId));
+    
+    // ── Add parent nodes to support hierarchy edges ──────────────────────────
+    // When a child node is visible, ensure its parent is also included for structural context
+    const nodeMap = new Map(nodes.map(n => [n.nodeId, n]));
+    const parentsToAdd = new Set<string>();
+    
+    for (const node of focusedNodes) {
+      if (node.parentNodeId && nodeMap.has(node.parentNodeId) && !visited.has(node.parentNodeId)) {
+        parentsToAdd.add(node.parentNodeId);
+      }
+    }
+    
+    // Add parent nodes to visited set and focused nodes
+    for (const parentId of parentsToAdd) {
+      visited.add(parentId);
+      const parentNode = nodeMap.get(parentId);
+      if (parentNode) {
+        focusedNodes.push(parentNode);
+      }
+    }
+    
+    console.log("[LineageView] Added parent nodes for hierarchy:", {
+      parentsAdded: parentsToAdd.size,
+      totalFocusedNodes: focusedNodes.length,
+    });
     
     // Use ALL edges (not just filtered ones) - show complete lineage
     const focusedEdges = edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));

@@ -1485,16 +1485,35 @@ export function LineageWorkbenchItemLineageView({
     // Use ALL edges (not just filtered ones) - show complete lineage
     const focusedEdges = edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));
 
+    // Add synthetic parent-child edges for hierarchical relationships
+    const syntheticEdges: LineageViewerEdge[] = [];
+    for (const node of focusedNodes) {
+      if (node.parentNodeId && visited.has(node.parentNodeId)) {
+        // Create edge from parent to child
+        syntheticEdges.push({
+          edgeId: `hierarchy_${node.parentNodeId}_${node.nodeId}`,
+          fromNodeId: node.parentNodeId,
+          toNodeId: node.nodeId,
+          edgeType: "hierarchy", // Distinct type for styling
+        });
+      }
+    }
+
+    // Combine lineage edges with synthetic hierarchy edges
+    const allGraphEdges = [...focusedEdges, ...syntheticEdges];
+
     console.log("[LineageView] graphNodes/graphEdges (focused mode):", {
       focusedNodes: focusedNodes.length,
-      focusedEdges: focusedEdges.length,
+      lineageEdges: focusedEdges.length,
+      hierarchyEdges: syntheticEdges.length,
+      totalGraphEdges: allGraphEdges.length,
       visitedNodes: visited.size,
       totalEdges: edges.length,
     });
 
     return {
       graphNodes: focusedNodes,
-      graphEdges: focusedEdges,
+      graphEdges: allGraphEdges,
       hiddenNodeCount: Math.max(0, nodes.length - focusedNodes.length),
       hiddenEdgeCount: Math.max(0, edges.length - focusedEdges.length),
       requiresSelection: false,

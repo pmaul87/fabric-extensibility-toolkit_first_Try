@@ -38,7 +38,6 @@ import { buildGraphProjection, filterEdgesByNodes, filterNodes } from "./lineage
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const SIDEBAR_WIDTH = 260;
 const DEFAULT_GRAPH_NODE_LIMIT = 80;
 type ExploreLayoutMode = "stacked" | "side-by-side" | "top-bottom";
 
@@ -49,105 +48,6 @@ const useStyles = makeStyles({
     height: "100%",
     width: "100%",
     overflow: "hidden",
-  },
-
-  // ── Left sidebar ──────────────────────────────────────────────────────────
-  sidebar: {
-    display: "flex",
-    flexDirection: "column",
-    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
-    background: tokens.colorNeutralBackground2,
-    flexShrink: 0,
-    overflow: "hidden",
-  },
-  sidebarHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    minHeight: "44px",
-    flexShrink: 0,
-  },
-  sidebarTitle: {
-    fontWeight: tokens.fontWeightSemibold,
-    fontSize: tokens.fontSizeBase300,
-    color: tokens.colorNeutralForeground1,
-  },
-  sidebarContent: {
-    flex: 1,
-    overflowY: "auto",
-    padding: tokens.spacingVerticalM,
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalM,
-  },
-
-  // ── Sidebar section accordion ─────────────────────────────────────────────
-  sidebarSection: {
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalXS,
-  },
-  sidebarSectionHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: tokens.spacingHorizontalXS,
-    cursor: "pointer",
-    padding: `${tokens.spacingVerticalXS} 0`,
-    color: tokens.colorNeutralForeground2,
-    userSelect: "none",
-  },
-  sidebarSectionLabel: {
-    fontSize: tokens.fontSizeBase200,
-    fontWeight: tokens.fontWeightSemibold,
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
-    flex: 1,
-  },
-  sidebarSectionBody: {
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalS,
-    paddingLeft: tokens.spacingHorizontalS,
-  },
-
-  // ── Stats grid ────────────────────────────────────────────────────────────
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: tokens.spacingHorizontalS,
-  },
-  statItem: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-    padding: tokens.spacingVerticalXS,
-    background: tokens.colorNeutralBackground1,
-    borderRadius: tokens.borderRadiusMedium,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-  },
-  statValue: {
-    fontSize: tokens.fontSizeBase500,
-    fontWeight: tokens.fontWeightSemibold,
-    color: tokens.colorBrandForeground1,
-  },
-  statLabel: {
-    fontSize: tokens.fontSizeBase100,
-    color: tokens.colorNeutralForeground3,
-  },
-
-  // ── Collapsed sidebar rail ────────────────────────────────────────────────
-  sidebarRail: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: `${tokens.spacingVerticalM} 0`,
-    gap: tokens.spacingVerticalS,
-    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
-    background: tokens.colorNeutralBackground2,
-    width: "44px",
-    flexShrink: 0,
   },
 
   // ── Main content ──────────────────────────────────────────────────────────
@@ -354,28 +254,6 @@ function createMockSnapshot() {
   };
 }
 
-interface SidebarSectionProps {
-  label: string;
-  icon: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}
-
-function SidebarSection({ label, icon, defaultOpen = true, children }: SidebarSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
-  const styles = useStyles();
-  return (
-    <div className={styles.sidebarSection}>
-      <div className={styles.sidebarSectionHeader} onClick={() => setOpen((v) => !v)}>
-        {icon}
-        <span className={styles.sidebarSectionLabel}>{label}</span>
-        {open ? <ChevronDownRegular fontSize={14} /> : <ChevronRightRegular fontSize={14} />}
-      </div>
-      {open && <div className={styles.sidebarSectionBody}>{children}</div>}
-    </div>
-  );
-}
-
 // ─── CollapsiblePanel ─────────────────────────────────────────────────────────
 
 interface CollapsiblePanelProps {
@@ -458,7 +336,6 @@ export function LineageWorkbenchItemLineageView({
   const hasHydratedActualGraphRef = useRef(false);
 
   // ── Layout state ──────────────────────────────────────────────────────────
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tableExpanded, setTableExpanded] = useState(true);
   const [graphExpanded, setGraphExpanded] = useState(false);
   const [detailExpanded, setDetailExpanded] = useState(false);
@@ -1540,83 +1417,6 @@ export function LineageWorkbenchItemLineageView({
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className={styles.root}>
-      {/* ── Left sidebar ── */}
-      {sidebarOpen ? (
-        <div className={styles.sidebar} style={{ width: SIDEBAR_WIDTH }}>
-          <div className={styles.sidebarHeader}>
-            <Text className={styles.sidebarTitle}>
-              {t("LineageWorkbench_Sidebar_Title", "Filters & Settings")}
-            </Text>
-            <Tooltip content={t("LineageWorkbench_Sidebar_Collapse", "Collapse panel")} relationship="label">
-              <Button
-                appearance="subtle"
-                size="small"
-                icon={<ChevronLeftFilled />}
-                onClick={() => setSidebarOpen(false)}
-              />
-            </Tooltip>
-          </div>
-
-          <div className={styles.sidebarContent}>
-            {/* Settings section - simplified to only show what's needed */}
-            <SidebarSection
-              label={t("LineageWorkbench_Section_Settings", "Settings")}
-              icon={<SettingsRegular fontSize={14} />}
-            >
-              {/* All controls moved to their respective panels */}
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3, fontStyle: "italic" }}>
-                {t("LineageWorkbench_Settings_MovedHint", "Controls are now located above their respective views.")}
-              </Text>
-            </SidebarSection>
-
-            {/* Filters section - will be moved above table */}
-            <SidebarSection
-              label={t("LineageWorkbench_Section_Filters", "Filters")}
-              icon={<FilterRegular fontSize={14} />}
-            >
-              <Input
-                contentBefore={<SearchRegular />}
-                placeholder={t("LineageWorkbench_Search", "Search nodes...")}
-                value={searchText}
-                onChange={(_, data) => setSearchText(data.value)}
-                size="small"
-              />
-              <Select
-                value={entityFilter}
-                onChange={(_, data) => setEntityFilter(data.value)}
-                size="small"
-              >
-                <option value="all">{t("LineageWorkbench_AllTypes", "All types")}</option>
-                {entityTypes.map((et) => (
-                  <option key={et} value={et}>{et}</option>
-                ))}
-              </Select>
-              <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>
-                {t("LineageWorkbench_Showing", "Showing")} {filtered.length} / {nodes.length}
-              </Text>
-            </SidebarSection>
-          </div>
-        </div>
-      ) : (
-        /* ── Collapsed rail ── */
-        <div className={styles.sidebarRail}>
-          <Tooltip content={t("LineageWorkbench_Sidebar_Expand", "Expand panel")} relationship="label">
-            <Button
-              appearance="subtle"
-              size="small"
-              icon={<ChevronRightFilled />}
-              onClick={() => setSidebarOpen(true)}
-            />
-          </Tooltip>
-          <Tooltip content={t("LineageWorkbench_Section_Filters", "Filters")} relationship="label">
-            <Button appearance="subtle" size="small" icon={<FilterRegular />} onClick={() => setSidebarOpen(true)} />
-          </Tooltip>
-          <Tooltip content={t("LineageWorkbench_Section_Settings", "Settings")} relationship="label">
-            <Button appearance="subtle" size="small" icon={<SettingsRegular />} onClick={() => setSidebarOpen(true)} />
-          </Tooltip>
-        </div>
-      )}
-
       {/* ── Main content: three collapsible panels stacked vertically ── */}
       <div className={styles.mainContent}>
         {loadError && (

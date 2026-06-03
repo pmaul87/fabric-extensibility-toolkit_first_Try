@@ -1548,145 +1548,47 @@ export function LineageWorkbenchItemLineageView({
       };
     }
 
-    if (graphScope === "full") {
-      let limitedNodes = [...filtered]
-        .sort((a, b) => a.displayName.localeCompare(b.displayName))
-        .slice(0, graphNodeLimit);
-      
-      // IMPORTANT: Always include parent semantic model containers when their children are visible
-      const limitedNodeIds = new Set(limitedNodes.map((n) => n.nodeId));
-      const parentIds = new Set<string>();
-      for (const node of limitedNodes) {
-        if (node.parentNodeId && !limitedNodeIds.has(node.parentNodeId)) {
-          parentIds.add(node.parentNodeId);
-        }
-      }
-      
-      // Add parent nodes from full nodes list
-      for (const parentId of parentIds) {
-        const parentNode = nodes.find(n => n.nodeId === parentId);
-        if (parentNode) {
-          limitedNodes.push(parentNode);
-          limitedNodeIds.add(parentId);
-        }
-      }
-      
-      // For full mode, use filtered edges (both endpoints must be in filtered set)
-      const limitedEdges = filteredEdges.filter((e) => limitedNodeIds.has(e.fromNodeId) && limitedNodeIds.has(e.toNodeId));
-
-      console.log("[LineageView] graphNodes/graphEdges (full mode):", {
-        limitedNodes: limitedNodes.length,
-        limitedEdges: limitedEdges.length,
-        filteredEdges: filteredEdges.length,
-        parentNodesAdded: parentIds.size,
-      });
-
-      return {
-        graphNodes: limitedNodes,
-        graphEdges: limitedEdges,
-        hiddenNodeCount: Math.max(0, filtered.length - limitedNodes.length),
-        hiddenEdgeCount: Math.max(0, filteredEdges.length - limitedEdges.length),
-        requiresSelection: false,
-      };
-    }
-
-    // Focused mode: show selected node + all connected nodes (regardless of filter)
-    const selectedInFilter = selectedNodeId && filtered.some((n) => n.nodeId === selectedNodeId);
-    if (!selectedInFilter) {
-      return {
-        graphNodes: [] as LineageViewerNode[],
-        graphEdges: [] as LineageViewerEdge[],
-        hiddenNodeCount: filtered.length,
-        hiddenEdgeCount: filteredEdges.length,
-        requiresSelection: true,
-      };
-    }
-
-    // Build adjacency map from ALL edges (not just filtered ones)
-    const adjacency = new Map<string, string[]>();
-    for (const edge of edges) {
-      if (!adjacency.has(edge.fromNodeId)) adjacency.set(edge.fromNodeId, []);
-      if (!adjacency.has(edge.toNodeId)) adjacency.set(edge.toNodeId, []);
-      adjacency.get(edge.fromNodeId)!.push(edge.toNodeId);
-      adjacency.get(edge.toNodeId)!.push(edge.fromNodeId);
-    }
-
-    // Build directed upstream and downstream maps
-    const upstreamMap = new Map<string, string[]>();
-    const downstreamMap = new Map<string, string[]>();
-    for (const edge of edges) {
-      if (!upstreamMap.has(edge.toNodeId)) upstreamMap.set(edge.toNodeId, []);
-      upstreamMap.get(edge.toNodeId)!.push(edge.fromNodeId);
-      if (!downstreamMap.has(edge.fromNodeId)) downstreamMap.set(edge.fromNodeId, []);
-      downstreamMap.get(edge.fromNodeId)!.push(edge.toNodeId);
-    }
-
-    // BFS traversal: collect upstream and downstream separately, then combine
-    // Depth of 5 allows seeing deeper lineage chains while maintaining directionality
-    // Upstream only follows upstream edges, downstream only follows downstream edges
-    const maxDepth = graphDisplayMode === "filter" ? 5 : Infinity;
-    const visited = new Set<string>([selectedNodeId]);
-    const depthMap = new Map<string, number>([[selectedNodeId, 0]]);
+    // Show all nodes up to graphNodeLimit
+    let limitedNodes = [...filtered]
+      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      .slice(0, graphNodeLimit);
     
-    // Traverse upstream (dependencies)
-    const upstreamQueue: string[] = [selectedNodeId];
-    while (upstreamQueue.length > 0 && visited.size < graphNodeLimit) {
-      const current = upstreamQueue.shift()!;
-      const currentDepth = depthMap.get(current) || 0;
-      if (currentDepth >= maxDepth) continue;
-      
-      const upstreamNeighbors = upstreamMap.get(current) ?? [];
-      for (const neighbor of upstreamNeighbors) {
-        if (visited.has(neighbor)) continue;
-        visited.add(neighbor);
-        depthMap.set(neighbor, currentDepth + 1);
-        upstreamQueue.push(neighbor);
-        if (visited.size >= graphNodeLimit) break;
+    // IMPORTANT: Always include parent semantic model containers when their children are visible
+    const limitedNodeIds = new Set(limitedNodes.map((n) => n.nodeId));
+    const parentIds = new Set<string>();
+    for (const node of limitedNodes) {
+      if (node.parentNodeId && !limitedNodeIds.has(node.parentNodeId)) {
+        parentIds.add(node.parentNodeId);
       }
     }
     
-    // Traverse downstream (dependents)
-    const downstreamQueue: string[] = [selectedNodeId];
-    while (downstreamQueue.length > 0 && visited.size < graphNodeLimit) {
-      const current = downstreamQueue.shift()!;
-      const currentDepth = depthMap.get(current) || 0;
-      if (currentDepth >= maxDepth) continue;
-      
-      const downstreamNeighbors = downstreamMap.get(current) ?? [];
-      for (const neighbor of downstreamNeighbors) {
-        if (visited.has(neighbor)) continue;
-        visited.add(neighbor);
-        depthMap.set(neighbor, currentDepth + 1);
-        downstreamQueue.push(neighbor);
-        if (visited.size >= graphNodeLimit) break;
+    // Add parent nodes from full nodes list
+    for (const parentId of parentIds) {
+      const parentNode = nodes.find(n => n.nodeId === parentId);
+      if (parentNode) {
+        limitedNodes.push(parentNode);
+        limitedNodeIds.add(parentId);
       }
     }
     
-    // Filter nodes to those we visited
-    const focusedNodes = nodes.filter((n) => visited.has(n.nodeId));
-    
-    // NOTE: Parent-child relationships are preserved in the node data model
-    // but are NOT rendered as hierarchical nesting in the graph view
-    // The graph view shows a flat network with edges showing relationships
-    
-    // For focused mode, use ALL edges (not just filtered ones)
-    const focusedEdges = edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));
+    // Use filtered edges (both endpoints must be in filtered set)
+    const limitedEdges = filteredEdges.filter((e) => limitedNodeIds.has(e.fromNodeId) && limitedNodeIds.has(e.toNodeId));
 
-    console.log("[LineageView] graphNodes/graphEdges (focused mode):", {
-      focusedNodes: focusedNodes.length,
-      focusedEdges: focusedEdges.length,
-      visitedNodes: visited.size,
-      totalEdges: edges.length,
+    console.log("[LineageView] graphNodes/graphEdges:", {
+      limitedNodes: limitedNodes.length,
+      limitedEdges: limitedEdges.length,
+      filteredEdges: filteredEdges.length,
+      parentNodesAdded: parentIds.size,
     });
 
     return {
-      graphNodes: focusedNodes,
-      graphEdges: focusedEdges,
-      hiddenNodeCount: Math.max(0, nodes.length - focusedNodes.length),
-      hiddenEdgeCount: Math.max(0, edges.length - focusedEdges.length),
+      graphNodes: limitedNodes,
+      graphEdges: limitedEdges,
+      hiddenNodeCount: Math.max(0, filtered.length - limitedNodes.length),
+      hiddenEdgeCount: Math.max(0, filteredEdges.length - limitedEdges.length),
       requiresSelection: false,
     };
-  }, [filtered, filteredEdges, nodes, edges, graphNodeLimit, graphScope, selectedNodeId, graphDisplayMode]);
+  }, [filtered, filteredEdges, nodes, edges, graphNodeLimit, selectedNodeId, graphDisplayMode]);
 
   // ── BFS highlight map ─────────────────────────────────────────────────────
   const { depthByNodeId, highlightedNodeIds, highlightedEdgeIds} = useMemo(() => {

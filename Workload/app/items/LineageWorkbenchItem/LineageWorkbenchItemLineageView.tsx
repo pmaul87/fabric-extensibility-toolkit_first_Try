@@ -1558,133 +1558,18 @@ export function LineageWorkbenchItemLineageView({
           </div>
 
           <div className={styles.sidebarContent}>
-            {/* Settings section */}
+            {/* Settings section - simplified to only show what's needed */}
             <SidebarSection
               label={t("LineageWorkbench_Section_Settings", "Settings")}
               icon={<SettingsRegular fontSize={14} />}
             >
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                {t("LineageWorkbench_DataSource", "Data source")}
+              {/* All controls moved to their respective panels */}
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3, fontStyle: "italic" }}>
+                {t("LineageWorkbench_Settings_MovedHint", "Controls are now located above their respective views.")}
               </Text>
-              <RadioGroup
-                layout="vertical"
-                value={dataSourceMode}
-                onChange={(_, data) => {
-                  const nextMode = data.value === "mock" ? "mock" : "actual";
-                  if (nextMode === dataSourceMode) return;
-                  onLineageChange({
-                    ...(lineage ?? {}),
-                    dataSourceMode: nextMode,
-                    mockGraphSnapshot: lineage?.mockGraphSnapshot ?? createMockSnapshot(),
-                  });
-                }}
-              >
-                <Radio value="actual" label={t("LineageWorkbench_Lineage_Mode_Actual", "Actual data")} />
-                <Radio value="mock" label={t("LineageWorkbench_Lineage_Mode_Mock", "Mock data")} />
-              </RadioGroup>
-
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2, marginTop: tokens.spacingVerticalXS }}>
-                {t("LineageWorkbench_GraphDensity", "Graph density")}
-              </Text>
-              <RadioGroup
-                layout="vertical"
-                value={graphScope}
-                onChange={(_, data) => {
-                  const next = data.value === "full" ? "full" : "focused";
-                  setGraphScope(next);
-                  if (next === "focused" && !selectedNodeId && filtered.length > 0) {
-                    setSelectedNodeId(filtered[0].nodeId);
-                  }
-                }}
-              >
-                <Radio
-                  value="focused"
-                  label={t("LineageWorkbench_GraphScope_Focused", "Focused neighborhood")}
-                />
-                <Radio
-                  value="full"
-                  label={t("LineageWorkbench_GraphScope_Full", "Full graph (limited)")}
-                />
-              </RadioGroup>
-
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2, marginTop: tokens.spacingVerticalXS }}>
-                {t("LineageWorkbench_GraphDisplayMode", "Display mode")}
-              </Text>
-              <RadioGroup
-                layout="vertical"
-                value={graphDisplayMode}
-                onChange={(_, data) => {
-                  setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
-                }}
-              >
-                <Radio
-                  value="highlight"
-                  label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight connected")}
-                />
-                <Radio
-                  value="filter"
-                  label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter to connected only")}
-                />
-              </RadioGroup>
-
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                {t("LineageWorkbench_GraphNodeLimit", "Max nodes in graph view")}
-              </Text>
-              <Select
-                value={String(graphNodeLimit)}
-                onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
-                size="small"
-              >
-                {[80, 120, 200, 350, 500].map((limit) => (
-                  <option key={limit} value={String(limit)}>{limit}</option>
-                ))}
-              </Select>
-
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2, marginTop: tokens.spacingVerticalXS }}>
-                {t("LineageWorkbench_ExploreLayout", "Table + Graph layout")}
-              </Text>
-              <RadioGroup
-                layout="vertical"
-                value={exploreLayout}
-                onChange={(_, data) => {
-                  const value = String(data.value);
-                  const next: ExploreLayoutMode =
-                    value === "side-by-side" || value === "top-bottom" ? value : "stacked";
-                  setExploreLayout(next);
-                }}
-              >
-                <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked panels")} />
-                <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side by side")} />
-                <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top and bottom")} />
-              </RadioGroup>
             </SidebarSection>
 
-            {/* Stats section */}
-            <SidebarSection
-              label={t("LineageWorkbench_Section_Stats", "Stats")}
-              icon={<DataTrendingRegular fontSize={14} />}
-            >
-              <div className={styles.statsGrid}>
-                <div className={styles.statItem}>
-                  <Text className={styles.statValue}>{nodes.length}</Text>
-                  <Text className={styles.statLabel}>{t("LineageWorkbench_Stat_Nodes", "Nodes")}</Text>
-                </div>
-                <div className={styles.statItem}>
-                  <Text className={styles.statValue}>{edges.length}</Text>
-                  <Text className={styles.statLabel}>{t("LineageWorkbench_Stat_Edges", "Edges")}</Text>
-                </div>
-                <div className={styles.statItem}>
-                  <Text className={styles.statValue}>{entityTypes.length}</Text>
-                  <Text className={styles.statLabel}>{t("LineageWorkbench_Stat_Types", "Types")}</Text>
-                </div>
-                <div className={styles.statItem}>
-                  <Text className={styles.statValue}>{filtered.length}</Text>
-                  <Text className={styles.statLabel}>{t("LineageWorkbench_Stat_Visible", "Visible")}</Text>
-                </div>
-              </div>
-            </SidebarSection>
-
-            {/* Filters section */}
+            {/* Filters section - will be moved above table */}
             <SidebarSection
               label={t("LineageWorkbench_Section_Filters", "Filters")}
               icon={<FilterRegular fontSize={14} />}
@@ -1823,6 +1708,46 @@ export function LineageWorkbenchItemLineageView({
                   fillHeight={tableFills}
                   customHeight={tableExpanded && !tableFills ? tableHeight : undefined}
                 >
+                  {/* Table filters */}
+                  <div style={{ 
+                    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                    display: "flex",
+                    gap: tokens.spacingHorizontalM,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    backgroundColor: tokens.colorNeutralBackground2,
+                  }}>
+                    <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
+                      <Input
+                        contentBefore={<SearchRegular />}
+                        placeholder={t("LineageWorkbench_Search", "Search nodes...")}
+                        value={searchText}
+                        onChange={(_, data) => setSearchText(data.value)}
+                        size="small"
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                        {t("LineageWorkbench_AllTypes", "Type")}:
+                      </Text>
+                      <Select
+                        value={entityFilter}
+                        onChange={(_, data) => setEntityFilter(data.value)}
+                        size="small"
+                        style={{ minWidth: "120px" }}
+                      >
+                        <option value="all">{t("LineageWorkbench_AllTypes", "All types")}</option>
+                        {entityTypes.map((et) => (
+                          <option key={et} value={et}>{et}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                      {t("LineageWorkbench_Showing", "Showing")} {filtered.length} / {nodes.length}
+                    </Text>
+                  </div>
+
                   {isLoadingGraph ? (
                     <div
                       style={{
@@ -1867,6 +1792,55 @@ export function LineageWorkbenchItemLineageView({
                   fillHeight={graphFills}
                   customHeight={graphExpanded && !graphFills ? graphHeight : undefined}
                 >
+                  {/* Graph controls */}
+                  <div style={{ 
+                    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                    display: "flex",
+                    gap: tokens.spacingHorizontalL,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    backgroundColor: tokens.colorNeutralBackground2,
+                  }}>
+                    <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                        {t("LineageWorkbench_GraphDisplayMode", "Display mode")}:
+                      </Text>
+                      <RadioGroup
+                        layout="horizontal"
+                        value={graphDisplayMode}
+                        onChange={(_, data) => {
+                          setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
+                        }}
+                      >
+                        <Radio
+                          value="highlight"
+                          label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight")}
+                        />
+                        <Radio
+                          value="filter"
+                          label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter")}
+                        />
+                      </RadioGroup>
+                    </div>
+                    
+                    <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                        {t("LineageWorkbench_GraphNodeLimit", "Max nodes")}:
+                      </Text>
+                      <Select
+                        value={String(graphNodeLimit)}
+                        onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
+                        size="small"
+                        style={{ minWidth: "80px" }}
+                      >
+                        {[80, 120, 200, 350, 500].map((limit) => (
+                          <option key={limit} value={String(limit)}>{limit}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+
                   {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (
                     <div className={styles.graphHint}>
                       <Text className={styles.graphHintText}>
@@ -1943,6 +1917,27 @@ export function LineageWorkbenchItemLineageView({
                   setGraphExpanded(next);
                 }}
                 fillHeight
+                actions={
+                  <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                      {t("LineageWorkbench_ExploreLayout", "Layout")}:
+                    </Text>
+                    <RadioGroup
+                      layout="horizontal"
+                      value={exploreLayout}
+                      onChange={(_, data) => {
+                        const value = String(data.value);
+                        const next: ExploreLayoutMode =
+                          value === "side-by-side" || value === "top-bottom" ? value : "stacked";
+                        setExploreLayout(next);
+                      }}
+                    >
+                      <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
+                      <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side")} />
+                      <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top")} />
+                    </RadioGroup>
+                  </div>
+                }
               >
                 {dataSourceMode === "actual" && !targetLakehouseId && (
                   <div className={styles.graphHint}>
@@ -1966,6 +1961,47 @@ export function LineageWorkbenchItemLineageView({
                       <span>{t("LineageWorkbench_Panel_Table", "Table")}</span>
                       <span>{filtered.length}</span>
                     </div>
+                    
+                    {/* Table filters */}
+                    <div style={{ 
+                      padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                      borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                      display: "flex",
+                      gap: tokens.spacingHorizontalM,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      backgroundColor: tokens.colorNeutralBackground2,
+                    }}>
+                      <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
+                        <Input
+                          contentBefore={<SearchRegular />}
+                          placeholder={t("LineageWorkbench_Search", "Search nodes...")}
+                          value={searchText}
+                          onChange={(_, data) => setSearchText(data.value)}
+                          size="small"
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                          {t("LineageWorkbench_AllTypes", "Type")}:
+                        </Text>
+                        <Select
+                          value={entityFilter}
+                          onChange={(_, data) => setEntityFilter(data.value)}
+                          size="small"
+                          style={{ minWidth: "120px" }}
+                        >
+                          <option value="all">{t("LineageWorkbench_AllTypes", "All types")}</option>
+                          {entityTypes.map((et) => (
+                            <option key={et} value={et}>{et}</option>
+                          ))}
+                        </Select>
+                      </div>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                        {t("LineageWorkbench_Showing", "Showing")} {filtered.length} / {nodes.length}
+                      </Text>
+                    </div>
+
                     {isLoadingGraph ? (
                       <div
                         style={{
@@ -2002,6 +2038,55 @@ export function LineageWorkbenchItemLineageView({
                     <div className={styles.splitPaneHeader}>
                       <span>{t("LineageWorkbench_Panel_Graph", "Graph")}</span>
                       <span>{`${graphNodes.length}/${filtered.length}`}</span>
+                    </div>
+
+                    {/* Graph controls */}
+                    <div style={{ 
+                      padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                      borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                      display: "flex",
+                      gap: tokens.spacingHorizontalL,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      backgroundColor: tokens.colorNeutralBackground2,
+                    }}>
+                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                          {t("LineageWorkbench_GraphDisplayMode", "Display mode")}:
+                        </Text>
+                        <RadioGroup
+                          layout="horizontal"
+                          value={graphDisplayMode}
+                          onChange={(_, data) => {
+                            setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
+                          }}
+                        >
+                          <Radio
+                            value="highlight"
+                            label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight")}
+                          />
+                          <Radio
+                            value="filter"
+                            label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter")}
+                          />
+                        </RadioGroup>
+                      </div>
+                      
+                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                          {t("LineageWorkbench_GraphNodeLimit", "Max nodes")}:
+                        </Text>
+                        <Select
+                          value={String(graphNodeLimit)}
+                          onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
+                          size="small"
+                          style={{ minWidth: "80px" }}
+                        >
+                          {[80, 120, 200, 350, 500].map((limit) => (
+                            <option key={limit} value={String(limit)}>{limit}</option>
+                          ))}
+                        </Select>
+                      </div>
                     </div>
 
                     {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (

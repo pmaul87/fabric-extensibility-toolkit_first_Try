@@ -268,11 +268,14 @@ export function LineageTableView({
   }, [groupedNodes]);
 
   const toggleGroup = (groupId: string) => {
+    console.log('[TableView] toggleGroup called for:', groupId);
     setCollapsedGroups((previous) => {
       const next = new Set(previous);
       if (next.has(groupId)) {
+        console.log('[TableView] Expanding group:', groupId);
         next.delete(groupId);
       } else {
+        console.log('[TableView] Collapsing group:', groupId);
         next.add(groupId);
       }
       return next;
@@ -350,19 +353,32 @@ export function LineageTableView({
             aria-expanded={!collapsedGroups.has(group.groupId)}
           >
             <div className={styles.groupHeaderLeft}>
-              <span
+              <button
                 onClick={(event) => {
+                  console.log('[TableView] Chevron button clicked for group:', group.groupId);
                   event.stopPropagation();
                   toggleGroup(group.groupId);
                 }}
-                style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+                style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  cursor: "pointer",
+                  background: "none",
+                  border: "none",
+                  padding: "4px",
+                  margin: 0,
+                  minWidth: "20px",
+                  minHeight: "20px",
+                }}
+                type="button"
+                aria-label={collapsedGroups.has(group.groupId) ? "Expand group" : "Collapse group"}
               >
                 {collapsedGroups.has(group.groupId) ? (
                   <ChevronRightRegular fontSize={14} />
                 ) : (
                   <ChevronDownRegular fontSize={14} />
                 )}
-              </span>
+              </button>
               {/* Group type badge */}
               <Badge className={styles.groupTypeBadge} appearance="outline" size="small">
                 {group.groupType === "report"

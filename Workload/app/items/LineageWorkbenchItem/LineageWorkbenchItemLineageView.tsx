@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import {
-  Button,
   Input,
   MessageBar,
   MessageBarBody,
@@ -12,17 +11,12 @@ import {
   RadioGroup,
   makeStyles,
   tokens,
-  Tooltip,
   Spinner,
 } from "@fluentui/react-components";
 import {
-  ChevronLeftFilled,
-  ChevronRightFilled,
   ChevronDownRegular,
   ChevronRightRegular,
   SearchRegular,
-  SettingsRegular,
-  FilterRegular,
   DataTrendingRegular,
   TableRegular,
   InfoRegular,

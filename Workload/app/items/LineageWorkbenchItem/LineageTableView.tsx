@@ -281,9 +281,10 @@ export function LineageTableView({
         if (group && groupingMode === "parent") {
           setCollapsedSecondLevelNodes(prev => {
             const updated = new Set(prev);
-            // Find and expand all depth 1 nodes (immediate children of the semantic model)
+            // Find and expand depth 0 (parent) and depth 1 nodes (immediate children)
             for (const node of group.nodes) {
-              if ((node.depth ?? 0) === 1) {
+              const depth = node.depth ?? 0;
+              if (depth === 0 || depth === 1) {
                 updated.delete(node.nodeId);
               }
             }
@@ -443,6 +444,7 @@ export function LineageTableView({
               idx,
               nodeId: node.nodeId,
               displayName: node.displayName,
+              depth: indentDepth,
               willCheckParentCollapse: indentDepth > 0,
             });
             
@@ -450,6 +452,15 @@ export function LineageTableView({
             const nextNode = group.nodes[idx + 1];
             const hasChildren = nextNode && (nextNode.depth ?? 0) > indentDepth;
             const isCollapsed = collapsedSecondLevelNodes.has(node.nodeId);
+            
+            console.log('[TableView] Node collapse state:', {
+              nodeId: node.nodeId,
+              displayName: node.displayName,
+              depth: indentDepth,
+              hasChildren,
+              isCollapsed,
+              isInCollapsedSet: collapsedSecondLevelNodes.has(node.nodeId),
+            });
             
             // Skip rendering if this node's parent is collapsed
             if (indentDepth > 0) {

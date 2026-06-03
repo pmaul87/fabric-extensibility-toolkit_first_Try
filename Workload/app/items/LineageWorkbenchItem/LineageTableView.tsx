@@ -274,6 +274,22 @@ export function LineageTableView({
       if (next.has(groupId)) {
         console.log('[TableView] Expanding group:', groupId);
         next.delete(groupId);
+        
+        // When expanding a group, also expand its immediate children (depth 1 nodes)
+        // so the user can see something
+        const group = groupedNodes.find(g => g.groupId === groupId);
+        if (group && groupingMode === "parent") {
+          setCollapsedSecondLevelNodes(prev => {
+            const updated = new Set(prev);
+            // Find and expand all depth 1 nodes (immediate children of the semantic model)
+            for (const node of group.nodes) {
+              if ((node.depth ?? 0) === 1) {
+                updated.delete(node.nodeId);
+              }
+            }
+            return updated;
+          });
+        }
       } else {
         console.log('[TableView] Collapsing group:', groupId);
         next.add(groupId);
@@ -407,7 +423,7 @@ export function LineageTableView({
                 groupingMode,
                 totalNodes: group.nodes.length,
                 firstNodeIsParent: isParentNode,
-                willSkipFirstNode: isParentNode && groupingMode === "parent",
+                willSkipFirstNode: isParentNode && groupingMode === "parent" && group.nodes.length > 1,
                 nodesSample: group.nodes.slice(0, 3).map(n => ({
                   nodeId: n.nodeId,
                   displayName: n.displayName,
@@ -422,6 +438,13 @@ export function LineageTableView({
               console.log('[TableView] Skipping parent node (shown in header):', node.nodeId);
               return null;
             }
+            
+            console.log('[TableView] After skip checks for node:', {
+              idx,
+              nodeId: node.nodeId,
+              displayName: node.displayName,
+              willCheckParentCollapse: indentDepth > 0,
+            });
             
             // Determine if this node has children (next node has greater depth)
             const nextNode = group.nodes[idx + 1];

@@ -1065,20 +1065,24 @@ function buildLayout(
           ? "var(--colorPaletteGreenBorderActive, #2d7d32)"
           : isHighlighted
             ? "var(--colorPaletteLavenderBorderActive, #6b4eff)"
-            : e.edgeType === "relationship"
-              ? "var(--colorBrandStroke1, #0078d4)"
-              : e.edgeType === "contains"
-                ? "var(--colorNeutralStroke2, #c4c4c4)"
-                : e.edgeType === "uses_column" || e.edgeType === "uses_measure"
-                  ? "var(--colorPaletteOrangeBorderActive, #ff8c00)"
-                  : "var(--colorNeutralStroke1, #9e9e9e)";
+            : e.edgeType === "hierarchy"
+              ? "var(--colorNeutralStroke3, #b0b0b0)"
+              : e.edgeType === "relationship"
+                ? "var(--colorBrandStroke1, #0078d4)"
+                : e.edgeType === "contains"
+                  ? "var(--colorNeutralStroke2, #c4c4c4)"
+                  : e.edgeType === "uses_column" || e.edgeType === "uses_measure"
+                    ? "var(--colorPaletteOrangeBorderActive, #ff8c00)"
+                    : "var(--colorNeutralStroke1, #9e9e9e)";
       
-      const edgeWidth = isUpstreamEdge || isDownstreamEdge ? 3 : isHighlighted ? 2.5 : e.edgeType === "contains" ? 1.5 : 2;
+      const edgeWidth = isUpstreamEdge || isDownstreamEdge ? 3 : isHighlighted ? 2.5 : e.edgeType === "hierarchy" ? 1 : e.edgeType === "contains" ? 1.5 : 2;
       const isAnimated = isUpstreamEdge || isDownstreamEdge;
       
       // Different stroke patterns for different edge types
       let strokeDasharray: string | undefined = undefined;
-      if (e.edgeType === "dependency") {
+      if (e.edgeType === "hierarchy") {
+        strokeDasharray = "1,2"; // Fine dotted for parent-child hierarchy
+      } else if (e.edgeType === "dependency") {
         strokeDasharray = "5,5"; // Dashed for dependencies
       } else if (e.edgeType === "contains") {
         strokeDasharray = "2,3"; // Dotted for containment
@@ -1089,7 +1093,9 @@ function buildLayout(
 
       // Edge labels
       let edgeLabel = "";
-      if (e.edgeType === "relationship") {
+      if (e.edgeType === "hierarchy") {
+        edgeLabel = ""; // No label for hierarchy edges to reduce clutter
+      } else if (e.edgeType === "relationship") {
         edgeLabel = "relationship";
       } else if (e.edgeType === "contains") {
         edgeLabel = "contains";

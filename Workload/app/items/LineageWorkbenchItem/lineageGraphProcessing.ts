@@ -170,6 +170,30 @@ export function buildGraphProjection(input: ProjectionInput): GraphProjectionRes
 
   const focusedEdges = allEdges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));
 
+  // Add synthetic parent-child hierarchy edges for hierarchical relationships
+  const syntheticEdges: LineageViewerEdge[] = [];
+  for (const node of focusedNodes) {
+    if (node.parentNodeId && visited.has(node.parentNodeId)) {
+      // Create edge from parent to child
+      syntheticEdges.push({
+        edgeId: `hierarchy_${node.parentNodeId}_${node.nodeId}`,
+        fromNodeId: node.parentNodeId,
+        toNodeId: node.nodeId,
+        edgeType: "hierarchy", // Distinct type for styling
+      });
+    }
+  }
+
+  // Combine lineage edges with synthetic hierarchy edges
+  const allGraphEdges = [...focusedEdges, ...syntheticEdges];
+
+  console.log("[buildGraphProjection] Added hierarchy edges:", {
+    focusedNodes: focusedNodes.length,
+    lineageEdges: focusedEdges.length,
+    hierarchyEdges: syntheticEdges.length,
+    totalGraphEdges: allGraphEdges.length,
+  });
+
   // Harden focused mode for demo scenarios: keep the selected node visible even if disconnected.
   if (focusedNodes.length === 0 && selectedNodeId) {
     const selectedNode = allNodes.find((n) => n.nodeId === selectedNodeId);
@@ -185,13 +209,13 @@ export function buildGraphProjection(input: ProjectionInput): GraphProjectionRes
     }
   }
 
-  const focusWarning = focusedEdges.length === 0
+  const focusWarning = allGraphEdges.length === 0
     ? "Selected node is isolated (no lineage edges available)."
     : undefined;
 
   return {
     graphNodes: focusedNodes,
-    graphEdges: focusedEdges,
+    graphEdges: allGraphEdges,
     hiddenNodeCount: Math.max(0, allNodes.length - focusedNodes.length),
     hiddenEdgeCount: Math.max(0, allEdges.length - focusedEdges.length),
     requiresSelection: false,

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import {
-  Button,
   Input,
   MessageBar,
   MessageBarBody,
@@ -12,17 +11,12 @@ import {
   RadioGroup,
   makeStyles,
   tokens,
-  Tooltip,
   Spinner,
 } from "@fluentui/react-components";
 import {
-  ChevronLeftFilled,
-  ChevronRightFilled,
   ChevronDownRegular,
   ChevronRightRegular,
   SearchRegular,
-  SettingsRegular,
-  FilterRegular,
   DataTrendingRegular,
   TableRegular,
   InfoRegular,
@@ -36,7 +30,6 @@ import type { Requirement } from "../RequirementBoardItem";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const SIDEBAR_WIDTH = 260;
 const DEFAULT_GRAPH_NODE_LIMIT = 80;
 type ExploreLayoutMode = "stacked" | "side-by-side" | "top-bottom";
 
@@ -47,105 +40,6 @@ const useStyles = makeStyles({
     height: "100%",
     width: "100%",
     overflow: "hidden",
-  },
-
-  // ── Left sidebar ──────────────────────────────────────────────────────────
-  sidebar: {
-    display: "flex",
-    flexDirection: "column",
-    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
-    background: tokens.colorNeutralBackground2,
-    flexShrink: 0,
-    overflow: "hidden",
-  },
-  sidebarHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    minHeight: "44px",
-    flexShrink: 0,
-  },
-  sidebarTitle: {
-    fontWeight: tokens.fontWeightSemibold,
-    fontSize: tokens.fontSizeBase300,
-    color: tokens.colorNeutralForeground1,
-  },
-  sidebarContent: {
-    flex: 1,
-    overflowY: "auto",
-    padding: tokens.spacingVerticalM,
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalM,
-  },
-
-  // ── Sidebar section accordion ─────────────────────────────────────────────
-  sidebarSection: {
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalXS,
-  },
-  sidebarSectionHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: tokens.spacingHorizontalXS,
-    cursor: "pointer",
-    padding: `${tokens.spacingVerticalXS} 0`,
-    color: tokens.colorNeutralForeground2,
-    userSelect: "none",
-  },
-  sidebarSectionLabel: {
-    fontSize: tokens.fontSizeBase200,
-    fontWeight: tokens.fontWeightSemibold,
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
-    flex: 1,
-  },
-  sidebarSectionBody: {
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalS,
-    paddingLeft: tokens.spacingHorizontalS,
-  },
-
-  // ── Stats grid ────────────────────────────────────────────────────────────
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: tokens.spacingHorizontalS,
-  },
-  statItem: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-    padding: tokens.spacingVerticalXS,
-    background: tokens.colorNeutralBackground1,
-    borderRadius: tokens.borderRadiusMedium,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-  },
-  statValue: {
-    fontSize: tokens.fontSizeBase500,
-    fontWeight: tokens.fontWeightSemibold,
-    color: tokens.colorBrandForeground1,
-  },
-  statLabel: {
-    fontSize: tokens.fontSizeBase100,
-    color: tokens.colorNeutralForeground3,
-  },
-
-  // ── Collapsed sidebar rail ────────────────────────────────────────────────
-  sidebarRail: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: `${tokens.spacingVerticalM} 0`,
-    gap: tokens.spacingVerticalS,
-    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
-    background: tokens.colorNeutralBackground2,
-    width: "44px",
-    flexShrink: 0,
   },
 
   // ── Main content ──────────────────────────────────────────────────────────
@@ -352,28 +246,6 @@ function createMockSnapshot() {
   };
 }
 
-interface SidebarSectionProps {
-  label: string;
-  icon: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}
-
-function SidebarSection({ label, icon, defaultOpen = true, children }: SidebarSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
-  const styles = useStyles();
-  return (
-    <div className={styles.sidebarSection}>
-      <div className={styles.sidebarSectionHeader} onClick={() => setOpen((v) => !v)}>
-        {icon}
-        <span className={styles.sidebarSectionLabel}>{label}</span>
-        {open ? <ChevronDownRegular fontSize={14} /> : <ChevronRightRegular fontSize={14} />}
-      </div>
-      {open && <div className={styles.sidebarSectionBody}>{children}</div>}
-    </div>
-  );
-}
-
 // ─── CollapsiblePanel ─────────────────────────────────────────────────────────
 
 interface CollapsiblePanelProps {
@@ -458,7 +330,6 @@ export function LineageWorkbenchItemLineageView({
   const hasHydratedActualGraphRef = useRef(false);
 
   // ── Layout state ──────────────────────────────────────────────────────────
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tableExpanded, setTableExpanded] = useState(true);
   const [graphExpanded, setGraphExpanded] = useState(false);
   const [detailExpanded, setDetailExpanded] = useState(false);
@@ -505,9 +376,7 @@ export function LineageWorkbenchItemLineageView({
   const [searchText, setSearchText] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
-  const [graphScope, setGraphScope] = useState<"focused" | "full">("focused");
   const [graphNodeLimit, setGraphNodeLimit] = useState<number>(DEFAULT_GRAPH_NODE_LIMIT);
-  const [graphDisplayMode, setGraphDisplayMode] = useState<"highlight" | "filter">("filter");
   const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("side-by-side");
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
 
@@ -681,9 +550,12 @@ export function LineageWorkbenchItemLineageView({
     const visualsByUid = new Map<string, any>();
     const semanticModelsByUid = new Map<string, any>();
     const tablesByUid = new Map<string, any>();
+    const partitionsByTablePk = new Map<string, any[]>(); // Array because table can have multiple partitions
     const columnsByUid = new Map<string, any>();
     const measuresByUid = new Map<string, any>();
     const lakehousesByUid = new Map<string, any>();
+    const lakehouseTablesByUid = new Map<string, any>();
+    const lakehouseColumnsByUid = new Map<string, any>();
     const warehousesByUid = new Map<string, any>();
 
     // Log dimension table structure for diagnostics
@@ -708,6 +580,13 @@ export function LineageWorkbenchItemLineageView({
         sampleRecord: dimensions.measures[0],
       });
     }
+    if (dimensions.partitions && dimensions.partitions.length > 0) {
+      console.log("[LineageView] 📋 Dimension Table Structure (partitions):", {
+        count: dimensions.partitions.length,
+        availableFields: Object.keys(dimensions.partitions[0]),
+        sampleRecord: dimensions.partitions[0],
+      });
+    }
 
     // Populate lookup maps with flexible uid field detection (prioritizing LineageTag)
     for (const r of (dimensions.reports || [])) {
@@ -730,10 +609,42 @@ export function LineageWorkbenchItemLineageView({
       const uid = t.LineageTag || t.lineageTag || t.lineage_tag || t.uid || t.data_uid || t.table_uid;
       if (uid) tablesByUid.set(uid, t);
     }
-    for (const c of (dimensions.columns || [])) {
-      const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
-      if (uid) columnsByUid.set(uid, c);
+    // Build partitions lookup by table_pk (multiple partitions per table)
+    for (const p of (dimensions.partitions || [])) {
+      const tablePk = p.table_sk || p.table_pk;
+      if (tablePk) {
+        if (!partitionsByTablePk.has(tablePk)) {
+          partitionsByTablePk.set(tablePk, []);
+        }
+        partitionsByTablePk.get(tablePk)!.push(p);
+      }
     }
+    // Debug: Log first column to see available fields
+    if ((dimensions.columns || []).length > 0) {
+      console.log("🔍 [Enrichment Debug] Sample column record:", (dimensions.columns || [])[0]);
+      console.log("🔍 [Enrichment Debug] Total columns to index:", (dimensions.columns || []).length);
+    }
+    
+    let columnsIndexed = 0;
+    for (const c of (dimensions.columns || [])) {
+      // Build UID in node_id format: table_name|column_name|dataset_id
+      const tableName = c.table_name || c.tableName;
+      const columnName = c.column_name || c.columnName;
+      const datasetId = c.dataset_id || c.datasetId;
+      
+      if (tableName && columnName && datasetId) {
+        const nodeIdFormat = `${tableName}|${columnName}|${datasetId}`;
+        columnsByUid.set(nodeIdFormat, c);
+        columnsIndexed++;
+      }
+      
+      // Also index by column_pk if it exists and differs from constructed key
+      const columnPk = c.column_pk || c.columnPk;
+      if (columnPk && columnPk !== `${tableName}|${columnName}|${datasetId}`) {
+        columnsByUid.set(columnPk, c);
+      }
+    }
+    console.log(`🔍 [Enrichment Debug] Indexed columns: ${columnsIndexed} using node_id format (table|column|dataset), total map size: ${columnsByUid.size}`);
     for (const m of (dimensions.measures || [])) {
       const uid = m.LineageTag || m.lineageTag || m.lineage_tag || m.uid || m.data_uid || m.measure_uid;
       if (uid) measuresByUid.set(uid, m);
@@ -741,6 +652,14 @@ export function LineageWorkbenchItemLineageView({
     for (const lh of (dimensions.lakehouses || [])) {
       const uid = lh.LineageTag || lh.lineageTag || lh.lineage_tag || lh.uid || lh.data_uid || lh.lakehouse_uid;
       if (uid) lakehousesByUid.set(uid, lh);
+    }
+    for (const lht of (dimensions.lakehouseTables || [])) {
+      const uid = lht.LineageTag || lht.lineageTag || lht.lineage_tag || lht.uid || lht.data_uid || lht.lakehouse_table_uid;
+      if (uid) lakehouseTablesByUid.set(uid, lht);
+    }
+    for (const lhc of (dimensions.lakehouseColumns || [])) {
+      const uid = lhc.LineageTag || lhc.lineageTag || lhc.lineage_tag || lhc.uid || lhc.data_uid || lhc.lakehouse_column_uid;
+      if (uid) lakehouseColumnsByUid.set(uid, lhc);
     }
     for (const wh of (dimensions.warehouses || [])) {
       const uid = wh.LineageTag || wh.lineageTag || wh.lineage_tag || wh.uid || wh.data_uid || wh.warehouse_uid;
@@ -753,9 +672,12 @@ export function LineageWorkbenchItemLineageView({
       visuals: visualsByUid.size,
       semanticModels: semanticModelsByUid.size,
       tables: tablesByUid.size,
+      partitions: partitionsByTablePk.size,
       columns: columnsByUid.size,
       measures: measuresByUid.size,
       lakehouses: lakehousesByUid.size,
+      lakehouseTables: lakehouseTablesByUid.size,
+      lakehouseColumns: lakehouseColumnsByUid.size,
       warehouses: warehousesByUid.size,
       // Sample UIDs for debugging
       sampleSemanticModelUid: semanticModelsByUid.size > 0 ? Array.from(semanticModelsByUid.keys())[0] : "N/A",
@@ -861,8 +783,15 @@ export function LineageWorkbenchItemLineageView({
       const parentNode = rawNode.parent_node || rawNode.parentNodeId;
       const datasetId = rawNode.dataset_id || rawNode.datasetId;
       
-      // Construct UID adaptively based on available fields
-      let dataUid = constructUid(rawNode, nodeType);
+      // For columns, use node_id directly (format: table_name|column_name|dataset_id)
+      // For other types, construct UID adaptively
+      let dataUid: string | undefined;
+      if ((nodeType || "").toLowerCase() === "column") {
+        dataUid = nodeId; // Use node_id directly for columns
+      } else {
+        dataUid = constructUid(rawNode, nodeType);
+      }
+      
       if (!dataUid) {
         noDataUidCount++;
       }
@@ -987,6 +916,8 @@ export function LineageWorkbenchItemLineageView({
                 detailRecord.name || 
                 nodeName || 
                 nodeId;
+              enrichedNode.columnName = detailRecord.column_name || detailRecord.columnName; // Store raw column name for filtering
+              enrichedNode.tableName = detailRecord.table_name || detailRecord.tableName; // Store table name for filtering
               enrichedNode.dataType = detailRecord.datatype || detailRecord.data_type || detailRecord.dataType;
               wasEnriched = true;
             }
@@ -1015,6 +946,36 @@ export function LineageWorkbenchItemLineageView({
                 detailRecord.name || 
                 nodeName || 
                 nodeId;
+              wasEnriched = true;
+            }
+            break;
+
+          case "lakehouse_table":
+            detailRecord = lakehouseTablesByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.table_name || 
+                detailRecord.tableName || 
+                detailRecord.lakehouse_table_name || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              enrichedNode.lakehouseId = detailRecord.lakehouse_id || detailRecord.lakehouseId;
+              wasEnriched = true;
+            }
+            break;
+
+          case "lakehouse_column":
+            detailRecord = lakehouseColumnsByUid.get(dataUid);
+            if (detailRecord) {
+              enrichedNode.displayName = 
+                detailRecord.column_name || 
+                detailRecord.columnName || 
+                detailRecord.name || 
+                nodeName || 
+                nodeId;
+              enrichedNode.lakehouseTableId = detailRecord.lakehouse_table_id || detailRecord.lakehouseTableId;
+              enrichedNode.dataType = detailRecord.datatype || detailRecord.data_type || detailRecord.dataType;
               wasEnriched = true;
             }
             break;
@@ -1111,7 +1072,38 @@ export function LineageWorkbenchItemLineageView({
       })),
     });
 
-    return result;
+    // Remove dangling semantic-model nodes that have no structural or lineage links.
+    // These often surface as isolated `sm:<datasetId>` entries and break focused view UX.
+    const connectedNodeIds = new Set<string>();
+    const rawEdges = Array.isArray(activeSnapshot?.edges) ? activeSnapshot.edges : [];
+    for (const rawEdge of rawEdges) {
+      const fromNodeId = rawEdge.referenced_node_id || rawEdge.from_node || rawEdge.fromNodeId || rawEdge.object_lineage_id || rawEdge.objectLineageId;
+      const toNodeId = rawEdge.node_id || rawEdge.to_node || rawEdge.toNodeId || rawEdge.referenced_object_key || rawEdge.refernced_object_key || rawEdge.referenced_object_lineage_id || rawEdge.referencedObjectLineageId;
+      if (fromNodeId) connectedNodeIds.add(fromNodeId);
+      if (toNodeId) connectedNodeIds.add(toNodeId);
+    }
+
+    const filteredResult = result.filter((node) => {
+      if (node.entityType !== "semantic_model") return true;
+      if (!node.nodeId.startsWith("sm:")) return true;
+
+      const hasChildren = parentChildMap.has(node.nodeId);
+      const isConnectedByEdge = connectedNodeIds.has(node.nodeId);
+      return hasChildren || isConnectedByEdge;
+    });
+
+    const removedDanglingSemanticModels = result.length - filteredResult.length;
+    if (removedDanglingSemanticModels > 0) {
+      console.warn("[LineageView] Removed dangling semantic_model nodes:", {
+        removedCount: removedDanglingSemanticModels,
+        removedNodeIds: result
+          .filter((node) => !filteredResult.some((kept) => kept.nodeId === node.nodeId))
+          .map((node) => node.nodeId)
+          .slice(0, 10),
+      });
+    }
+
+    return filteredResult;
   }, [activeSnapshot]);
 
   const edges: LineageViewerEdge[] = useMemo(() => {
@@ -1160,6 +1152,7 @@ export function LineageWorkbenchItemLineageView({
     const visualsByUid = new Map<string, any>();
     const semanticModelsByUid = new Map<string, any>();
     const tablesByUid = new Map<string, any>();
+    const partitionsByTablePk = new Map<string, any[]>(); // Array because table can have multiple partitions
     const columnsByUid = new Map<string, any>();
     const measuresByUid = new Map<string, any>();
     const relationshipsByUid = new Map<string, any>();
@@ -1184,6 +1177,16 @@ export function LineageWorkbenchItemLineageView({
     for (const t of (dimensions.tables || [])) {
       const uid = t.LineageTag || t.lineageTag || t.lineage_tag || t.uid || t.data_uid || t.table_uid;
       if (uid) tablesByUid.set(uid, t);
+    }
+    // Build partitions lookup by table_pk (multiple partitions per table)
+    for (const p of (dimensions.partitions || [])) {
+      const tablePk = p.table_sk || p.table_pk;
+      if (tablePk) {
+        if (!partitionsByTablePk.has(tablePk)) {
+          partitionsByTablePk.set(tablePk, []);
+        }
+        partitionsByTablePk.get(tablePk)!.push(p);
+      }
     }
     for (const c of (dimensions.columns || [])) {
       const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
@@ -1446,49 +1449,7 @@ export function LineageWorkbenchItemLineageView({
       };
     }
 
-    if (graphScope === "full") {
-      let limitedNodes = [...filtered]
-        .sort((a, b) => a.displayName.localeCompare(b.displayName))
-        .slice(0, graphNodeLimit);
-      
-      // IMPORTANT: Always include parent semantic model containers when their children are visible
-      const limitedNodeIds = new Set(limitedNodes.map((n) => n.nodeId));
-      const parentIds = new Set<string>();
-      for (const node of limitedNodes) {
-        if (node.parentNodeId && !limitedNodeIds.has(node.parentNodeId)) {
-          parentIds.add(node.parentNodeId);
-        }
-      }
-      
-      // Add parent nodes from full nodes list
-      for (const parentId of parentIds) {
-        const parentNode = nodes.find(n => n.nodeId === parentId);
-        if (parentNode) {
-          limitedNodes.push(parentNode);
-          limitedNodeIds.add(parentId);
-        }
-      }
-      
-      // For full mode, use filtered edges (both endpoints must be in filtered set)
-      const limitedEdges = filteredEdges.filter((e) => limitedNodeIds.has(e.fromNodeId) && limitedNodeIds.has(e.toNodeId));
-
-      console.log("[LineageView] graphNodes/graphEdges (full mode):", {
-        limitedNodes: limitedNodes.length,
-        limitedEdges: limitedEdges.length,
-        filteredEdges: filteredEdges.length,
-        parentNodesAdded: parentIds.size,
-      });
-
-      return {
-        graphNodes: limitedNodes,
-        graphEdges: limitedEdges,
-        hiddenNodeCount: Math.max(0, filtered.length - limitedNodes.length),
-        hiddenEdgeCount: Math.max(0, filteredEdges.length - limitedEdges.length),
-        requiresSelection: false,
-      };
-    }
-
-    // Focused mode: show selected node + all connected nodes (regardless of filter)
+    // Focused mode: show selected node + all connected nodes (filter to connected only)
     const selectedInFilter = selectedNodeId && filtered.some((n) => n.nodeId === selectedNodeId);
     if (!selectedInFilter) {
       return {
@@ -1500,16 +1461,7 @@ export function LineageWorkbenchItemLineageView({
       };
     }
 
-    // Build adjacency map from ALL edges (not just filtered ones)
-    const adjacency = new Map<string, string[]>();
-    for (const edge of edges) {
-      if (!adjacency.has(edge.fromNodeId)) adjacency.set(edge.fromNodeId, []);
-      if (!adjacency.has(edge.toNodeId)) adjacency.set(edge.toNodeId, []);
-      adjacency.get(edge.fromNodeId)!.push(edge.toNodeId);
-      adjacency.get(edge.toNodeId)!.push(edge.fromNodeId);
-    }
-
-    // Build directed upstream and downstream maps
+    // Build directed upstream and downstream maps from ALL edges
     const upstreamMap = new Map<string, string[]>();
     const downstreamMap = new Map<string, string[]>();
     for (const edge of edges) {
@@ -1519,10 +1471,8 @@ export function LineageWorkbenchItemLineageView({
       downstreamMap.get(edge.fromNodeId)!.push(edge.toNodeId);
     }
 
-    // BFS traversal: collect upstream and downstream separately, then combine
-    // Depth of 5 allows seeing deeper lineage chains while maintaining directionality
-    // Upstream only follows upstream edges, downstream only follows downstream edges
-    const maxDepth = graphDisplayMode === "filter" ? 5 : Infinity;
+    // BFS traversal with depth limit (filter mode - only show connected nodes)
+    const maxDepth = 5;
     const visited = new Set<string>([selectedNodeId]);
     const depthMap = new Map<string, number>([[selectedNodeId, 0]]);
     
@@ -1563,28 +1513,68 @@ export function LineageWorkbenchItemLineageView({
     // Filter nodes to those we visited
     const focusedNodes = nodes.filter((n) => visited.has(n.nodeId));
     
-    // NOTE: Parent-child relationships are preserved in the node data model
-    // but are NOT rendered as hierarchical nesting in the graph view
-    // The graph view shows a flat network with edges showing relationships
+    // ── Add parent nodes to support hierarchy edges ──────────────────────────
+    // When a child node is visible, ensure its parent is also included for structural context
+    const nodeMap = new Map(nodes.map(n => [n.nodeId, n]));
+    const parentsToAdd = new Set<string>();
     
-    // For focused mode, use ALL edges (not just filtered ones)
+    for (const node of focusedNodes) {
+      if (node.parentNodeId && nodeMap.has(node.parentNodeId) && !visited.has(node.parentNodeId)) {
+        parentsToAdd.add(node.parentNodeId);
+      }
+    }
+    
+    // Add parent nodes to visited set and focused nodes
+    for (const parentId of parentsToAdd) {
+      visited.add(parentId);
+      const parentNode = nodeMap.get(parentId);
+      if (parentNode) {
+        focusedNodes.push(parentNode);
+      }
+    }
+    
+    console.log("[LineageView] Added parent nodes for hierarchy:", {
+      parentsAdded: parentsToAdd.size,
+      totalFocusedNodes: focusedNodes.length,
+    });
+    
+    // Use ALL edges (not just filtered ones) - show complete lineage
     const focusedEdges = edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));
+
+    // Add synthetic parent-child edges for hierarchical relationships
+    const syntheticEdges: LineageViewerEdge[] = [];
+    for (const node of focusedNodes) {
+      if (node.parentNodeId && visited.has(node.parentNodeId)) {
+        // Create edge from parent to child
+        syntheticEdges.push({
+          edgeId: `hierarchy_${node.parentNodeId}_${node.nodeId}`,
+          fromNodeId: node.parentNodeId,
+          toNodeId: node.nodeId,
+          edgeType: "hierarchy", // Distinct type for styling
+        });
+      }
+    }
+
+    // Combine lineage edges with synthetic hierarchy edges
+    const allGraphEdges = [...focusedEdges, ...syntheticEdges];
 
     console.log("[LineageView] graphNodes/graphEdges (focused mode):", {
       focusedNodes: focusedNodes.length,
-      focusedEdges: focusedEdges.length,
+      lineageEdges: focusedEdges.length,
+      hierarchyEdges: syntheticEdges.length,
+      totalGraphEdges: allGraphEdges.length,
       visitedNodes: visited.size,
       totalEdges: edges.length,
     });
 
     return {
       graphNodes: focusedNodes,
-      graphEdges: focusedEdges,
+      graphEdges: allGraphEdges,
       hiddenNodeCount: Math.max(0, nodes.length - focusedNodes.length),
       hiddenEdgeCount: Math.max(0, edges.length - focusedEdges.length),
       requiresSelection: false,
     };
-  }, [filtered, filteredEdges, nodes, edges, graphNodeLimit, graphScope, selectedNodeId, graphDisplayMode]);
+  }, [filtered, filteredEdges, nodes, edges, graphNodeLimit, selectedNodeId]);
 
   // ── BFS highlight map ─────────────────────────────────────────────────────
   const { depthByNodeId, highlightedNodeIds, highlightedEdgeIds} = useMemo(() => {
@@ -1669,198 +1659,6 @@ export function LineageWorkbenchItemLineageView({
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className={styles.root}>
-      {/* ── Left sidebar ── */}
-      {sidebarOpen ? (
-        <div className={styles.sidebar} style={{ width: SIDEBAR_WIDTH }}>
-          <div className={styles.sidebarHeader}>
-            <Text className={styles.sidebarTitle}>
-              {t("LineageWorkbench_Sidebar_Title", "Filters & Settings")}
-            </Text>
-            <Tooltip content={t("LineageWorkbench_Sidebar_Collapse", "Collapse panel")} relationship="label">
-              <Button
-                appearance="subtle"
-                size="small"
-                icon={<ChevronLeftFilled />}
-                onClick={() => setSidebarOpen(false)}
-              />
-            </Tooltip>
-          </div>
-
-          <div className={styles.sidebarContent}>
-            {/* Settings section */}
-            <SidebarSection
-              label={t("LineageWorkbench_Section_Settings", "Settings")}
-              icon={<SettingsRegular fontSize={14} />}
-            >
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                {t("LineageWorkbench_DataSource", "Data source")}
-              </Text>
-              <RadioGroup
-                layout="vertical"
-                value={dataSourceMode}
-                onChange={(_, data) => {
-                  const nextMode = data.value === "mock" ? "mock" : "actual";
-                  if (nextMode === dataSourceMode) return;
-                  onLineageChange({
-                    ...(lineage ?? {}),
-                    dataSourceMode: nextMode,
-                    mockGraphSnapshot: lineage?.mockGraphSnapshot ?? createMockSnapshot(),
-                  });
-                }}
-              >
-                <Radio value="actual" label={t("LineageWorkbench_Lineage_Mode_Actual", "Actual data")} />
-                <Radio value="mock" label={t("LineageWorkbench_Lineage_Mode_Mock", "Mock data")} />
-              </RadioGroup>
-
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2, marginTop: tokens.spacingVerticalXS }}>
-                {t("LineageWorkbench_GraphDensity", "Graph density")}
-              </Text>
-              <RadioGroup
-                layout="vertical"
-                value={graphScope}
-                onChange={(_, data) => {
-                  const next = data.value === "full" ? "full" : "focused";
-                  setGraphScope(next);
-                  if (next === "focused" && !selectedNodeId && filtered.length > 0) {
-                    setSelectedNodeId(filtered[0].nodeId);
-                  }
-                }}
-              >
-                <Radio
-                  value="focused"
-                  label={t("LineageWorkbench_GraphScope_Focused", "Focused neighborhood")}
-                />
-                <Radio
-                  value="full"
-                  label={t("LineageWorkbench_GraphScope_Full", "Full graph (limited)")}
-                />
-              </RadioGroup>
-
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2, marginTop: tokens.spacingVerticalXS }}>
-                {t("LineageWorkbench_GraphDisplayMode", "Display mode")}
-              </Text>
-              <RadioGroup
-                layout="vertical"
-                value={graphDisplayMode}
-                onChange={(_, data) => {
-                  setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
-                }}
-              >
-                <Radio
-                  value="highlight"
-                  label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight connected")}
-                />
-                <Radio
-                  value="filter"
-                  label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter to connected only")}
-                />
-              </RadioGroup>
-
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                {t("LineageWorkbench_GraphNodeLimit", "Max nodes in graph view")}
-              </Text>
-              <Select
-                value={String(graphNodeLimit)}
-                onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
-                size="small"
-              >
-                {[80, 120, 200, 350, 500].map((limit) => (
-                  <option key={limit} value={String(limit)}>{limit}</option>
-                ))}
-              </Select>
-
-              <Text size={200} style={{ color: tokens.colorNeutralForeground2, marginTop: tokens.spacingVerticalXS }}>
-                {t("LineageWorkbench_ExploreLayout", "Table + Graph layout")}
-              </Text>
-              <RadioGroup
-                layout="vertical"
-                value={exploreLayout}
-                onChange={(_, data) => {
-                  const value = String(data.value);
-                  const next: ExploreLayoutMode =
-                    value === "side-by-side" || value === "top-bottom" ? value : "stacked";
-                  setExploreLayout(next);
-                }}
-              >
-                <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked panels")} />
-                <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side by side")} />
-                <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top and bottom")} />
-              </RadioGroup>
-            </SidebarSection>
-
-            {/* Stats section */}
-            <SidebarSection
-              label={t("LineageWorkbench_Section_Stats", "Stats")}
-              icon={<DataTrendingRegular fontSize={14} />}
-            >
-              <div className={styles.statsGrid}>
-                <div className={styles.statItem}>
-                  <Text className={styles.statValue}>{nodes.length}</Text>
-                  <Text className={styles.statLabel}>{t("LineageWorkbench_Stat_Nodes", "Nodes")}</Text>
-                </div>
-                <div className={styles.statItem}>
-                  <Text className={styles.statValue}>{edges.length}</Text>
-                  <Text className={styles.statLabel}>{t("LineageWorkbench_Stat_Edges", "Edges")}</Text>
-                </div>
-                <div className={styles.statItem}>
-                  <Text className={styles.statValue}>{entityTypes.length}</Text>
-                  <Text className={styles.statLabel}>{t("LineageWorkbench_Stat_Types", "Types")}</Text>
-                </div>
-                <div className={styles.statItem}>
-                  <Text className={styles.statValue}>{filtered.length}</Text>
-                  <Text className={styles.statLabel}>{t("LineageWorkbench_Stat_Visible", "Visible")}</Text>
-                </div>
-              </div>
-            </SidebarSection>
-
-            {/* Filters section */}
-            <SidebarSection
-              label={t("LineageWorkbench_Section_Filters", "Filters")}
-              icon={<FilterRegular fontSize={14} />}
-            >
-              <Input
-                contentBefore={<SearchRegular />}
-                placeholder={t("LineageWorkbench_Search", "Search nodes...")}
-                value={searchText}
-                onChange={(_, data) => setSearchText(data.value)}
-                size="small"
-              />
-              <Select
-                value={entityFilter}
-                onChange={(_, data) => setEntityFilter(data.value)}
-                size="small"
-              >
-                <option value="all">{t("LineageWorkbench_AllTypes", "All types")}</option>
-                {entityTypes.map((et) => (
-                  <option key={et} value={et}>{et}</option>
-                ))}
-              </Select>
-              <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>
-                {t("LineageWorkbench_Showing", "Showing")} {filtered.length} / {nodes.length}
-              </Text>
-            </SidebarSection>
-          </div>
-        </div>
-      ) : (
-        /* ── Collapsed rail ── */
-        <div className={styles.sidebarRail}>
-          <Tooltip content={t("LineageWorkbench_Sidebar_Expand", "Expand panel")} relationship="label">
-            <Button
-              appearance="subtle"
-              size="small"
-              icon={<ChevronRightFilled />}
-              onClick={() => setSidebarOpen(true)}
-            />
-          </Tooltip>
-          <Tooltip content={t("LineageWorkbench_Section_Filters", "Filters")} relationship="label">
-            <Button appearance="subtle" size="small" icon={<FilterRegular />} onClick={() => setSidebarOpen(true)} />
-          </Tooltip>
-          <Tooltip content={t("LineageWorkbench_Section_Settings", "Settings")} relationship="label">
-            <Button appearance="subtle" size="small" icon={<SettingsRegular />} onClick={() => setSidebarOpen(true)} />
-          </Tooltip>
-        </div>
-      )}
-
       {/* ── Main content: three collapsible panels stacked vertically ── */}
       <div className={styles.mainContent}>
         {loadError && (
@@ -1952,6 +1750,46 @@ export function LineageWorkbenchItemLineageView({
                   fillHeight={tableFills}
                   customHeight={tableExpanded && !tableFills ? tableHeight : undefined}
                 >
+                  {/* Table filters */}
+                  <div style={{ 
+                    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                    display: "flex",
+                    gap: tokens.spacingHorizontalM,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    backgroundColor: tokens.colorNeutralBackground2,
+                  }}>
+                    <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
+                      <Input
+                        contentBefore={<SearchRegular />}
+                        placeholder={t("LineageWorkbench_Search", "Search nodes...")}
+                        value={searchText}
+                        onChange={(_, data) => setSearchText(data.value)}
+                        size="small"
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                        {t("LineageWorkbench_AllTypes", "Type")}:
+                      </Text>
+                      <Select
+                        value={entityFilter}
+                        onChange={(_, data) => setEntityFilter(data.value)}
+                        size="small"
+                        style={{ minWidth: "120px" }}
+                      >
+                        <option value="all">{t("LineageWorkbench_AllTypes", "All types")}</option>
+                        {entityTypes.map((et) => (
+                          <option key={et} value={et}>{et}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                      {t("LineageWorkbench_Showing", "Showing")} {filtered.length} / {nodes.length}
+                    </Text>
+                  </div>
+
                   {isLoadingGraph ? (
                     <div
                       style={{
@@ -1996,6 +1834,33 @@ export function LineageWorkbenchItemLineageView({
                   fillHeight={graphFills}
                   customHeight={graphExpanded && !graphFills ? graphHeight : undefined}
                 >
+                  {/* Graph controls */}
+                  <div style={{ 
+                    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                    display: "flex",
+                    gap: tokens.spacingHorizontalL,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    backgroundColor: tokens.colorNeutralBackground2,
+                  }}>
+                    <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                        {t("LineageWorkbench_GraphNodeLimit", "Max nodes")}:
+                      </Text>
+                      <Select
+                        value={String(graphNodeLimit)}
+                        onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
+                        size="small"
+                        style={{ minWidth: "80px" }}
+                      >
+                        {[80, 120, 200, 350, 500].map((limit) => (
+                          <option key={limit} value={String(limit)}>{limit}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+
                   {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (
                     <div className={styles.graphHint}>
                       <Text className={styles.graphHintText}>
@@ -2063,6 +1928,33 @@ export function LineageWorkbenchItemLineageView({
                 }}
                 fillHeight
               >
+                {/* Layout toggle */}
+                <div style={{ 
+                  padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                  borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                  display: "flex",
+                  gap: tokens.spacingHorizontalS,
+                  alignItems: "center",
+                  backgroundColor: tokens.colorNeutralBackground2,
+                }}>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                    {t("LineageWorkbench_ExploreLayout", "Layout")}:
+                  </Text>
+                  <RadioGroup
+                    layout="horizontal"
+                    value={exploreLayout}
+                    onChange={(_, data) => {
+                      const value = String(data.value);
+                      const next: ExploreLayoutMode =
+                        value === "side-by-side" || value === "top-bottom" ? value : "stacked";
+                      setExploreLayout(next);
+                    }}
+                  >
+                    <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
+                    <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side")} />
+                    <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top")} />
+                  </RadioGroup>
+                </div>
                 {dataSourceMode === "actual" && !targetLakehouseId && (
                   <div className={styles.graphHint}>
                     <MessageBar intent="warning">
@@ -2085,6 +1977,47 @@ export function LineageWorkbenchItemLineageView({
                       <span>{t("LineageWorkbench_Panel_Table", "Table")}</span>
                       <span>{filtered.length}</span>
                     </div>
+                    
+                    {/* Table filters */}
+                    <div style={{ 
+                      padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                      borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                      display: "flex",
+                      gap: tokens.spacingHorizontalM,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      backgroundColor: tokens.colorNeutralBackground2,
+                    }}>
+                      <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
+                        <Input
+                          contentBefore={<SearchRegular />}
+                          placeholder={t("LineageWorkbench_Search", "Search nodes...")}
+                          value={searchText}
+                          onChange={(_, data) => setSearchText(data.value)}
+                          size="small"
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                          {t("LineageWorkbench_AllTypes", "Type")}:
+                        </Text>
+                        <Select
+                          value={entityFilter}
+                          onChange={(_, data) => setEntityFilter(data.value)}
+                          size="small"
+                          style={{ minWidth: "120px" }}
+                        >
+                          <option value="all">{t("LineageWorkbench_AllTypes", "All types")}</option>
+                          {entityTypes.map((et) => (
+                            <option key={et} value={et}>{et}</option>
+                          ))}
+                        </Select>
+                      </div>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                        {t("LineageWorkbench_Showing", "Showing")} {filtered.length} / {nodes.length}
+                      </Text>
+                    </div>
+
                     {isLoadingGraph ? (
                       <div
                         style={{
@@ -2121,6 +2054,33 @@ export function LineageWorkbenchItemLineageView({
                     <div className={styles.splitPaneHeader}>
                       <span>{t("LineageWorkbench_Panel_Graph", "Graph")}</span>
                       <span>{`${graphNodes.length}/${filtered.length}`}</span>
+                    </div>
+
+                    {/* Graph controls */}
+                    <div style={{ 
+                      padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                      borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                      display: "flex",
+                      gap: tokens.spacingHorizontalL,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      backgroundColor: tokens.colorNeutralBackground2,
+                    }}>
+                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                          {t("LineageWorkbench_GraphNodeLimit", "Max nodes")}:
+                        </Text>
+                        <Select
+                          value={String(graphNodeLimit)}
+                          onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
+                          size="small"
+                          style={{ minWidth: "80px" }}
+                        >
+                          {[80, 120, 200, 350, 500].map((limit) => (
+                            <option key={limit} value={String(limit)}>{limit}</option>
+                          ))}
+                        </Select>
+                      </div>
                     </div>
 
                     {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (

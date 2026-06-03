@@ -29,11 +29,15 @@ const LINEAGE_OPTIONAL_TABLES = [
   "t_report_visuals",  // Alternative naming convention
   "t_dataset_semantic_models",
   "t_dataset_tables",
+  "t_dataset_partitions",
+  "t_column_lineage",
   "t_dataset_columns",
   "t_dataset_measures",
   "t_dataset_measure",
   "t_dataset_relationships",
   "t_dataset_lakehouses",
+  "t_dataset_lakehouse_tables",
+  "t_dataset_lakehouse_columns",
   "t_dataset_warehouses",
   "t_datamodel_reports",
   "t_datamodel_pages",
@@ -850,10 +854,14 @@ class LakehouseAnalyzerService {
       visuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
       semanticModels: output.t_dataset_semantic_models || output.t_datamodel_semantic_models || output.lineage_semantic_models || [],
       tables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
+      partitions: output.t_dataset_partitions || [],
+      columnLineage: output.t_column_lineage || [],
       columns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
       measures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],
       relationships: output.t_dataset_relationships || output.t_datamodel_relationships || output.lineage_semantic_model_relationships || [],
       lakehouses: output.t_dataset_lakehouses || output.t_datamodel_lakehouses || output.lineage_lakehouses || [],
+      lakehouseTables: output.t_dataset_lakehouse_tables || [],
+      lakehouseColumns: output.t_dataset_lakehouse_columns || [],
       warehouses: output.t_dataset_warehouses || output.t_datamodel_warehouses || output.warehouses || [],
       // Legacy aliases (for backward compatibility with old saved data)
       reportPages: output.t_report_pages || output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
@@ -895,6 +903,17 @@ class LakehouseAnalyzerService {
         output.t_datamodel_visuals?.length && `t_datamodel_visuals(${output.t_datamodel_visuals.length})`
       ].filter(Boolean).join(", ") || "none"
     });
+    console.log("[LakehouseAnalyzer] Partitions:", {
+      selected: output.t_dataset_partitions ? "t_dataset_partitions" : "none",
+      count: dimensions.partitions.length,
+      available: output.t_dataset_partitions?.length ? `t_dataset_partitions(${output.t_dataset_partitions.length})` : "none"
+    });
+    console.log("[LakehouseAnalyzer] 🔍 Column Lineage:", {
+      selected: output.t_column_lineage ? "t_column_lineage" : "none",
+      count: dimensions.columnLineage.length,
+      available: output.t_column_lineage?.length ? `t_column_lineage(${output.t_column_lineage.length})` : "none",
+      sampleRecord: dimensions.columnLineage.length > 0 ? dimensions.columnLineage[0] : null
+    });
     console.log("[LakehouseAnalyzer] ===== END TABLE MAPPING =====");
 
     console.log("[LakehouseAnalyzer] Dimensions summary:", {
@@ -910,6 +929,8 @@ class LakehouseAnalyzerService {
       measures: dimensions.measures.length,
       relationships: dimensions.relationships.length,
       lakehouses: dimensions.lakehouses.length,
+      lakehouseTables: dimensions.lakehouseTables.length,
+      lakehouseColumns: dimensions.lakehouseColumns.length,
       warehouses: dimensions.warehouses.length,
       // Legacy aliases for verification
       smTables: dimensions.smTables.length,

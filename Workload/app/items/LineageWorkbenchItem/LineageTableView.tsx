@@ -245,18 +245,68 @@ export function LineageTableView({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set(groupedNodes.map((group) => group.groupId))
   );
+  
+  const [collapsedSecondLevelNodes, setCollapsedSecondLevelNodes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setCollapsedGroups(new Set(groupedNodes.map((group) => group.groupId)));
+    
+    // Initialize second-level nodes as collapsed by default
+    const parentNodes = new Set<string>();
+    for (const group of groupedNodes) {
+      for (let idx = 0; idx < group.nodes.length; idx++) {
+        const node = group.nodes[idx];
+        const nextNode = group.nodes[idx + 1];
+        const indentDepth = node.depth ?? 0;
+        const hasChildren = nextNode && (nextNode.depth ?? 0) > indentDepth;
+        if (hasChildren) {
+          parentNodes.add(node.nodeId);
+        }
+      }
+    }
+    setCollapsedSecondLevelNodes(parentNodes);
   }, [groupedNodes]);
 
   const toggleGroup = (groupId: string) => {
+    console.log('[TableView] toggleGroup called for:', groupId);
     setCollapsedGroups((previous) => {
       const next = new Set(previous);
       if (next.has(groupId)) {
+        console.log('[TableView] Expanding group:', groupId);
         next.delete(groupId);
+        
+        // When expanding a group, also expand its immediate children (depth 1 nodes)
+        // so the user can see something
+        const group = groupedNodes.find(g => g.groupId === groupId);
+        if (group && groupingMode === "parent") {
+          setCollapsedSecondLevelNodes(prev => {
+            const updated = new Set(prev);
+            // Find and expand depth 0 (parent) and depth 1 nodes (immediate children)
+            for (const node of group.nodes) {
+              const depth = node.depth ?? 0;
+              if (depth === 0 || depth === 1) {
+                updated.delete(node.nodeId);
+              }
+            }
+            return updated;
+          });
+        }
       } else {
+        console.log('[TableView] Collapsing group:', groupId);
         next.add(groupId);
+      }
+      return next;
+    });
+  };
+  
+  const toggleSecondLevelNode = (nodeId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setCollapsedSecondLevelNodes((previous) => {
+      const next = new Set(previous);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
       }
       return next;
     });
@@ -305,7 +355,10 @@ export function LineageTableView({
         <React.Fragment key={group.groupId}>
           <div
             className={styles.groupHeader}
-            onClick={() => toggleGroup(group.groupId)}
+            onClick={() => {
+              // Click header to select the parent node
+              onNodeSelect?.(group.groupId);
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
@@ -317,11 +370,32 @@ export function LineageTableView({
             aria-expanded={!collapsedGroups.has(group.groupId)}
           >
             <div className={styles.groupHeaderLeft}>
-              {collapsedGroups.has(group.groupId) ? (
-                <ChevronRightRegular fontSize={14} />
-              ) : (
-                <ChevronDownRegular fontSize={14} />
-              )}
+              <button
+                onClick={(event) => {
+                  console.log('[TableView] Chevron button clicked for group:', group.groupId);
+                  event.stopPropagation();
+                  toggleGroup(group.groupId);
+                }}
+                style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  cursor: "pointer",
+                  background: "none",
+                  border: "none",
+                  padding: "4px",
+                  margin: 0,
+                  minWidth: "20px",
+                  minHeight: "20px",
+                }}
+                type="button"
+                aria-label={collapsedGroups.has(group.groupId) ? "Expand group" : "Collapse group"}
+              >
+                {collapsedGroups.has(group.groupId) ? (
+                  <ChevronRightRegular fontSize={14} />
+                ) : (
+                  <ChevronDownRegular fontSize={14} />
+                )}
+              </button>
               {/* Group type badge */}
               <Badge className={styles.groupTypeBadge} appearance="outline" size="small">
                 {group.groupType === "report"
@@ -341,6 +415,88 @@ export function LineageTableView({
           {!collapsedGroups.has(group.groupId) && group.nodes.map((node, idx) => {
             const isParentNode = idx === 0;
             const indentDepth = node.depth ?? 0;
+            
+            // Debug logging for first expansion
+            if (idx === 0) {
+              console.log('[TableView] Rendering nodes for expanded group:', {
+                groupId: group.groupId,
+                groupDisplayName: group.groupDisplayName,
+                groupingMode,
+                totalNodes: group.nodes.length,
+                firstNodeIsParent: isParentNode,
+                willSkipFirstNode: isParentNode && groupingMode === "parent" && group.nodes.length > 1,
+                nodesSample: group.nodes.slice(0, 3).map(n => ({
+                  nodeId: n.nodeId,
+                  displayName: n.displayName,
+                  depth: n.depth,
+                })),
+              });
+            }
+            
+            // Skip the first node (parent) in hierarchical mode since it's shown in the header
+            // UNLESS it's the only node in the group (no children)
+            if (isParentNode && groupingMode === "parent" && group.nodes.length > 1) {
+              console.log('[TableView] Skipping parent node (shown in header):', node.nodeId);
+              return null;
+            }
+            
+            console.log('[TableView] After skip checks for node:', {
+              idx,
+              nodeId: node.nodeId,
+              displayName: node.displayName,
+              depth: indentDepth,
+              willCheckParentCollapse: indentDepth > 0,
+            });
+            
+            // Determine if this node has children (next node has greater depth)
+            const nextNode = group.nodes[idx + 1];
+            const hasChildren = nextNode && (nextNode.depth ?? 0) > indentDepth;
+            const isCollapsed = collapsedSecondLevelNodes.has(node.nodeId);
+            
+            console.log('[TableView] Node collapse state:', {
+              nodeId: node.nodeId,
+              displayName: node.displayName,
+              depth: indentDepth,
+              hasChildren,
+              isCollapsed,
+              isInCollapsedSet: collapsedSecondLevelNodes.has(node.nodeId),
+            });
+            
+            // Skip rendering if this node's parent is collapsed
+            if (indentDepth > 0) {
+              // Find the parent by looking backwards for a node with depth = indentDepth - 1
+              for (let i = idx - 1; i >= 0; i--) {
+                const potentialParent = group.nodes[i];
+                const parentDepth = potentialParent.depth ?? 0;
+                if (parentDepth === indentDepth - 1) {
+                  // This is the direct parent
+                  const parentCollapsed = collapsedSecondLevelNodes.has(potentialParent.nodeId);
+                  if (parentCollapsed) {
+                    console.log('[TableView] Skipping node due to collapsed parent:', {
+                      nodeId: node.nodeId,
+                      nodeDisplayName: node.displayName,
+                      nodeDepth: indentDepth,
+                      parentNodeId: potentialParent.nodeId,
+                      parentDisplayName: potentialParent.displayName,
+                      parentDepth,
+                    });
+                    return null; // Skip rendering this node
+                  }
+                  break;
+                } else if (parentDepth < indentDepth - 1) {
+                  // We've gone too far back, no direct parent found
+                  break;
+                }
+              }
+            }
+            
+            console.log('[TableView] Rendering node:', {
+              idx,
+              nodeId: node.nodeId,
+              displayName: node.displayName,
+              depth: indentDepth,
+              hasChildren,
+            });
 
             return (
               <div
@@ -350,7 +506,22 @@ export function LineageTableView({
                 style={indentDepth > 0 ? { paddingLeft: `calc(${tokens.spacingHorizontalM} + ${indentDepth * 20}px)` } : undefined}
               >
                 <div className={styles.nameCell}>
-                  <Text className={styles.nodeName}>{node.displayName}</Text>
+                  <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                    {hasChildren && (
+                      <span
+                        onClick={(e) => toggleSecondLevelNode(node.nodeId, e)}
+                        style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+                      >
+                        {isCollapsed ? (
+                          <ChevronRightRegular fontSize={14} />
+                        ) : (
+                          <ChevronDownRegular fontSize={14} />
+                        )}
+                      </span>
+                    )}
+                    {!hasChildren && <span style={{ width: "14px" }} />}
+                    <Text className={styles.nodeName}>{node.displayName}</Text>
+                  </div>
                 </div>
                 <Badge appearance="outline" color={isParentNode ? "important" : "informative"}>
                   {node.entityType}

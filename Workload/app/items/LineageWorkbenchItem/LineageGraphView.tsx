@@ -17,7 +17,7 @@ import {
 import type { Node, Edge, NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ChevronRightFilled, SaveRegular, TargetArrowRegular, ChevronUpRegular, ChevronDownRegular } from "@fluentui/react-icons";
-import { Switch, Text, tokens, Button, Slider, Label, Spinner } from "@fluentui/react-components";
+import { Text, tokens, Button, Slider, Label, Spinner } from "@fluentui/react-components";
 import dagre from "dagre";
 import { toPng } from "html-to-image";
 
@@ -26,10 +26,12 @@ import { toPng } from "html-to-image";
 export interface LineageViewerNode {
   nodeId: string;
   displayName: string;
-  entityType: "report" | "page" | "visual" | "semantic_model" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "warehouse" | "unknown";
+  entityType: "report" | "page" | "visual" | "semantic_model" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "lakehouse_table" | "lakehouse_column" | "warehouse" | "unknown";
   datasetId?: string;
   modelName?: string;
   tableName?: string;
+  table_sk?: string;
+  columnName?: string; // Raw column name from dimension table for matching with t_column_lineage
   objectName?: string;
   objectSubtype?: string;
   dataType?: string;
@@ -40,6 +42,8 @@ export interface LineageViewerNode {
   visualId?: string;
   pageNumber?: number;
   visualType?: string;
+  lakehouseId?: string;
+  lakehouseTableId?: string;
   parentNodeId?: string;
   isGroupNode?: boolean;
 }
@@ -338,6 +342,8 @@ const NODE_W = 210;
 export interface LineageNodeData extends Record<string, unknown> {
   label: string;
   subLabel?: string;
+  parentLabel?: string;
+  typeLabel?: string;
   entityType: string;
   tableName?: string;
   isFocus: boolean;
@@ -501,6 +507,33 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
                   {data.childCount} items
                 </div>
               )}
+
+              {data.typeLabel && (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                  }}
+                >
+                  Type: {data.typeLabel}
+                </div>
+              )}
+
+              {data.parentLabel && (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    maxWidth: 160,
+                  }}
+                  title={data.parentLabel}
+                >
+                  Parent: {data.parentLabel}
+                </div>
+              )}
             </div>
           </div>
 
@@ -540,6 +573,33 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
                 title={data.subLabel}
               >
                 {data.subLabel}
+              </div>
+            )}
+
+            {data.typeLabel && (
+              <div
+                style={{
+                  fontSize: 10,
+                  color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                }}
+              >
+                Type: {data.typeLabel}
+              </div>
+            )}
+
+            {data.parentLabel && (
+              <div
+                style={{
+                  fontSize: 10,
+                  color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  maxWidth: NODE_W - 24,
+                }}
+                title={data.parentLabel}
+              >
+                Parent: {data.parentLabel}
               </div>
             )}
           </div>
@@ -815,10 +875,17 @@ function buildLayout(
   // Create semantic model group nodes if they don't exist
   const modelNodeIds = new Set(lvNodes.filter(n => n.entityType === "semantic_model").map(n => n.nodeId));
   const datasetIds = new Set(lvNodes.filter(n => n.datasetId).map(n => n.datasetId!));
+  const connectedIds = new Set<string>();
+  for (const edge of lvEdges) {
+    connectedIds.add(edge.fromNodeId);
+    connectedIds.add(edge.toNodeId);
+  }
+  const hasHierarchyChildren = new Set(lvNodes.map(n => n.parentNodeId).filter(Boolean));
   
   for (const datasetId of datasetIds) {
     const modelNodeId = `sm:${datasetId}`;
-    if (!modelNodeIds.has(modelNodeId)) {
+    const shouldCreateModelNode = connectedIds.has(modelNodeId) || hasHierarchyChildren.has(modelNodeId);
+    if (!modelNodeIds.has(modelNodeId) && shouldCreateModelNode) {
       const modelName = lvNodes.find(n => n.datasetId === datasetId && n.modelName)?.modelName || `Model ${datasetId}`;
       syntheticGroupNodes.push({
         nodeId: modelNodeId,
@@ -831,6 +898,14 @@ function buildLayout(
   }
   
   allNodes.push(...syntheticGroupNodes);
+
+  const allNodesById = new Map(allNodes.map(n => [n.nodeId, n]));
+
+  const childCountByParent = new Map<string, number>();
+  for (const node of allNodes) {
+    if (!node.parentNodeId) continue;
+    childCountByParent.set(node.parentNodeId, (childCountByParent.get(node.parentNodeId) ?? 0) + 1);
+  }
 
   // ── Build directional highlight info ──────────────────────────────────────
   const directUpstreamNodeIds = new Set<string>();
@@ -898,6 +973,8 @@ function buildLayout(
       data: {
         label: node.displayName,
         subLabel: node.tableName || node.dataType || undefined,
+        parentLabel: node.parentNodeId ? (allNodesById.get(node.parentNodeId)?.displayName ?? node.parentNodeId) : undefined,
+        typeLabel: palette(node.entityType).typeLabel,
         entityType: node.entityType,
         tableName: node.tableName,
         isFocus: isFocus || criticalPathNodes.has(node.nodeId),
@@ -906,7 +983,7 @@ function buildLayout(
         isDirectDownstream,
         depth,
         isGroupNode: node.isGroupNode,
-        childCount: undefined,
+        childCount: childCountByParent.get(node.nodeId),
         degreeCentrality: metrics?.degreeCentrality,
         betweennessCentrality: metrics?.betweennessCentrality,
         upstreamCount: metrics?.upstreamCount,
@@ -976,20 +1053,24 @@ function buildLayout(
           ? "var(--colorPaletteGreenBorderActive, #2d7d32)"
           : isHighlighted
             ? "var(--colorPaletteLavenderBorderActive, #6b4eff)"
-            : e.edgeType === "relationship"
-              ? "var(--colorBrandStroke1, #0078d4)"
-              : e.edgeType === "contains"
-                ? "var(--colorNeutralStroke2, #c4c4c4)"
-                : e.edgeType === "uses_column" || e.edgeType === "uses_measure"
-                  ? "var(--colorPaletteOrangeBorderActive, #ff8c00)"
-                  : "var(--colorNeutralStroke1, #9e9e9e)";
+            : e.edgeType === "hierarchy"
+              ? "var(--colorNeutralStroke3, #b0b0b0)"
+              : e.edgeType === "relationship"
+                ? "var(--colorBrandStroke1, #0078d4)"
+                : e.edgeType === "contains"
+                  ? "var(--colorNeutralStroke2, #c4c4c4)"
+                  : e.edgeType === "uses_column" || e.edgeType === "uses_measure"
+                    ? "var(--colorPaletteOrangeBorderActive, #ff8c00)"
+                    : "var(--colorNeutralStroke1, #9e9e9e)";
       
-      const edgeWidth = isUpstreamEdge || isDownstreamEdge ? 3 : isHighlighted ? 2.5 : e.edgeType === "contains" ? 1.5 : 2;
+      const edgeWidth = isUpstreamEdge || isDownstreamEdge ? 3 : isHighlighted ? 2.5 : e.edgeType === "hierarchy" ? 1 : e.edgeType === "contains" ? 1.5 : 2;
       const isAnimated = isUpstreamEdge || isDownstreamEdge;
       
       // Different stroke patterns for different edge types
       let strokeDasharray: string | undefined = undefined;
-      if (e.edgeType === "dependency") {
+      if (e.edgeType === "hierarchy") {
+        strokeDasharray = "1,2"; // Fine dotted for parent-child hierarchy
+      } else if (e.edgeType === "dependency") {
         strokeDasharray = "5,5"; // Dashed for dependencies
       } else if (e.edgeType === "contains") {
         strokeDasharray = "2,3"; // Dotted for containment
@@ -1000,7 +1081,9 @@ function buildLayout(
 
       // Edge labels
       let edgeLabel = "";
-      if (e.edgeType === "relationship") {
+      if (e.edgeType === "hierarchy") {
+        edgeLabel = ""; // No label for hierarchy edges to reduce clutter
+      } else if (e.edgeType === "relationship") {
         edgeLabel = "relationship";
       } else if (e.edgeType === "contains") {
         edgeLabel = "contains";
@@ -1114,11 +1197,9 @@ interface LineageGraphViewProps {
 // ─── Legend Component ─────────────────────────────────────────────────────────
 
 interface LegendProps {
-  useTableColors: boolean;
-  onToggleColorMode: () => void;
 }
 
-function GraphLegend({ useTableColors, onToggleColorMode }: LegendProps) {
+function GraphLegend({}: LegendProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   
   return (
@@ -1148,20 +1229,6 @@ function GraphLegend({ useTableColors, onToggleColorMode }: LegendProps) {
         
         {isExpanded && (
           <>
-        
-        {/* Color Mode Toggle */}
-        <div style={{ marginBottom: "12px", padding: "8px", background: tokens.colorNeutralBackground2, borderRadius: tokens.borderRadiusSmall }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-            <Switch 
-              checked={useTableColors} 
-              onChange={onToggleColorMode}
-              label="Table-based colors"
-            />
-          </div>
-          <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>
-            {useTableColors ? "Grouped by table" : "Grouped by type"}
-          </Text>
-        </div>
 
         {/* Edge Types */}
         <div style={{ marginBottom: "8px" }}>
@@ -1220,7 +1287,7 @@ function LineageGraphInner({
   onNodeClick,
 }: LineageGraphViewProps) {
   const expandedGroups = externalExpandedGroups ?? new Set<string>();
-  const [useTableColors, setUseTableColors] = useState(true);
+  const useTableColors = true;
   const [focusZoom, setFocusZoom] = useState(1.0); // Standard zoom level for better visibility
   const { getNode, setCenter } = useReactFlow();
   
@@ -1255,10 +1322,6 @@ function LineageGraphInner({
   const handleToggleGroup = useCallback((groupId: string) => {
     externalOnToggleGroup?.(groupId);
   }, [externalOnToggleGroup]);
-  
-  const handleToggleColorMode = useCallback(() => {
-    setUseTableColors(prev => !prev);
-  }, []);
   
   // Context menu handlers
   const handleNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
@@ -1541,7 +1604,7 @@ function LineageGraphInner({
           </div>
         </Panel>
         
-        <GraphLegend useTableColors={useTableColors} onToggleColorMode={handleToggleColorMode} />
+        <GraphLegend />
       </ReactFlow>
       
       {/* Context Menu */}

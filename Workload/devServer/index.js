@@ -7,6 +7,7 @@ const manifestApi = require('./manifestApi');
 const { router: metadataRouter, initializeMetadataApi, initializeReportScannerPersistence } = require('./api/metadata.api');
 const { router: semanticRouter, initializeSemanticApi } = require('./api/semantic.api');
 const { router: lakehouseRouter, initializeLakehouseApi } = require('./api/lakehouse.api');
+const { router: aiRouter } = require('./api/ai.api');
 
 /**
  * Register dev server manifest APIs with an Express application
@@ -25,6 +26,9 @@ function registerDevServerApis(app, fabricPlatformApiClient) {
 
   console.log('*** Mounting Lakehouse Analyzer API ***');
   app.use('/', lakehouseRouter);
+
+  console.log('*** Mounting AI Query Explanation API ***');
+  app.use('/', aiRouter);
 
   initializeMetadataApi(fabricPlatformApiClient);
   initializeSemanticApi(fabricPlatformApiClient);

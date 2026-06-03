@@ -11,12 +11,20 @@ import {
   AccordionItem,
   AccordionPanel,
   Switch,
+  Dialog,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogContent,
+  DialogActions,
+  Spinner,
 } from "@fluentui/react-components";
 import { 
   ArrowRight16Regular, 
   Add16Regular, 
   ChevronRight16Regular, 
-  ChevronDown16Regular 
+  ChevronDown16Regular,
+  Sparkle16Regular
 } from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
 import type { Requirement } from "../RequirementBoardItem";
@@ -215,6 +223,11 @@ export function LineageDetailView({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [showAllConnections, setShowAllConnections] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [queryExplanationOpen, setQueryExplanationOpen] = useState(false);
+  const [currentQuery, setCurrentQuery] = useState<{ text: string; language: string; context: any } | null>(null);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explanationLoading, setExplanationLoading] = useState(false);
+  const [explanationError, setExplanationError] = useState<string | null>(null);
 
   const toggleNodeExpansion = (nodeId: string) => {
     setExpandedNodes(prev => {
@@ -226,6 +239,44 @@ export function LineageDetailView({
       }
       return next;
     });
+  };
+
+  const handleExplainQuery = async (queryText: string, queryLanguage: string = 'M', context: any = {}) => {
+    setCurrentQuery({ text: queryText, language: queryLanguage, context });
+    setQueryExplanationOpen(true);
+    setExplanation(null);
+    setExplanationError(null);
+    setExplanationLoading(true);
+
+    try {
+      const response = await fetch('/api/ai/explain-query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          queryText,
+          queryLanguage,
+          context
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setExplanation(result.explanation);
+        setExplanationError(null);
+      } else {
+        setExplanation(null);
+        setExplanationError(result.error || 'Failed to generate explanation');
+      }
+    } catch (error) {
+      console.error('[LineageDetail] Failed to explain query:', error);
+      setExplanation(null);
+      setExplanationError('Failed to connect to AI service');
+    } finally {
+      setExplanationLoading(false);
+    }
   };
 
   const nodeById = useMemo(() => {
@@ -1515,6 +1566,390 @@ export function LineageDetailView({
         </div>
       )}
 
+      {/* ── Partitions (for tables) ── */}
+      {(() => {
+        if (selectedNode.entityType !== "table") return false;
+        
+        // Find table_pk from node or from dimension table lookup
+        const tableDetails = dimensions?.tables?.find((t: any) => 
+          t.table_pk === selectedNode.nodeId || 
+          t.uid === selectedNode.nodeId || 
+          (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
+        );
+        const tablePk = tableDetails?.table_pk || selectedNode.nodeId;
+        
+        // Find partitions matching this table
+        const partitions = (dimensions?.partitions || []).filter((p: any) => 
+          p.table_sk === tablePk || p.table_pk === tablePk
+        );
+        
+        console.log("[LineageDetail] Partition lookup:", {
+          entityType: selectedNode.entityType,
+          nodeId: selectedNode.nodeId,
+          tablePk,
+          foundPartitions: partitions.length,
+          partitionsSample: partitions[0],
+        });
+        
+        return partitions.length > 0;
+      })() && (
+        <Accordion className={styles.accordionPanel} collapsible>
+          <AccordionItem value="partitions">
+            <AccordionHeader>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{t("LineageDetail_Partitions", "Partitions")}</Text>
+                <Badge>
+                  {(() => {
+                    const tableDetails = dimensions?.tables?.find((t: any) => 
+                      t.table_pk === selectedNode.nodeId || 
+                      t.uid === selectedNode.nodeId || 
+                      (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
+                    );
+                    const tablePk = tableDetails?.table_pk || selectedNode.nodeId;
+                    const partitions = (dimensions?.partitions || []).filter((p: any) => 
+                      p.table_sk === tablePk || p.table_pk === tablePk
+                    );
+                    return partitions.length;
+                  })()}
+                </Badge>
+              </div>
+            </AccordionHeader>
+            <AccordionPanel>
+              <div className={styles.accordionContent}>
+                {(() => {
+                  const tableDetails = dimensions?.tables?.find((t: any) => 
+                    t.table_pk === selectedNode.nodeId || 
+                    t.uid === selectedNode.nodeId || 
+                    (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
+                  );
+                  const tablePk = tableDetails?.table_pk || selectedNode.nodeId;
+                  const partitions = (dimensions?.partitions || []).filter((p: any) => 
+                    p.table_sk === tablePk || p.table_pk === tablePk
+                  );
+                  
+                  return partitions.map((partition: any, index: number) => (
+                    <div key={`partition-${index}`} className={styles.connectionGroup} style={{ marginBottom: tokens.spacingVerticalM }}>
+                      <div className={styles.connectionGroupLabel}>
+                        {partition.name || partition.partition_name || `Partition ${index + 1}`}
+                      </div>
+                      <div style={{ paddingLeft: tokens.spacingHorizontalM, display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Mode:</Text>
+                          <Text size={200} weight="semibold">{partition.mode || "N/A"}</Text>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Source Type:</Text>
+                          <Text size={200} weight="semibold">{partition.source_type || partition.sourcetype || "N/A"}</Text>
+                        </div>
+                        {partition.query && (
+                          <div style={{ marginTop: tokens.spacingVerticalXXS }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tokens.spacingVerticalXXS }}>
+                              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Query:</Text>
+                              <Button
+                                size="small"
+                                appearance="subtle"
+                                icon={<Sparkle16Regular />}
+                                onClick={() => handleExplainQuery(
+                                  partition.query,
+                                  partition.source_type?.toUpperCase() === 'SQL' ? 'SQL' : 'M',
+                                  {
+                                    tableName: selectedNode.tableName,
+                                    datasetName: selectedNode.datasetId,
+                                    partitionName: partition.name || partition.partition_name
+                                  }
+                                )}
+                              >
+                                {t("LineageDetail_ExplainQuery", "Explain")}
+                              </Button>
+                            </div>
+                            <div className={styles.expressionBlock}>
+                              {partition.query}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
+      )}
+
+      {/* ── Partitions (for columns - show parent table partitions) ── */}
+      {(() => {
+        if (selectedNode.entityType !== "column") return false;
+        
+        // Find parent table using column's tableName and datasetId
+        const parentTable = dimensions?.tables?.find((t: any) => 
+          (t.table_name === selectedNode.tableName || t.name === selectedNode.tableName) && 
+          (t.model_id === selectedNode.datasetId || t.dataset_id === selectedNode.datasetId)
+        );
+        
+        if (!parentTable) return false;
+        
+        const tablePk = parentTable.table_pk || parentTable.uid;
+        
+        // Find partitions matching the parent table
+        const partitions = (dimensions?.partitions || []).filter((p: any) => 
+          p.table_sk === tablePk || p.table_pk === tablePk
+        );
+        
+        console.log("[LineageDetail] Column partition lookup:", {
+          entityType: selectedNode.entityType,
+          columnName: selectedNode.displayName,
+          tableName: selectedNode.tableName,
+          datasetId: selectedNode.datasetId,
+          foundParentTable: !!parentTable,
+          tablePk,
+          foundPartitions: partitions.length,
+          partitionsSample: partitions[0],
+        });
+        
+        return partitions.length > 0;
+      })() && (
+        <Accordion className={styles.accordionPanel} collapsible>
+          <AccordionItem value="column-partitions">
+            <AccordionHeader>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{t("LineageDetail_TablePartitions", "Table Partitions")}</Text>
+                <Badge>
+                  {(() => {
+                    const parentTable = dimensions?.tables?.find((t: any) => 
+                      (t.table_name === selectedNode.tableName || t.name === selectedNode.tableName) &&
+                      (t.model_id === selectedNode.datasetId || t.dataset_id === selectedNode.datasetId)
+                    );
+                    const tablePk = parentTable?.table_pk || parentTable?.uid;
+                    const partitions = (dimensions?.partitions || []).filter((p: any) => 
+                      p.table_sk === tablePk || p.table_pk === tablePk
+                    );
+                    return partitions.length;
+                  })()}
+                </Badge>
+              </div>
+            </AccordionHeader>
+            <AccordionPanel>
+              <div className={styles.accordionContent}>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                  {t("LineageDetail_ColumnPartitionsHint", "Datasource information from parent table: {{tableName}}", { tableName: selectedNode.tableName })}
+                </Text>
+                {(() => {
+                  const parentTable = dimensions?.tables?.find((t: any) => 
+                    (t.table_name === selectedNode.tableName || t.name === selectedNode.tableName) &&
+                    (t.model_id === selectedNode.datasetId || t.dataset_id === selectedNode.datasetId)
+                  );
+                  const tablePk = parentTable?.table_pk || parentTable?.uid;
+                  const partitions = (dimensions?.partitions || []).filter((p: any) => 
+                    p.table_sk === tablePk || p.table_pk === tablePk
+                  );
+                  
+                  return partitions.map((partition: any, index: number) => (
+                    <div key={`column-partition-${index}`} className={styles.connectionGroup} style={{ marginBottom: tokens.spacingVerticalM }}>
+                      <div className={styles.connectionGroupLabel}>
+                        {partition.name || partition.partition_name || `Partition ${index + 1}`}
+                      </div>
+                      <div style={{ paddingLeft: tokens.spacingHorizontalM, display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Mode:</Text>
+                          <Text size={200} weight="semibold">{partition.mode || "N/A"}</Text>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Source Type:</Text>
+                          <Text size={200} weight="semibold">{partition.source_type || partition.sourcetype || "N/A"}</Text>
+                        </div>
+                        {partition.query && (
+                          <div style={{ marginTop: tokens.spacingVerticalXXS }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tokens.spacingVerticalXXS }}>
+                              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Query:</Text>
+                              <Button
+                                size="small"
+                                appearance="subtle"
+                                icon={<Sparkle16Regular />}
+                                onClick={() => handleExplainQuery(
+                                  partition.query,
+                                  partition.source_type?.toUpperCase() === 'SQL' ? 'SQL' : 'M',
+                                  {
+                                    tableName: selectedNode.tableName,
+                                    columnName: selectedNode.displayName,
+                                    datasetName: selectedNode.datasetId,
+                                    partitionName: partition.name || partition.partition_name
+                                  }
+                                )}
+                              >
+                                {t("LineageDetail_ExplainQuery", "Explain")}
+                              </Button>
+                            </div>
+                            <div className={styles.expressionBlock}>
+                              {partition.query}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
+      )}
+
+      {/* ── Column Transformation Steps ── */}
+      {selectedNode.entityType === "column" && (() => {
+        // 🔍 DEBUG: Column Lineage
+        console.log("🔍 [Column Lineage Debug] Selected column entity:", {
+          displayName: selectedNode.displayName,
+          objectName: selectedNode.objectName,
+          columnName: selectedNode.columnName,
+          tableName: selectedNode.tableName,
+          datasetId: selectedNode.datasetId,
+          entityType: selectedNode.entityType
+        });
+        
+        console.log("🔍 [Column Lineage Debug] dimensions.columnLineage:", dimensions?.columnLineage);
+        console.log("🔍 [Column Lineage Debug] columnLineage array length:", (dimensions?.columnLineage || []).length);
+        if ((dimensions?.columnLineage || []).length > 0) {
+          console.log("🔍 [Column Lineage Debug] Sample columnLineage record:", (dimensions?.columnLineage || [])[0]);
+        }
+        
+        const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
+          const matchesDataset = step.dataset_id === selectedNode.datasetId;
+          const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+          // Check BOTH final_column_name AND column_name_at_step to catch all transformation steps
+          const matchesColumn = 
+            step.final_column_name === selectedNode.displayName || 
+            step.final_column_name === selectedNode.columnName ||
+            step.final_column_name === selectedNode.objectName ||
+            step.column_name_at_step === selectedNode.displayName ||
+            step.column_name_at_step === selectedNode.columnName ||
+            step.column_name_at_step === selectedNode.objectName;
+          
+          // 🔍 DEBUG: Log each step evaluation
+          if (matchesColumn || matchesTable) {
+            console.log("🔍 [Column Lineage Debug] Evaluating step:", {
+              step_name: step.step_name,
+              dataset_id: step.dataset_id,
+              power_bi_table_name: step.power_bi_table_name,
+              final_column_name: step.final_column_name,
+              column_name_at_step: step.column_name_at_step,
+              matchesDataset,
+              matchesTable,
+              matchesColumn,
+              willInclude: matchesDataset && matchesTable && matchesColumn
+            });
+          }
+          
+          return matchesDataset && matchesTable && matchesColumn;
+        }).sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0)); // Sort descending (latest first)
+        
+        console.log("🔍 [Column Lineage Debug] Filtered transformation steps:", transformationSteps.length, transformationSteps);
+        
+        return transformationSteps.length > 0;
+      })() && (
+        <Accordion className={styles.accordionPanel} collapsible>
+          <AccordionItem value="column-transformations">
+            <AccordionHeader>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                <Text weight="semibold">{t("LineageDetail_ColumnTransformations", "Transformation Steps")}</Text>
+                <Badge>
+                  {(() => {
+                    const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
+                      const matchesDataset = step.dataset_id === selectedNode.datasetId;
+                      const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+                      const matchesColumn = 
+                        step.final_column_name === selectedNode.displayName || 
+                        step.final_column_name === selectedNode.columnName ||
+                        step.final_column_name === selectedNode.objectName ||
+                        step.column_name_at_step === selectedNode.displayName ||
+                        step.column_name_at_step === selectedNode.columnName ||
+                        step.column_name_at_step === selectedNode.objectName;
+                      return matchesDataset && matchesTable && matchesColumn;
+                    });
+                    return transformationSteps.length;
+                  })()}
+                </Badge>
+              </div>
+            </AccordionHeader>
+            <AccordionPanel>
+              <div className={styles.accordionContent}>
+                {(() => {
+                  const transformationSteps = (dimensions?.columnLineage || []).filter((step: any) => {
+                    const matchesDataset = step.dataset_id === selectedNode.datasetId;
+                    const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+                    const matchesColumn = 
+                      step.final_column_name === selectedNode.displayName || 
+                      step.final_column_name === selectedNode.columnName ||
+                      step.final_column_name === selectedNode.objectName ||
+                      step.column_name_at_step === selectedNode.displayName ||
+                      step.column_name_at_step === selectedNode.columnName ||
+                      step.column_name_at_step === selectedNode.objectName;
+                    return matchesDataset && matchesTable && matchesColumn;
+                  }).sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
+                  
+                  return (
+                    <div style={{ paddingLeft: tokens.spacingHorizontalM, paddingRight: tokens.spacingHorizontalM }}>
+                      {transformationSteps.map((step: any, index: number) => (
+                        <div key={`transform-step-${index}`} style={{ marginBottom: tokens.spacingVerticalS, paddingBottom: tokens.spacingVerticalS, borderBottom: `1px solid ${tokens.colorNeutralStroke2}` }}>
+                          {/* Row 1: All step info in one line */}
+                          <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, flexWrap: "wrap", marginBottom: tokens.spacingVerticalXXS }}>
+                            <Badge appearance="tint" size="small" style={{ minWidth: "24px", textAlign: "center" }}>
+                              {step.step_order}
+                            </Badge>
+                            <Text size={200} weight="semibold">{step.step_name || `Step ${step.step_order}`}</Text>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>·</Text>
+                            <Text size={200}>{step.transformation_function || "N/A"}</Text>
+                            {step.column_name_at_step && step.column_name_at_step !== selectedNode.displayName && (
+                              <>
+                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>·</Text>
+                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>as:</Text>
+                                <Text size={200} style={{ fontStyle: "italic" }}>{step.column_name_at_step}</Text>
+                              </>
+                            )}
+                            {step.affects_entire_table && (
+                              <>
+                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>·</Text>
+                                <Text size={200} style={{ color: tokens.colorBrandForeground1 }}>⚡ Table-wide</Text>
+                              </>
+                            )}
+                            {step.step_expression && (
+                              <Button
+                                size="small"
+                                appearance="subtle"
+                                icon={<Sparkle16Regular />}
+                                style={{ marginLeft: "auto" }}
+                                onClick={() => handleExplainQuery(
+                                  step.step_expression,
+                                  'M',
+                                  {
+                                    tableName: selectedNode.tableName,
+                                    columnName: selectedNode.displayName,
+                                    datasetName: selectedNode.datasetId,
+                                    stepName: step.step_name
+                                  }
+                                )}
+                              >
+                                {t("LineageDetail_ExplainQuery", "Explain")}
+                              </Button>
+                            )}
+                          </div>
+                          
+                          {/* Row 2: M expression */}
+                          {step.step_expression && (
+                            <div className={styles.expressionBlock} style={{ fontSize: "11px", marginTop: tokens.spacingVerticalXXS }}>
+                              {step.step_expression}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
+      )}
 
 
       {/* ── Connection Depth Toggle ── */}
@@ -1831,6 +2266,68 @@ export function LineageDetailView({
           setCreateDialogOpen(false);
         }}
       />
+
+      <Dialog open={queryExplanationOpen} onOpenChange={(_, data) => setQueryExplanationOpen(data.open)}>
+        <DialogSurface style={{ maxWidth: "800px" }}>
+          <DialogBody>
+            <DialogTitle>
+              {t("LineageDetail_QueryExplanationTitle", "Query Explanation")}
+            </DialogTitle>
+            <DialogContent>
+              {explanationLoading && (
+                <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM, padding: tokens.spacingVerticalL }}>
+                  <Spinner size="small" />
+                  <Text>{t("LineageDetail_GeneratingExplanation", "Generating explanation...")}</Text>
+                </div>
+              )}
+              
+              {!explanationLoading && explanationError && (
+                <div style={{ padding: tokens.spacingVerticalM, color: tokens.colorPaletteRedForeground1 }}>
+                  <Text weight="semibold">{t("LineageDetail_ExplanationError", "Error:")}</Text>
+                  <Text style={{ display: "block", marginTop: tokens.spacingVerticalXS }}>{explanationError}</Text>
+                  {explanationError.includes('not configured') && (
+                    <Text size={200} style={{ display: "block", marginTop: tokens.spacingVerticalS, color: tokens.colorNeutralForeground3 }}>
+                      {t("LineageDetail_ConfigureAzureOpenAI", "Please configure Azure OpenAI credentials in azureOpenAI.config.json")}
+                    </Text>
+                  )}
+                </div>
+              )}
+              
+              {!explanationLoading && !explanationError && explanation && (
+                <div style={{ padding: tokens.spacingVerticalM }}>
+                  <div style={{ 
+                    whiteSpace: "pre-wrap", 
+                    lineHeight: "1.6",
+                    color: tokens.colorNeutralForeground1
+                  }}>
+                    {explanation}
+                  </div>
+                  
+                  {currentQuery && (
+                    <div style={{ 
+                      marginTop: tokens.spacingVerticalL, 
+                      paddingTop: tokens.spacingVerticalM, 
+                      borderTop: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`
+                    }}>
+                      <Text size={200} weight="semibold" style={{ display: "block", marginBottom: tokens.spacingVerticalXS }}>
+                        {t("LineageDetail_OriginalQuery", "Original Query:")}
+                      </Text>
+                      <div className={styles.expressionBlock} style={{ fontSize: tokens.fontSizeBase200 }}>
+                        {currentQuery.text}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" onClick={() => setQueryExplanationOpen(false)}>
+                {t("Common_Close", "Close")}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 }

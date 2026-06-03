@@ -399,8 +399,26 @@ export function LineageTableView({
             const isParentNode = idx === 0;
             const indentDepth = node.depth ?? 0;
             
+            // Debug logging for first expansion
+            if (idx === 0) {
+              console.log('[TableView] Rendering nodes for expanded group:', {
+                groupId: group.groupId,
+                groupDisplayName: group.groupDisplayName,
+                groupingMode,
+                totalNodes: group.nodes.length,
+                firstNodeIsParent: isParentNode,
+                willSkipFirstNode: isParentNode && groupingMode === "parent",
+                nodesSample: group.nodes.slice(0, 3).map(n => ({
+                  nodeId: n.nodeId,
+                  displayName: n.displayName,
+                  depth: n.depth,
+                })),
+              });
+            }
+            
             // Skip the first node (parent) in hierarchical mode since it's shown in the header
             if (isParentNode && groupingMode === "parent") {
+              console.log('[TableView] Skipping parent node (shown in header):', node.nodeId);
               return null;
             }
             
@@ -417,7 +435,16 @@ export function LineageTableView({
                 const parentDepth = potentialParent.depth ?? 0;
                 if (parentDepth === indentDepth - 1) {
                   // This is the direct parent
-                  if (collapsedSecondLevelNodes.has(potentialParent.nodeId)) {
+                  const parentCollapsed = collapsedSecondLevelNodes.has(potentialParent.nodeId);
+                  if (parentCollapsed) {
+                    console.log('[TableView] Skipping node due to collapsed parent:', {
+                      nodeId: node.nodeId,
+                      nodeDisplayName: node.displayName,
+                      nodeDepth: indentDepth,
+                      parentNodeId: potentialParent.nodeId,
+                      parentDisplayName: potentialParent.displayName,
+                      parentDepth,
+                    });
                     return null; // Skip rendering this node
                   }
                   break;
@@ -427,6 +454,14 @@ export function LineageTableView({
                 }
               }
             }
+            
+            console.log('[TableView] Rendering node:', {
+              idx,
+              nodeId: node.nodeId,
+              displayName: node.displayName,
+              depth: indentDepth,
+              hasChildren,
+            });
 
             return (
               <div

@@ -417,7 +417,8 @@ export function LineageTableView({
             }
             
             // Skip the first node (parent) in hierarchical mode since it's shown in the header
-            if (isParentNode && groupingMode === "parent") {
+            // UNLESS it's the only node in the group (no children)
+            if (isParentNode && groupingMode === "parent" && group.nodes.length > 1) {
               console.log('[TableView] Skipping parent node (shown in header):', node.nodeId);
               return null;
             }

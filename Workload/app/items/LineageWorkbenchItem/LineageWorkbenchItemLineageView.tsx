@@ -505,7 +505,6 @@ export function LineageWorkbenchItemLineageView({
   const [searchText, setSearchText] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
-  const [graphScope, setGraphScope] = useState<"focused" | "full">("focused");
   const [graphNodeLimit, setGraphNodeLimit] = useState<number>(DEFAULT_GRAPH_NODE_LIMIT);
   const [graphDisplayMode, setGraphDisplayMode] = useState<"highlight" | "filter">("filter");
   const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("side-by-side");
@@ -2139,28 +2138,34 @@ export function LineageWorkbenchItemLineageView({
                   setGraphExpanded(next);
                 }}
                 fillHeight
-                actions={
-                  <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
-                    <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                      {t("LineageWorkbench_ExploreLayout", "Layout")}:
-                    </Text>
-                    <RadioGroup
-                      layout="horizontal"
-                      value={exploreLayout}
-                      onChange={(_, data) => {
-                        const value = String(data.value);
-                        const next: ExploreLayoutMode =
-                          value === "side-by-side" || value === "top-bottom" ? value : "stacked";
-                        setExploreLayout(next);
-                      }}
-                    >
-                      <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
-                      <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side")} />
-                      <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top")} />
-                    </RadioGroup>
-                  </div>
-                }
               >
+                {/* Layout toggle */}
+                <div style={{ 
+                  padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                  borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                  display: "flex",
+                  gap: tokens.spacingHorizontalS,
+                  alignItems: "center",
+                  backgroundColor: tokens.colorNeutralBackground2,
+                }}>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                    {t("LineageWorkbench_ExploreLayout", "Layout")}:
+                  </Text>
+                  <RadioGroup
+                    layout="horizontal"
+                    value={exploreLayout}
+                    onChange={(_, data) => {
+                      const value = String(data.value);
+                      const next: ExploreLayoutMode =
+                        value === "side-by-side" || value === "top-bottom" ? value : "stacked";
+                      setExploreLayout(next);
+                    }}
+                  >
+                    <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
+                    <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side")} />
+                    <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top")} />
+                  </RadioGroup>
+                </div>
                 {dataSourceMode === "actual" && !targetLakehouseId && (
                   <div className={styles.graphHint}>
                     <MessageBar intent="warning">

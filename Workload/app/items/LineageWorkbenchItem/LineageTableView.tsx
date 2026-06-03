@@ -335,7 +335,10 @@ export function LineageTableView({
         <React.Fragment key={group.groupId}>
           <div
             className={styles.groupHeader}
-            onClick={() => toggleGroup(group.groupId)}
+            onClick={() => {
+              // Click header to select the parent node
+              onNodeSelect?.(group.groupId);
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
@@ -347,11 +350,19 @@ export function LineageTableView({
             aria-expanded={!collapsedGroups.has(group.groupId)}
           >
             <div className={styles.groupHeaderLeft}>
-              {collapsedGroups.has(group.groupId) ? (
-                <ChevronRightRegular fontSize={14} />
-              ) : (
-                <ChevronDownRegular fontSize={14} />
-              )}
+              <span
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleGroup(group.groupId);
+                }}
+                style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+              >
+                {collapsedGroups.has(group.groupId) ? (
+                  <ChevronRightRegular fontSize={14} />
+                ) : (
+                  <ChevronDownRegular fontSize={14} />
+                )}
+              </span>
               {/* Group type badge */}
               <Badge className={styles.groupTypeBadge} appearance="outline" size="small">
                 {group.groupType === "report"
@@ -371,6 +382,11 @@ export function LineageTableView({
           {!collapsedGroups.has(group.groupId) && group.nodes.map((node, idx) => {
             const isParentNode = idx === 0;
             const indentDepth = node.depth ?? 0;
+            
+            // Skip the first node (parent) in hierarchical mode since it's shown in the header
+            if (isParentNode && groupingMode === "parent") {
+              return null;
+            }
             
             // Determine if this node has children (next node has greater depth)
             const nextNode = group.nodes[idx + 1];

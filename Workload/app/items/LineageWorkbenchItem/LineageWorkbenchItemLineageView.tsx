@@ -213,7 +213,7 @@ function createMockSnapshot() {
       { nodeId: "visual:mock_report|ReportSection2|VisualContainer3", displayName: "Sales Table", entityType: "visual", pageId: "ReportSection2", reportId: "mock_report", visualType: "tableEx", parentNodeId: "page:mock_report|ReportSection2" },
       { nodeId: "table:mock_model|Sales", displayName: "Sales", entityType: "table" },
       { nodeId: "table:mock_model|Date", displayName: "Date", entityType: "table" },
-      { nodeId: "col:mock_model|Sales|Amount", displayName: "Amount", entityType: "column" },
+      { nodeId: "col:mock_model|Sales|Amount", displayName: "Amount", entityType: "column", tableName: "Sales", datasetId: "mock_model" },
       { nodeId: "measure:mock_model|Sales|Total Sales", displayName: "Total Sales", entityType: "measure" },
     ],
     edges: [
@@ -244,6 +244,32 @@ function createMockSnapshot() {
       measures: [{ uid: "mock|mock_model|Sales|Total Sales", model_id: "mock_model", table: "Sales", name: "Total Sales", expression: "SUM(Sales[Amount])" }],
       relationships: [{ uid: "mock|mock_model|Sales_Date", model_id: "mock_model", name: "Sales_Date", fromtable: "Sales", totable: "Date" }],
       smDependencies: [{ model_id: "mock_model", objectname: "Total Sales", objecttype: "Measure", tablename: "Sales", referencedobjectname: "Amount", referencedobjecttype: "Column", referencedtablename: "Sales" }],
+      columnLineage: [
+        {
+          dataset_id: "mock_model",
+          power_bi_table_name: "Sales",
+          final_column_name: "Amount",
+          column_name_at_step: "Amount",
+          step_name: "Source",
+          step_order: 1,
+          transformation_function: "Table.SelectColumns",
+          step_expression: '#"Source" = Sql.Database("server", "database")',
+          affects_entire_table: false,
+          column_created_here: true,
+        },
+        {
+          dataset_id: "mock_model",
+          power_bi_table_name: "Sales",
+          final_column_name: "Amount",
+          column_name_at_step: "Amount",
+          step_name: "Changed Type",
+          step_order: 2,
+          transformation_function: "Table.TransformColumnTypes",
+          step_expression: '= Table.TransformColumnTypes(Source, {{"Amount", type number}})',
+          affects_entire_table: false,
+          column_created_here: false,
+        },
+      ],
     },
   };
 }
@@ -376,7 +402,7 @@ export function LineageWorkbenchItemLineageView({
   const [searchText, setSearchText] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
-  const [graphScope, setGraphScope] = useState<"focused" | "full">("focused");
+  const graphScope = "focused"; // Always use focused mode
   const [graphNodeLimit, setGraphNodeLimit] = useState<number>(DEFAULT_GRAPH_NODE_LIMIT);
   const [graphDisplayMode, setGraphDisplayMode] = useState<"highlight" | "filter">("filter");
   const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("side-by-side");
@@ -460,6 +486,7 @@ export function LineageWorkbenchItemLineageView({
           columns: snapshot?.dimensions?.columns?.length || 0,
           measures: snapshot?.dimensions?.measures?.length || 0,
           relationships: snapshot?.dimensions?.relationships?.length || 0,
+          columnLineage: snapshot?.dimensions?.columnLineage?.length || 0,
           // Legacy property names (fallback)
           smTables: snapshot?.dimensions?.smTables?.length || 0,
           smColumns: snapshot?.dimensions?.smColumns?.length || 0,
@@ -467,6 +494,7 @@ export function LineageWorkbenchItemLineageView({
           // Sample field names for debugging
           sampleSemanticModel: snapshot?.dimensions?.semanticModels?.[0] ? Object.keys(snapshot.dimensions.semanticModels[0]) : "N/A",
           sampleTable: snapshot?.dimensions?.tables?.[0] ? Object.keys(snapshot.dimensions.tables[0]) : "N/A",
+          sampleColumnLineage: snapshot?.dimensions?.columnLineage?.[0] ? Object.keys(snapshot.dimensions.columnLineage[0]) : "N/A",
         });
         onLineageChange({
           ...(lineage ?? {}),
@@ -603,6 +631,17 @@ export function LineageWorkbenchItemLineageView({
       if (uid) tablesByUid.set(uid, t);
     }
     for (const c of (dimensions.columns || [])) {
+      // Index by node_id format: table_name|column_name|dataset_id
+      const tableName = c.table_name || c.tableName;
+      const columnName = c.column_name || c.columnName;
+      const datasetId = c.dataset_id || c.datasetId;
+      
+      if (tableName && columnName && datasetId) {
+        const nodeIdFormat = `${tableName}|${columnName}|${datasetId}`;
+        columnsByUid.set(nodeIdFormat, c);
+      }
+      
+      // Also index by LineageTag/uid as fallback
       const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
       if (uid) columnsByUid.set(uid, c);
     }
@@ -730,7 +769,14 @@ export function LineageWorkbenchItemLineageView({
       const { nodeId, nodeName, nodeType, parentNodeId: parentNode, datasetId } = resolveNodeFields(rawNode);
       
       // Construct UID adaptively based on available fields
-      let dataUid = constructUid(rawNode, nodeType);
+      // For columns, use node_id directly (matches node_id format: table_name|column_name|dataset_id)
+      let dataUid: string | undefined;
+      if ((nodeType || "").toLowerCase() === "column") {
+        dataUid = nodeId; // Use node_id directly for columns
+      } else {
+        dataUid = constructUid(rawNode, nodeType);
+      }
+      
       if (!dataUid) {
         noDataUidCount++;
       }
@@ -855,6 +901,8 @@ export function LineageWorkbenchItemLineageView({
                 detailRecord.name || 
                 nodeName || 
                 nodeId;
+              enrichedNode.columnName = detailRecord.column_name || detailRecord.columnName; // Store raw column name
+              enrichedNode.tableName = detailRecord.table_name || detailRecord.tableName; // Store table name for filtering
               enrichedNode.dataType = detailRecord.datatype || detailRecord.data_type || detailRecord.dataType;
               wasEnriched = true;
             }
@@ -1083,6 +1131,17 @@ export function LineageWorkbenchItemLineageView({
       if (uid) tablesByUid.set(uid, t);
     }
     for (const c of (dimensions.columns || [])) {
+      // Index by node_id format: table_name|column_name|dataset_id
+      const tableName = c.table_name || c.tableName;
+      const columnName = c.column_name || c.columnName;
+      const datasetId = c.dataset_id || c.datasetId;
+      
+      if (tableName && columnName && datasetId) {
+        const nodeIdFormat = `${tableName}|${columnName}|${datasetId}`;
+        columnsByUid.set(nodeIdFormat, c);
+      }
+      
+      // Also index by LineageTag/uid as fallback
       const uid = c.LineageTag || c.lineageTag || c.lineage_tag || c.uid || c.data_uid || c.column_uid;
       if (uid) columnsByUid.set(uid, c);
     }
@@ -1711,28 +1770,34 @@ export function LineageWorkbenchItemLineageView({
                   setGraphExpanded(next);
                 }}
                 fillHeight
-                actions={
-                  <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
-                    <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                      {t("LineageWorkbench_ExploreLayout", "Layout")}:
-                    </Text>
-                    <RadioGroup
-                      layout="horizontal"
-                      value={exploreLayout}
-                      onChange={(_, data) => {
-                        const value = String(data.value);
-                        const next: ExploreLayoutMode =
-                          value === "side-by-side" || value === "top-bottom" ? value : "stacked";
-                        setExploreLayout(next);
-                      }}
-                    >
-                      <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
-                      <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side")} />
-                      <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top")} />
-                    </RadioGroup>
-                  </div>
-                }
               >
+                {/* Layout controls */}
+                <div style={{ 
+                  padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+                  borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                  backgroundColor: tokens.colorNeutralBackground2,
+                  display: "flex", 
+                  gap: tokens.spacingHorizontalS, 
+                  alignItems: "center" 
+                }}>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                    {t("LineageWorkbench_ExploreLayout", "Layout")}:
+                  </Text>
+                  <RadioGroup
+                    layout="horizontal"
+                    value={exploreLayout}
+                    onChange={(_, data) => {
+                      const value = String(data.value);
+                      const next: ExploreLayoutMode =
+                        value === "side-by-side" || value === "top-bottom" ? value : "stacked";
+                      setExploreLayout(next);
+                    }}
+                  >
+                    <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
+                    <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side")} />
+                    <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top")} />
+                  </RadioGroup>
+                </div>
                 {dataSourceMode === "actual" && !targetLakehouseId && (
                   <div className={styles.graphHint}>
                     <MessageBar intent="warning">

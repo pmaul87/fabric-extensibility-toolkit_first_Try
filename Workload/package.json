@@ -7,6 +7,8 @@
     "start:devServer": "cross-env NODE_OPTIONS=--max-old-space-size=8192 env-cmd -f .env.dev webpack serve --open --config ./devServer/webpack.dev.js",
     "start:devGateway": "node ./devServer/start-devGateway.js",
     "start:codespace": "cross-env NODE_OPTIONS=--max-old-space-size=8192 env-cmd -f .env.dev webpack serve --open --config ./devServer/webpack.dev.js --no-hot",
+    "smoke:lineage": "node ./scripts/smoke/lineage-smoke.js",
+    "demo:start": "pwsh ./scripts/Run/StartDemo.ps1",
     "build:test": "node ./devServer/run-webpack-with-env.js test",
     "build:prod": "node ./devServer/run-webpack-with-env.js prod",
     "lint": "eslint --ext .ts,.tsx ./app",

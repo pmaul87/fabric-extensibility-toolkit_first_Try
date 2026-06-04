@@ -14,10 +14,11 @@ import {
   MessageBar,
   MessageBarBody,
 } from "@fluentui/react-components";
-import { PlayRegular } from "@fluentui/react-icons";
+import { PlayRegular, DatabaseRegular } from "@fluentui/react-icons";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { ItemEditorDefaultView } from "../../components/ItemEditor";
 import { FabricNotebookClient } from "../../clients/FabricNotebookClient";
+import { callDatahubOpen } from "../../controller/DataHubController";
 import type { LineageWorkbenchExtractionConfig } from "./LineageWorkbenchItemDefinition";
 
 const useStyles = makeStyles({
@@ -101,16 +102,47 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
     onExtractionChange({ ...extraction, artifactTypes: Array.from(next) });
   };
 
-  const handleLakehouseChange = (value: string) => {
-    onExtractionChange({ ...extraction, targetLakehouseId: value });
+  const handleSelectLakehouse = async () => {
+    const result = await callDatahubOpen(
+      workloadClient,
+      ["Lakehouse"],
+      t("LineageWorkbench_Extraction_SelectLakehouse", "Select a Lakehouse for lineage storage"),
+      false
+    );
+
+    if (result) {
+      onExtractionChange({
+        ...extraction,
+        targetLakehouseId: result.id,
+        targetLakehouseDisplayName: result.displayName,
+        targetLakehouseWorkspaceId: result.workspaceId,
+      });
+    }
   };
 
-  const handleWorkspaceIdChange = (value: string) => {
-    onExtractionChange({ ...extraction, workspaceId: value });
+  const handleCreateNewLakehouse = (checked: boolean) => {
+    onExtractionChange({
+      ...extraction,
+      notebooks: {
+        ...extraction.notebooks,
+        createNewLakehouse: checked,
+      },
+    });
   };
 
-  const handleSqlEndpointChange = (value: string) => {
-    onExtractionChange({ ...extraction, sqlEndpoint: value });
+  const handleDeployClick = async () => {
+    if (!extraction.targetLakehouseId) {
+      setError("Please select a target lakehouse first");
+      return;
+    }
+
+    setError(null);
+    // TODO: Implement notebook deployment via Fabric API
+    // For now, show a message that deployment is not yet implemented
+    setError(
+      "Notebook deployment via UI is scaffolded. Use PowerShell script for now: " +
+      "pwsh .\\scripts\\Deploy\\DeployNotebooksToFabric.ps1 -WorkspaceId <workspace-id>"
+    );
   };
 
   const runExtraction = useCallback(async () => {
@@ -177,46 +209,81 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
           {t("LineageWorkbench_Extraction_Section_Target", "Target Lakehouse")}
         </Text>
         <div className={styles.sectionBody}>
-          <Field label={t("LineageWorkbench_Extraction_LakehouseId", "OneLake Lakehouse ID")}>
-            <Input
-              value={extraction.targetLakehouseId ?? ""}
-              placeholder={t("LineageWorkbench_Extraction_LakehouseId_Placeholder", "Paste Lakehouse item ID...")}
-              onChange={(_, data) => handleLakehouseChange(data.value)}
-            />
-          </Field>
-          
-          <Field 
-            label={t("LineageWorkbench_Extraction_WorkspaceId", "Workspace ID (Manual Override)")}
-            hint={t("LineageWorkbench_Extraction_WorkspaceId_Hint", "Override if lakehouse lookup fails. Find in Fabric URL: /groups/<workspace-id>/")}
-          >
-            <Input
-              value={extraction.workspaceId ?? ""}
-              placeholder={t("LineageWorkbench_Extraction_WorkspaceId_Placeholder", "e.g., 12345678-1234-1234-1234-123456789abc")}
-              onChange={(_, data) => handleWorkspaceIdChange(data.value)}
-            />
-          </Field>
-          
-          <Field 
-            label={t("LineageWorkbench_Extraction_SqlEndpoint", "SQL Analytics Endpoint (Optional)")}
-            hint={t("LineageWorkbench_Extraction_SqlEndpoint_Hint", "Override if auto-detection fails. Format: <workspace-id>.datawarehouse.fabric.microsoft.com")}
-          >
-            <Input
-              value={extraction.sqlEndpoint ?? ""}
-              placeholder={t("LineageWorkbench_Extraction_SqlEndpoint_Placeholder", "e.g., abc123.datawarehouse.fabric.microsoft.com")}
-              onChange={(_, data) => handleSqlEndpointChange(data.value)}
-            />
+          <Field label={t("LineageWorkbench_Extraction_Lakehouse", "Lineage Storage Lakehouse")}>
+            <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM }}>
+              <Button
+                appearance="secondary"
+                icon={<DatabaseRegular />}
+                onClick={handleSelectLakehouse}
+              >
+                {extraction.targetLakehouseId
+                  ? extraction.targetLakehouseDisplayName || t("LineageWorkbench_Extraction_Lakehouse_Selected", "Lakehouse selected")
+                  : t("LineageWorkbench_Extraction_Lakehouse_Select", "Select Lakehouse")}
+              </Button>
+              {extraction.targetLakehouseId && (
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                  {extraction.targetLakehouseId}
+                </Text>
+              )}
+            </div>
           </Field>
           
           <MessageBar intent="info">
             <MessageBarBody>
-              <strong>Manual Configuration (when auto-detection fails):</strong>
-              <ol style={{ margin: "8px 0", paddingLeft: "20px" }}>
-                <li><strong>Workspace ID:</strong> Find in Fabric portal URL: https://app.fabric.microsoft.com/groups/<strong>&lt;workspace-id&gt;</strong>/...</li>
-                <li><strong>SQL Endpoint:</strong> Open your Lakehouse, find the SQL analytics endpoint connection string, copy only the hostname part (after "Server=" and before the semicolon)</li>
-                <li>Enter both values above and save the workbench</li>
-              </ol>
+              {t("LineageWorkbench_Extraction_LakehouseInfo", 
+                "Workspace ID and SQL endpoint are automatically retrieved from the selected lakehouse.")}
             </MessageBarBody>
           </MessageBar>
+        </div>
+      </div>
+
+      <Divider />
+
+      <div>
+        <Text className={styles.sectionTitle}>
+          {t("LineageWorkbench_Extraction_Section_Deployment", "Deployment Configuration")}
+        </Text>
+        <div className={styles.sectionBody}>
+          <MessageBar intent="info">
+            <MessageBarBody>
+              <strong>{t("LineageWorkbench_Extraction_NotebooksInfo", "Notebooks to deploy:")} </strong>
+              <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>
+                <li>Extract_Datasets_and_Reports.ipynb</li>
+                <li>Extract_Datasources_from_SemanticModels.ipynb</li>
+              </ul>
+            </MessageBarBody>
+          </MessageBar>
+          
+          <Checkbox
+            checked={extraction.notebooks?.createNewLakehouse ?? false}
+            onChange={(_, data) => handleCreateNewLakehouse(data.checked as boolean)}
+            label={t("LineageWorkbench_Extraction_CreateNewLakehouse", "Create new lakehouse for lineage storage")}
+          />
+          {extraction.notebooks?.createNewLakehouse && (
+            <Field label={t("LineageWorkbench_Extraction_NewLakehouseName", "New Lakehouse Name")}>
+              <Input
+                value={extraction.notebooks?.newLakehouseName ?? ""}
+                placeholder={t("LineageWorkbench_Extraction_NewLakehouseName_Placeholder", "Enter lakehouse name...")}
+                onChange={(_, data) =>
+                  onExtractionChange({
+                    ...extraction,
+                    notebooks: {
+                      ...extraction.notebooks,
+                      newLakehouseName: data.value,
+                    },
+                  })
+                }
+              />
+            </Field>
+          )}
+          
+          <Button
+            appearance="primary"
+            onClick={handleDeployClick}
+            disabled={!extraction.targetLakehouseId}
+          >
+            {t("LineageWorkbench_Extraction_DeployButton", "Deploy Notebooks to Workspace")}
+          </Button>
         </div>
       </div>
 

@@ -6,12 +6,18 @@
 export interface LineageWorkbenchExtractionConfig {
   targetWorkspaces?: string[];
   targetLakehouseId?: string;
-  workspaceId?: string;
-  sqlEndpoint?: string;
+  targetLakehouseDisplayName?: string;
+  targetLakehouseWorkspaceId?: string;
   artifactTypes?: string[];
   lastRunAt?: string;
   lastRunStatus?: "idle" | "running" | "success" | "error";
   lastRunMessage?: string;
+  
+  // Notebook deployment configuration
+  notebooks?: {
+    createNewLakehouse?: boolean;
+    newLakehouseName?: string;
+  };
 }
 
 export interface LineageWorkbenchItemDefinition {

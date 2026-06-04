@@ -35,6 +35,7 @@ const LINEAGE_OPTIONAL_TABLES = [
   "t_dataset_relationships",
   "t_dataset_lakehouses",
   "t_dataset_warehouses",
+  "t_column_lineage",  // Column transformation query steps
   "t_datamodel_reports",
   "t_datamodel_pages",
   "t_datamodel_visuals",
@@ -855,6 +856,7 @@ class LakehouseAnalyzerService {
       relationships: output.t_dataset_relationships || output.t_datamodel_relationships || output.lineage_semantic_model_relationships || [],
       lakehouses: output.t_dataset_lakehouses || output.t_datamodel_lakehouses || output.lineage_lakehouses || [],
       warehouses: output.t_dataset_warehouses || output.t_datamodel_warehouses || output.warehouses || [],
+      columnLineage: output.t_column_lineage || [],
       // Legacy aliases (for backward compatibility with old saved data)
       reportPages: output.t_report_pages || output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
       reportVisuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],

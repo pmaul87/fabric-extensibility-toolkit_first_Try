@@ -32,6 +32,7 @@ Each release note file follows the naming convention: `v{YYYY}.{MM}[.{P}].md`
 
 ## Latest Releases
 
+- **[Deployment UI Configuration](2026/06_DeploymentUIConfiguration.md)** - UI-based notebook deployment configuration with entity picker for lakehouse selection
 - **[v2026.03](2026/v2026.03.md)** - Remote workload hosting, job scheduling framework, item lifecycle operations with soft delete/restore support, and variables library sample in Client SDK playground.
 - **[v2026.01](2026/v2026.01.md)** - Enhanced toolkit with new Dialog Control, improved Client SDK capabilities, and memory management optimizations
 - **[v2025.12.1](2025/v2025.12.1.md)** - Patch release with critical bug fixes, security improvements, and stability enhancements

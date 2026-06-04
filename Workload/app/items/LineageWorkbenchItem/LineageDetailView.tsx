@@ -1515,6 +1515,126 @@ export function LineageDetailView({
         </div>
       )}
 
+      {/* ── Query Steps (Column Transformation History) ── */}
+      {(() => {
+        // Only show for columns
+        if (selectedNode.entityType !== "column") return false;
+        
+        const columnLineage = dimensions?.columnLineage || [];
+        
+        // Match by final_column_name and dataset_id (or table name)
+        const steps = columnLineage.filter((step: any) => {
+          const matchesColumn = step.final_column_name === selectedNode.displayName || 
+                              step.column_name_at_step === selectedNode.displayName;
+          const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+          const matchesModel = !selectedNode.datasetId || step.dataset_id === selectedNode.datasetId;
+          
+          return matchesColumn && matchesTable && matchesModel;
+        });
+        
+        // Sort by step_order (descending, so most recent step is first)
+        steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
+        
+        console.log("[LineageDetail] Query steps check:", {
+          entityType: selectedNode.entityType,
+          displayName: selectedNode.displayName,
+          tableName: selectedNode.tableName,
+          datasetId: selectedNode.datasetId,
+          totalColumnLineageRecords: columnLineage.length,
+          matchedSteps: steps.length,
+          steps: steps,
+        });
+        
+        return steps.length > 0;
+      })() && (() => {
+        const columnLineage = dimensions?.columnLineage || [];
+        const steps = columnLineage.filter((step: any) => {
+          const matchesColumn = step.final_column_name === selectedNode.displayName || 
+                              step.column_name_at_step === selectedNode.displayName;
+          const matchesTable = step.power_bi_table_name === selectedNode.tableName;
+          const matchesModel = !selectedNode.datasetId || step.dataset_id === selectedNode.datasetId;
+          return matchesColumn && matchesTable && matchesModel;
+        });
+        steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
+        
+        return (
+          <Accordion className={styles.accordionPanel} collapsible defaultOpenItems={["query-steps"]}>
+            <AccordionItem value="query-steps">
+              <AccordionHeader>
+                <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                  <Text weight="semibold">{t("LineageDetail_QuerySteps", "Query Steps")}</Text>
+                  <Badge>{steps.length}</Badge>
+                </div>
+              </AccordionHeader>
+              <AccordionPanel>
+                <div className={styles.accordionContent}>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                    {t("LineageDetail_QueryStepsHint", "Power Query M transformation steps applied to this column")}
+                  </Text>
+                  {steps.map((step: any, index: number) => (
+                    <div key={index} className={styles.card} style={{ marginBottom: tokens.spacingVerticalS }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tokens.spacingVerticalXS }}>
+                        <Text weight="semibold" size={300}>
+                          {step.step_name || `Step ${step.step_order || index + 1}`}
+                        </Text>
+                        <Badge size="small" appearance="outline">
+                          {step.step_order || index + 1}
+                        </Badge>
+                      </div>
+                      
+                      {step.transformation_function && (
+                        <div style={{ marginTop: tokens.spacingVerticalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                            {t("LineageDetail_TransformFunction", "Function")}:
+                          </Text>
+                          <Text size={200} weight="semibold" style={{ marginLeft: tokens.spacingHorizontalXXS }}>
+                            {step.transformation_function}
+                          </Text>
+                        </div>
+                      )}
+                      
+                      {step.column_name_at_step && step.column_name_at_step !== step.final_column_name && (
+                        <div style={{ marginTop: tokens.spacingVerticalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                            {t("LineageDetail_ColumnAt", "Column at step")}:
+                          </Text>
+                          <Text size={200} weight="semibold" style={{ marginLeft: tokens.spacingHorizontalXXS }}>
+                            {step.column_name_at_step}
+                          </Text>
+                        </div>
+                      )}
+                      
+                      {step.affects_entire_table && (
+                        <Badge size="small" appearance="filled" color="warning" style={{ marginTop: tokens.spacingVerticalXXS }}>
+                          {t("LineageDetail_AffectsTable", "Affects entire table")}
+                        </Badge>
+                      )}
+                      
+                      {step.column_created_here && (
+                        <Badge size="small" appearance="filled" color="success" style={{ marginTop: tokens.spacingVerticalXXS, marginLeft: tokens.spacingHorizontalXS }}>
+                          {t("LineageDetail_CreatedHere", "Column created here")}
+                        </Badge>
+                      )}
+                      
+                      {step.step_expression && (
+                        <div style={{ marginTop: tokens.spacingVerticalS }}>
+                          <Text size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground3, display: "block", marginBottom: tokens.spacingVerticalXXS }}>
+                            {t("LineageDetail_StepExpression", "Expression")}:
+                          </Text>
+                          <div className={styles.expressionBlock} style={{ maxHeight: "200px" }}>
+                            {step.step_expression}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </AccordionPanel>
+            </AccordionItem>
+          </Accordion>
+        );
+      })()}
+
 
 
       {/* ── Connection Depth Toggle ── */}

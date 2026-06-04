@@ -507,11 +507,19 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
               {data.typeLabel && (
                 <div
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    width: "fit-content",
+                    padding: "2px 6px",
+                    borderRadius: 999,
                     fontSize: 10,
-                    color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                    lineHeight: 1.2,
+                    color: isFocus ? "#ffffff" : nodeBorder,
+                    background: isFocus ? "rgba(255,255,255,0.14)" : "var(--colorNeutralBackground1, #fff)",
+                    border: `1px solid ${isFocus ? "rgba(255,255,255,0.3)" : nodeBorder}`,
                   }}
                 >
-                  Type: {data.typeLabel}
+                  {data.typeLabel}
                 </div>
               )}
 
@@ -519,7 +527,7 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
                 <div
                   style={{
                     fontSize: 10,
-                    color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                    color: isFocus ? "rgba(255,255,255,0.78)" : "var(--colorNeutralForeground2, #424242)",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -575,11 +583,19 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
             {data.typeLabel && (
               <div
                 style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  width: "fit-content",
+                  padding: "2px 6px",
+                  borderRadius: 999,
                   fontSize: 10,
-                  color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                  lineHeight: 1.2,
+                  color: isFocus ? "#ffffff" : nodeBorder,
+                  background: isFocus ? "rgba(255,255,255,0.14)" : "var(--colorNeutralBackground1, #fff)",
+                  border: `1px solid ${isFocus ? "rgba(255,255,255,0.3)" : nodeBorder}`,
                 }}
               >
-                Type: {data.typeLabel}
+                {data.typeLabel}
               </div>
             )}
 

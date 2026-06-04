@@ -33,6 +33,8 @@ import { LineageGraphView, LineageViewerNode, LineageViewerEdge } from "./Lineag
 import { LineageTableView } from "./LineageTableView";
 import { LineageDetailView } from "./LineageDetailView";
 import type { Requirement } from "../RequirementBoardItem";
+import { isSyntheticSemanticModelNode, resolveEdgeFields, resolveNodeFields } from "./lineageContracts";
+import { buildGraphProjection, filterEdgesByNodes, filterNodes } from "./lineageGraphProcessing";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -438,7 +440,6 @@ interface LineageWorkbenchItemLineageViewProps {
   workloadClient: WorkloadClientAPI;
   workspaceId?: string;
   targetLakehouseId?: string;
-  sqlEndpoint?: string;
   lineage: any;
   onLineageChange: (next: any) => void;
   onOpenRequirementsBoard?: () => void;
@@ -448,7 +449,6 @@ export function LineageWorkbenchItemLineageView({
   workloadClient,
   workspaceId,
   targetLakehouseId,
-  sqlEndpoint,
   lineage,
   onLineageChange,
   onOpenRequirementsBoard,
@@ -566,7 +566,7 @@ export function LineageWorkbenchItemLineageView({
       try {
         const storage = new OneLakeLineageStorage(workloadClient);
         storage.initializeForItem(targetLakehouseId, workspaceId);
-        const loadedGraph = await storage.loadLineageGraph(workspaceId, sqlEndpoint);
+        const loadedGraph = await storage.loadLineageGraph(workspaceId);
         const snapshot = loadedGraph?.graphSnapshot ?? loadedGraph;
         if (cancelled || !snapshot) {
           return;
@@ -660,6 +660,7 @@ export function LineageWorkbenchItemLineageView({
         warehouses: [],
         smDependencies: [],
         workspaceArtifacts: [],
+        columnLineage: [],
       }
     };
   }, [dataSourceMode, lineage]);
@@ -855,11 +856,7 @@ export function LineageWorkbenchItemLineageView({
     // Convert v_nodes to LineageViewerNode with enrichment from dimension tables
     for (const rawNode of rawNodes) {
       // Primary column names from user's v_nodes schema: node_id, parent_node, node_name, dataset_id, node_type
-      const nodeId = rawNode.node_id || rawNode.nodeId;
-      const nodeName = rawNode.node_name || rawNode.name || rawNode.displayName;
-      const nodeType = rawNode.node_type || rawNode.entityType;
-      const parentNode = rawNode.parent_node || rawNode.parentNodeId;
-      const datasetId = rawNode.dataset_id || rawNode.datasetId;
+      const { nodeId, nodeName, nodeType, parentNodeId: parentNode, datasetId } = resolveNodeFields(rawNode);
       
       // Construct UID adaptively based on available fields
       let dataUid = constructUid(rawNode, nodeType);
@@ -876,7 +873,7 @@ export function LineageWorkbenchItemLineageView({
       let enrichedNode: LineageViewerNode = {
         nodeId,
         displayName: nodeName || nodeId,  // Use nodeName as initial fallback
-        entityType: (nodeType || "unknown").toLowerCase(), // Normalize to lowercase for consistent matching
+        entityType: nodeType as LineageViewerNode["entityType"],
         parentNodeId: parentNode || undefined,
         datasetId: datasetId || undefined,  // Include dataset_id from v_nodes
         isGroupNode: false,  // Will be determined by checking if any nodes have this as parent
@@ -886,7 +883,7 @@ export function LineageWorkbenchItemLineageView({
       let detailRecord: any = null;
       let wasEnriched = false;
       if (dataUid) {
-        switch ((nodeType || "").toLowerCase()) { // Normalize to lowercase for case-insensitive matching
+        switch (nodeType) {
           case "report":
             detailRecord = reportsByUid.get(dataUid);
             if (detailRecord) {
@@ -1116,15 +1113,13 @@ export function LineageWorkbenchItemLineageView({
     const connectedNodeIds = new Set<string>();
     const rawEdges = Array.isArray(activeSnapshot?.edges) ? activeSnapshot.edges : [];
     for (const rawEdge of rawEdges) {
-      const fromNodeId = rawEdge.referenced_node_id || rawEdge.from_node || rawEdge.fromNodeId || rawEdge.object_lineage_id || rawEdge.objectLineageId;
-      const toNodeId = rawEdge.node_id || rawEdge.to_node || rawEdge.toNodeId || rawEdge.referenced_object_key || rawEdge.refernced_object_key || rawEdge.referenced_object_lineage_id || rawEdge.referencedObjectLineageId;
+      const { fromNodeId, toNodeId } = resolveEdgeFields(rawEdge);
       if (fromNodeId) connectedNodeIds.add(fromNodeId);
       if (toNodeId) connectedNodeIds.add(toNodeId);
     }
 
     const filteredResult = result.filter((node) => {
-      if (node.entityType !== "semantic_model") return true;
-      if (!node.nodeId.startsWith("sm:")) return true;
+      if (!isSyntheticSemanticModelNode(node.nodeId, node.entityType)) return true;
 
       const hasChildren = parentChildMap.has(node.nodeId);
       const isConnectedByEdge = connectedNodeIds.has(node.nodeId);
@@ -1236,17 +1231,7 @@ export function LineageWorkbenchItemLineageView({
 
     // Convert v_edges to LineageViewerEdge with enrichment from dimension tables
     for (const rawEdge of rawEdges) {
-      // Primary column names from user's v_edges schema: object_type (info), node_id (TO node), referenced_node_id (FROM node)
-      const fromNodeId = rawEdge.referenced_node_id || rawEdge.from_node || rawEdge.fromNodeId || rawEdge.object_lineage_id || rawEdge.objectLineageId;
-      const toNodeId = rawEdge.node_id || rawEdge.to_node || rawEdge.toNodeId || rawEdge.referenced_object_key || rawEdge.refernced_object_key || rawEdge.referenced_object_lineage_id || rawEdge.referencedObjectLineageId;
-      const edgeType = rawEdge.edge_type || rawEdge.edgeType || rawEdge.object_type || "uses";  // object_type can be used as edge type if edge_type is missing
-      const lineageId = rawEdge.LineageTag || rawEdge.lineageTag || rawEdge.lineage_tag || rawEdge.lineage_id || rawEdge.lineageId;  // Optional UID for dimension lookup
-      
-      // Construct edge ID: Try dependency_pk, then explicit edge_id, then construct from source/target/type
-      let edgeId = rawEdge.dependency_pk || rawEdge.edge_id || rawEdge.edgeId || rawEdge.LineageTag || rawEdge.lineageTag;
-      if (!edgeId && fromNodeId && toNodeId) {
-        edgeId = `${fromNodeId}__${edgeType}__${toNodeId}`;
-      }
+      const { edgeId, fromNodeId, toNodeId, edgeType, lineageId } = resolveEdgeFields(rawEdge);
 
       if (!edgeId || !fromNodeId || !toNodeId) {
         skippedEdgesCount++;
@@ -1437,26 +1422,18 @@ export function LineageWorkbenchItemLineageView({
   }, [nodes]);
 
   // ── Filtered results ──────────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    const search = searchText.trim().toLowerCase();
-    return nodes.filter((node) => {
-      if (entityFilter !== "all" && node.entityType !== entityFilter) return false;
-      if (!search) return true;
-      return `${node.displayName} ${node.nodeId} ${node.entityType}`.toLowerCase().includes(search);
-    });
-  }, [nodes, searchText, entityFilter]);
+  const filtered = useMemo(() => filterNodes(nodes, searchText, entityFilter), [nodes, searchText, entityFilter]);
 
   const filteredEdges: LineageViewerEdge[] = useMemo(() => {
-    const ids = new Set(filtered.map((n) => n.nodeId));
-    const result = edges.filter((e) => ids.has(e.fromNodeId) && ids.has(e.toNodeId));
-    
+    const result = filterEdgesByNodes(edges, filtered);
+
     console.log("[LineageView] filteredEdges:", {
       totalEdges: edges.length,
       filteredEdges: result.length,
-      filteredNodesCount: ids.size,
+      filteredNodesCount: filtered.length,
       edgesFilteredOut: edges.length - result.length,
     });
-    
+
     return result;
   }, [edges, filtered]);
 
@@ -1466,176 +1443,18 @@ export function LineageWorkbenchItemLineageView({
     hiddenNodeCount,
     hiddenEdgeCount,
     requiresSelection,
+    focusWarning,
   } = useMemo(() => {
-    if (filtered.length === 0) {
-      return {
-        graphNodes: [] as LineageViewerNode[],
-        graphEdges: [] as LineageViewerEdge[],
-        hiddenNodeCount: 0,
-        hiddenEdgeCount: 0,
-        requiresSelection: false,
-      };
-    }
-
-    if (graphScope === "full") {
-      let limitedNodes = [...filtered]
-        .sort((a, b) => a.displayName.localeCompare(b.displayName))
-        .slice(0, graphNodeLimit);
-      
-      // IMPORTANT: Always include parent semantic model containers when their children are visible
-      const limitedNodeIds = new Set(limitedNodes.map((n) => n.nodeId));
-      const parentIds = new Set<string>();
-      for (const node of limitedNodes) {
-        if (node.parentNodeId && !limitedNodeIds.has(node.parentNodeId)) {
-          parentIds.add(node.parentNodeId);
-        }
-      }
-      
-      // Add parent nodes from full nodes list
-      for (const parentId of parentIds) {
-        const parentNode = nodes.find(n => n.nodeId === parentId);
-        if (parentNode) {
-          limitedNodes.push(parentNode);
-          limitedNodeIds.add(parentId);
-        }
-      }
-      
-      // For full mode, use filtered edges (both endpoints must be in filtered set)
-      const limitedEdges = filteredEdges.filter((e) => limitedNodeIds.has(e.fromNodeId) && limitedNodeIds.has(e.toNodeId));
-
-      console.log("[LineageView] graphNodes/graphEdges (full mode):", {
-        limitedNodes: limitedNodes.length,
-        limitedEdges: limitedEdges.length,
-        filteredEdges: filteredEdges.length,
-        parentNodesAdded: parentIds.size,
-      });
-
-      return {
-        graphNodes: limitedNodes,
-        graphEdges: limitedEdges,
-        hiddenNodeCount: Math.max(0, filtered.length - limitedNodes.length),
-        hiddenEdgeCount: Math.max(0, filteredEdges.length - limitedEdges.length),
-        requiresSelection: false,
-      };
-    }
-
-    // Focused mode: show selected node + all connected nodes (regardless of filter)
-    const selectedInFilter = selectedNodeId && filtered.some((n) => n.nodeId === selectedNodeId);
-    if (!selectedInFilter) {
-      return {
-        graphNodes: [] as LineageViewerNode[],
-        graphEdges: [] as LineageViewerEdge[],
-        hiddenNodeCount: filtered.length,
-        hiddenEdgeCount: filteredEdges.length,
-        requiresSelection: true,
-      };
-    }
-
-    // Build adjacency map from ALL edges (not just filtered ones)
-    const adjacency = new Map<string, string[]>();
-    for (const edge of edges) {
-      if (!adjacency.has(edge.fromNodeId)) adjacency.set(edge.fromNodeId, []);
-      if (!adjacency.has(edge.toNodeId)) adjacency.set(edge.toNodeId, []);
-      adjacency.get(edge.fromNodeId)!.push(edge.toNodeId);
-      adjacency.get(edge.toNodeId)!.push(edge.fromNodeId);
-    }
-
-    // Build directed upstream and downstream maps
-    const upstreamMap = new Map<string, string[]>();
-    const downstreamMap = new Map<string, string[]>();
-    for (const edge of edges) {
-      if (!upstreamMap.has(edge.toNodeId)) upstreamMap.set(edge.toNodeId, []);
-      upstreamMap.get(edge.toNodeId)!.push(edge.fromNodeId);
-      if (!downstreamMap.has(edge.fromNodeId)) downstreamMap.set(edge.fromNodeId, []);
-      downstreamMap.get(edge.fromNodeId)!.push(edge.toNodeId);
-    }
-
-    // BFS traversal: collect upstream and downstream separately, then combine
-    // Depth of 5 allows seeing deeper lineage chains while maintaining directionality
-    // Upstream only follows upstream edges, downstream only follows downstream edges
-    const maxDepth = graphDisplayMode === "filter" ? 5 : Infinity;
-    const visited = new Set<string>([selectedNodeId]);
-    const depthMap = new Map<string, number>([[selectedNodeId, 0]]);
-    
-    // Traverse upstream (dependencies)
-    const upstreamQueue: string[] = [selectedNodeId];
-    while (upstreamQueue.length > 0 && visited.size < graphNodeLimit) {
-      const current = upstreamQueue.shift()!;
-      const currentDepth = depthMap.get(current) || 0;
-      if (currentDepth >= maxDepth) continue;
-      
-      const upstreamNeighbors = upstreamMap.get(current) ?? [];
-      for (const neighbor of upstreamNeighbors) {
-        if (visited.has(neighbor)) continue;
-        visited.add(neighbor);
-        depthMap.set(neighbor, currentDepth + 1);
-        upstreamQueue.push(neighbor);
-        if (visited.size >= graphNodeLimit) break;
-      }
-    }
-    
-    // Traverse downstream (dependents)
-    const downstreamQueue: string[] = [selectedNodeId];
-    while (downstreamQueue.length > 0 && visited.size < graphNodeLimit) {
-      const current = downstreamQueue.shift()!;
-      const currentDepth = depthMap.get(current) || 0;
-      if (currentDepth >= maxDepth) continue;
-      
-      const downstreamNeighbors = downstreamMap.get(current) ?? [];
-      for (const neighbor of downstreamNeighbors) {
-        if (visited.has(neighbor)) continue;
-        visited.add(neighbor);
-        depthMap.set(neighbor, currentDepth + 1);
-        downstreamQueue.push(neighbor);
-        if (visited.size >= graphNodeLimit) break;
-      }
-    }
-    
-    // Filter nodes to those we visited
-    const focusedNodes = nodes.filter((n) => visited.has(n.nodeId));
-    
-    // ── Add parent nodes to support hierarchy edges ──────────────────────────
-    // When a child node is visible, ensure its parent is also included for structural context
-    const nodeMap = new Map(nodes.map(n => [n.nodeId, n]));
-    const parentsToAdd = new Set<string>();
-    
-    for (const node of focusedNodes) {
-      if (node.parentNodeId && nodeMap.has(node.parentNodeId) && !visited.has(node.parentNodeId)) {
-        parentsToAdd.add(node.parentNodeId);
-      }
-    }
-    
-    // Add parent nodes to visited set and focused nodes
-    for (const parentId of parentsToAdd) {
-      visited.add(parentId);
-      const parentNode = nodeMap.get(parentId);
-      if (parentNode) {
-        focusedNodes.push(parentNode);
-      }
-    }
-    
-    console.log("[LineageView] Added parent nodes for hierarchy:", {
-      parentsAdded: parentsToAdd.size,
-      totalFocusedNodes: focusedNodes.length,
+    return buildGraphProjection({
+      filteredNodes: filtered,
+      filteredEdges,
+      allNodes: nodes,
+      allEdges: edges,
+      selectedNodeId,
+      graphScope,
+      graphDisplayMode,
+      graphNodeLimit,
     });
-    
-    // Use ALL edges (not just filtered ones) - show complete lineage
-    const focusedEdges = edges.filter((e) => visited.has(e.fromNodeId) && visited.has(e.toNodeId));
-
-    console.log("[LineageView] graphNodes/graphEdges (focused mode):", {
-      focusedNodes: focusedNodes.length,
-      focusedEdges: focusedEdges.length,
-      visitedNodes: visited.size,
-      totalEdges: edges.length,
-    });
-
-    return {
-      graphNodes: focusedNodes,
-      graphEdges: focusedEdges,
-      hiddenNodeCount: Math.max(0, nodes.length - focusedNodes.length),
-      hiddenEdgeCount: Math.max(0, edges.length - focusedEdges.length),
-      requiresSelection: false,
-    };
   }, [filtered, filteredEdges, nodes, edges, graphNodeLimit, graphScope, selectedNodeId, graphDisplayMode]);
 
   // ── BFS highlight map ─────────────────────────────────────────────────────
@@ -2060,6 +1879,16 @@ export function LineageWorkbenchItemLineageView({
                     </div>
                   )}
 
+                  {focusWarning && (
+                    <div className={styles.graphHint}>
+                      <MessageBar intent="warning">
+                        <MessageBarBody>
+                          {t("LineageWorkbench_GraphFocusWarning", focusWarning)}
+                        </MessageBarBody>
+                      </MessageBar>
+                    </div>
+                  )}
+
                   {requiresSelection ? (
                     <div className={styles.graphEmptyBody}>
                       <Text style={{ color: tokens.colorNeutralForeground3, maxWidth: 460 }}>
@@ -2184,6 +2013,16 @@ export function LineageWorkbenchItemLineageView({
                             { hiddenNodes: hiddenNodeCount, hiddenEdges: hiddenEdgeCount }
                           )}
                         </Text>
+                      </div>
+                    )}
+
+                    {focusWarning && (
+                      <div className={styles.graphHint}>
+                        <MessageBar intent="warning">
+                          <MessageBarBody>
+                            {t("LineageWorkbench_GraphFocusWarning", focusWarning)}
+                          </MessageBarBody>
+                        </MessageBar>
                       </div>
                     )}
 

@@ -251,9 +251,8 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
       component: (
         <LineageWorkbenchItemLineageView
             workloadClient={workloadClient}
-            workspaceId={definition.extraction?.workspaceId || item?.workspaceId}
+            workspaceId={definition.extraction?.targetLakehouseWorkspaceId || item?.workspaceId}
             targetLakehouseId={definition.extraction?.targetLakehouseId}
-            sqlEndpoint={definition.extraction?.sqlEndpoint}
           lineage={definition.lineage}
           onLineageChange={handleLineageChange}
           onOpenRequirementsBoard={() => navigateTo(VIEW.REQUIREMENTS)}

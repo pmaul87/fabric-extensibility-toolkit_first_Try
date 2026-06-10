@@ -25,6 +25,18 @@ param (
     
     # Deploy manifest package to Fabric (not implemented yet)
     [boolean]$DeployManifest = $false,
+
+    # Deploy local notebooks to a Fabric workspace
+    [boolean]$DeployNotebooks = $false,
+
+    # Fabric workspace ID used for notebook deployment
+    [string]$FabricWorkspaceId,
+
+    # The local notebooks directory to publish
+    [string]$NotebooksPath = "..\..\Workload\notebooks",
+
+    # Top-level folder name for notebooks in the Fabric workspace
+    [string]$NotebookRootFolderName = "Notebooks",
     
     # Deployment slot name (optional, for staging deployments)
     [string]$SlotName,
@@ -64,6 +76,18 @@ param (
 
 .PARAMETER DeployManifest
     Also deploy the manifest package to Fabric (not implemented yet).
+
+.PARAMETER DeployNotebooks
+    Publish local notebook files to a Fabric workspace using the Fabric public API.
+
+.PARAMETER FabricWorkspaceId
+    The target Fabric workspace ID for notebook deployment.
+
+.PARAMETER NotebooksPath
+    The local path that contains notebook files to publish.
+
+.PARAMETER NotebookRootFolderName
+    The top-level Fabric folder used to store published notebooks.
 
 .PARAMETER SlotName
     The deployment slot name for staging deployments.
@@ -461,6 +485,12 @@ Write-Info "  Deployment Method: $DeploymentMethod"
 Write-Info "  Create Backup: $CreateBackup"
 Write-Info "  Restart After Deploy: $RestartAfterDeploy"
 Write-Info "  Deploy Manifest: $DeployManifest"
+Write-Info "  Deploy Notebooks: $DeployNotebooks"
+if (-not [string]::IsNullOrWhiteSpace($FabricWorkspaceId)) {
+    Write-Info "  Fabric Workspace ID: $FabricWorkspaceId"
+}
+Write-Info "  Notebooks Path: $NotebooksPath"
+Write-Info "  Notebook Root Folder: $NotebookRootFolderName"
 Write-Info ""
 
 # Confirm deployment unless Force is specified
@@ -539,6 +569,35 @@ try {
     Write-Info "=== Deploying Manifest ===" "Yellow"
     Deploy-Manifest -ManifestPath "..\..\release\ManifestPackage.1.0.0.nupkg"
     Write-Info ""
+
+    if ($DeployNotebooks) {
+        if ([string]::IsNullOrWhiteSpace($FabricWorkspaceId)) {
+            Write-Error-Custom "FabricWorkspaceId is required when DeployNotebooks is enabled."
+            exit 1
+        }
+
+        Write-Info "=== Deploying Notebooks to Fabric ===" "Yellow"
+        $notebookDeployScript = Join-Path $PSScriptRoot "DeployNotebooksToFabric.ps1"
+
+        if (-not (Test-Path $notebookDeployScript)) {
+            Write-Error-Custom "Notebook deployment script not found: $notebookDeployScript"
+            exit 1
+        }
+
+        try {
+            & $notebookDeployScript `
+                -WorkspaceId $FabricWorkspaceId `
+                -NotebooksPath $NotebooksPath `
+                -RootFolderName $NotebookRootFolderName
+        }
+        catch {
+            Write-Error-Custom "Notebook deployment failed."
+            Write-Error-Custom $_.Exception.Message
+            exit 1
+        }
+
+        Write-Info ""
+    }
     
     # Final summary
     $deploymentDuration = (Get-Date) - $deploymentStartTime
@@ -558,7 +617,13 @@ try {
     Write-Info "1. Test your workload functionality in the browser"
     Write-Info "2. TODO: Go to Fabric Admin Portal and upload manifest package:" "Red"
     Write-Info "   📦 Manifest location: $(Join-Path $PSScriptRoot "..\..\release\ManifestPackage.1.0.0.nupkg")" "Red"
-    Write-Info "3. Test item creation and functionality in Microsoft Fabric"
+    if ($DeployNotebooks) {
+        Write-Info "3. Confirm notebooks are present in Fabric workspace $FabricWorkspaceId"
+        Write-Info "4. Test item creation and functionality in Microsoft Fabric"
+    }
+    else {
+        Write-Info "3. Test item creation and functionality in Microsoft Fabric"
+    }
     
 }
 catch {

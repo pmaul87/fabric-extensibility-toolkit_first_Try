@@ -46,7 +46,7 @@
 | ExtractionView config UI | ✅ Complete | Target workspaces, artifact types, lakehouse ID |
 | LineageWorkbench graph view | ✅ Complete | Node/edge rendering with requirements panel |
 | RequirementBoardItem kanban | ✅ Complete | Creator/assignee tracking, shared dialog |
-| Extraction notebooks (local) | ✅ Complete | 01–03 ready in `Workload/notebooks/extraction/` |
+| Extraction notebooks (local) | ✅ Complete | Local notebooks are stored in `Workload/notebooks/` and can be published with `scripts/Deploy/DeployNotebooksToFabric.ps1` |
 | Manifest cleanup | ✅ Complete | 3 active items, unused assets removed |
 | Workspace migration | ✅ Complete | Workspace `a559a09d-159b-43f9-a5f7-f908bc5a77bb` |
 | FabricNotebookClient scaffold | ✅ Complete | `Workload/app/clients/FabricNotebookClient.ts` |
@@ -55,20 +55,42 @@
 
 ## Phase 2 — Step-by-Step Plan
 
-### Step 1: Upload Extraction Notebooks to Fabric Workspace
+### Step 1: Configure Notebook Deployment in the Workbench UI
 
-The notebooks must exist as Fabric Notebook items before they can be triggered by the client.
+**Recommended Approach**: Use the Extraction view's deployment configuration section.
 
-**How to upload**:
-1. Open VS Code with the Synapse (FabricNotebook) extension
-2. Connect to workspace `a559a09d-159b-43f9-a5f7-f908bc5a77bb`
-3. Use **Fabric: Upload Notebook** for each file:
-   - `Workload/notebooks/extraction/01_extract_semantic_models.ipynb`
-   - `Workload/notebooks/extraction/02_extract_reports.ipynb`
-   - `Workload/notebooks/extraction/03_extract_notebooks.ipynb`
-4. Keep the display names matching `FabricNotebookClient.EXTRACTION_NOTEBOOKS` exactly
+The ExtractionView now includes a **Deployment Configuration** section that allows you to:
+- Enable/disable notebook deployment to Fabric workspace
+- Select which notebooks to deploy (checkboxes for each .ipynb file)
+- Choose an existing lakehouse or create a new one using the entity picker
+- Configure lakehouse name for new deployments
 
-> Once uploaded, the FabricNotebook MCP can read/run them from VS Code directly.
+**To configure deployment**:
+1. Open the LineageWorkbenchItem in the Fabric portal
+2. Navigate to the **Extraction** view
+3. In the **Target Lakehouse** section, use the **Select Lakehouse** button to pick a lakehouse using the DataHub entity picker
+4. In the **Deployment Configuration** section:
+   - Check **Deploy extraction notebooks to Fabric workspace**
+   - Check **Create new lakehouse for lineage storage** if you want to create a new lakehouse (and provide a name)
+   - Select which notebooks should be deployed (future enhancement)
+5. Save the workbench item
+
+**Alternative**: PowerShell scripts are still available for CI/CD scenarios:
+
+```powershell
+pwsh .\scripts\Deploy\DeployNotebooksToFabric.ps1 `
+  -WorkspaceId "a559a09d-159b-43f9-a5f7-f908bc5a77bb"
+```
+
+Or integrated with the main deployment:
+
+```powershell
+pwsh .\scripts\Deploy\DeployToAzureWebApp.ps1 `
+  -WebAppName "your-webapp" `
+  -ResourceGroupName "your-resource-group" `
+  -DeployNotebooks $true `
+  -FabricWorkspaceId "a559a09d-159b-43f9-a5f7-f908bc5a77bb"
+```
 
 ---
 
@@ -171,7 +193,7 @@ Add each to `FabricNotebookClient.EXTRACTION_NOTEBOOKS` as they are built.
 | `Workload/app/items/LineageWorkbenchItem/LineageWorkbenchItemExtractionView.tsx` | Needs Run button + progress UI |
 | `Workload/app/services/LineageGraphService.ts` | To be created — OneLake → graph model |
 | `Workload/app/items/LineageWorkbenchItem/LineageWorkbenchItemDefaultView.tsx` | Needs real data wiring |
-| `Workload/notebooks/extraction/` | 3 notebooks ready for upload |
+| `Workload/notebooks/` | Local notebooks ready for Fabric deployment |
 | `build/DevGateway/workload-dev-mode.json` | Workspace `a559a09d` configured |
 
 ---

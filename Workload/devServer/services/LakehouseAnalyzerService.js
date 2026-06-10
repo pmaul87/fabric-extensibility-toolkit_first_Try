@@ -29,16 +29,14 @@ const LINEAGE_OPTIONAL_TABLES = [
   "t_report_visuals",  // Alternative naming convention
   "t_dataset_semantic_models",
   "t_dataset_tables",
-  "t_dataset_partitions",
-  "t_column_lineage",
   "t_dataset_columns",
   "t_dataset_measures",
   "t_dataset_measure",
   "t_dataset_relationships",
+  "t_dataset_relations",  // Alternative naming for relationships table
   "t_dataset_lakehouses",
-  "t_dataset_lakehouse_tables",
-  "t_dataset_lakehouse_columns",
   "t_dataset_warehouses",
+  "t_column_lineage",  // Column transformation query steps
   "t_datamodel_reports",
   "t_datamodel_pages",
   "t_datamodel_visuals",
@@ -350,19 +348,29 @@ async function queryLineageTables(sqlEndpoint, sqlAccessToken, tableNames, fallb
 
     const output = {};
     const diagnostics = [];
+    console.log(`[LakehouseAnalyzer] *** Querying ${tableNames.length} tables:`, tableNames);
     for (const tableName of tableNames) {
       const schemaName = await resolveTableSchema(pool, tableName);
       if (!schemaName) {
         output[tableName] = [];
         diagnostics.push(`Table '${tableName}' not found in Lakehouse SQL endpoint.`);
-        console.log(`[LakehouseAnalyzer] Table not found: ${tableName}`);
+        console.log(`[LakehouseAnalyzer] ✗ Table not found: ${tableName}`);
         continue;
       }
 
       const qualified = `${escapeSqlIdentifier(schemaName)}.${escapeSqlIdentifier(tableName)}`;
       const rowsResult = await pool.request().query(`SELECT * FROM ${qualified};`);
       output[tableName] = rowsResult.recordset || [];
-      console.log(`[LakehouseAnalyzer] Queried ${qualified}: ${output[tableName].length} rows`);
+      console.log(`[LakehouseAnalyzer] ✓ Queried ${qualified}: ${output[tableName].length} rows`);
+      
+      // Special logging for relationship tables
+      if (tableName.includes('relation')) {
+        console.log(`[LakehouseAnalyzer] *** ${tableName} details:`, {
+          rowCount: output[tableName].length,
+          firstRow: output[tableName].length > 0 ? output[tableName][0] : 'NO ROWS',
+          columns: output[tableName].length > 0 ? Object.keys(output[tableName][0]) : []
+        });
+      }
     }
 
     return { output, diagnostics };
@@ -847,31 +855,38 @@ class LakehouseAnalyzerService {
       diagnostics.push("v_nodes and v_edges returned no rows.");
     }
 
+    // Helper function to find first non-empty array (empty arrays from missing tables should be skipped)
+    const firstNonEmpty = (...arrays) => {
+      for (const arr of arrays) {
+        if (Array.isArray(arr) && arr.length > 0) {
+          return arr;
+        }
+      }
+      return [];
+    };
+
     const dimensions = {
       // New dimension tables (support both t_dataset_*, t_report_* and t_datamodel_* naming)
-      reports: output.t_report_reports || output.t_dataset_reports || output.t_datamodel_reports || output.lineage_reports || [],
-      pages: output.t_report_pages || output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
-      visuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
-      semanticModels: output.t_dataset_semantic_models || output.t_datamodel_semantic_models || output.lineage_semantic_models || [],
-      tables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
-      partitions: output.t_dataset_partitions || [],
-      columnLineage: output.t_column_lineage || [],
-      columns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
-      measures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],
-      relationships: output.t_dataset_relationships || output.t_datamodel_relationships || output.lineage_semantic_model_relationships || [],
-      lakehouses: output.t_dataset_lakehouses || output.t_datamodel_lakehouses || output.lineage_lakehouses || [],
-      lakehouseTables: output.t_dataset_lakehouse_tables || [],
-      lakehouseColumns: output.t_dataset_lakehouse_columns || [],
-      warehouses: output.t_dataset_warehouses || output.t_datamodel_warehouses || output.warehouses || [],
+      reports: firstNonEmpty(output.t_report_reports, output.t_dataset_reports, output.t_datamodel_reports, output.lineage_reports),
+      pages: firstNonEmpty(output.t_report_pages, output.t_dataset_pages, output.t_datamodel_pages, output.lineage_report_pages),
+      visuals: firstNonEmpty(output.t_report_visuals, output.t_dataset_visuals, output.t_datamodel_visuals, output.lineage_report_visuals),
+      semanticModels: firstNonEmpty(output.t_dataset_semantic_models, output.t_datamodel_semantic_models, output.lineage_semantic_models),
+      tables: firstNonEmpty(output.t_dataset_tables, output.t_datamodel_tables, output.lineage_semantic_model_tables),
+      columns: firstNonEmpty(output.t_dataset_columns, output.t_datamodel_columns, output.lineage_semantic_model_columns),
+      measures: firstNonEmpty(output.t_dataset_measures, output.t_dataset_measure, output.t_datamodel_measures, output.lineage_semantic_model_measures),
+      relationships: firstNonEmpty(output.t_dataset_relationships, output.t_dataset_relations, output.t_datamodel_relationships, output.lineage_semantic_model_relationships),
+      lakehouses: firstNonEmpty(output.t_dataset_lakehouses, output.t_datamodel_lakehouses, output.lineage_lakehouses),
+      warehouses: firstNonEmpty(output.t_dataset_warehouses, output.t_datamodel_warehouses, output.warehouses),
+      columnLineage: firstNonEmpty(output.t_column_lineage),
       // Legacy aliases (for backward compatibility with old saved data)
-      reportPages: output.t_report_pages || output.t_dataset_pages || output.t_datamodel_pages || output.lineage_report_pages || [],
-      reportVisuals: output.t_report_visuals || output.t_dataset_visuals || output.t_datamodel_visuals || output.lineage_report_visuals || [],
-      smTables: output.t_dataset_tables || output.t_datamodel_tables || output.lineage_semantic_model_tables || [],
-      smColumns: output.t_dataset_columns || output.t_datamodel_columns || output.lineage_semantic_model_columns || [],
-      smMeasures: output.t_dataset_measures || output.t_dataset_measure || output.t_datamodel_measures || output.lineage_semantic_model_measures || [],
-      smRelationships: output.t_dataset_relationships || output.t_datamodel_relationships || output.lineage_semantic_model_relationships || [],
-      smDependencies: output.lineage_semantic_model_dependencies || [],
-      workspaceArtifacts: output.workspace_artifacts || [],
+      reportPages: firstNonEmpty(output.t_report_pages, output.t_dataset_pages, output.t_datamodel_pages, output.lineage_report_pages),
+      reportVisuals: firstNonEmpty(output.t_report_visuals, output.t_dataset_visuals, output.t_datamodel_visuals, output.lineage_report_visuals),
+      smTables: firstNonEmpty(output.t_dataset_tables, output.t_datamodel_tables, output.lineage_semantic_model_tables),
+      smColumns: firstNonEmpty(output.t_dataset_columns, output.t_datamodel_columns, output.lineage_semantic_model_columns),
+      smMeasures: firstNonEmpty(output.t_dataset_measures, output.t_dataset_measure, output.t_datamodel_measures, output.lineage_semantic_model_measures),
+      smRelationships: firstNonEmpty(output.t_dataset_relationships, output.t_dataset_relations, output.t_datamodel_relationships, output.lineage_semantic_model_relationships),
+      smDependencies: firstNonEmpty(output.lineage_semantic_model_dependencies),
+      workspaceArtifacts: firstNonEmpty(output.workspace_artifacts),
     };
 
     // Log which table names were actually found
@@ -903,16 +918,14 @@ class LakehouseAnalyzerService {
         output.t_datamodel_visuals?.length && `t_datamodel_visuals(${output.t_datamodel_visuals.length})`
       ].filter(Boolean).join(", ") || "none"
     });
-    console.log("[LakehouseAnalyzer] Partitions:", {
-      selected: output.t_dataset_partitions ? "t_dataset_partitions" : "none",
-      count: dimensions.partitions.length,
-      available: output.t_dataset_partitions?.length ? `t_dataset_partitions(${output.t_dataset_partitions.length})` : "none"
-    });
-    console.log("[LakehouseAnalyzer] 🔍 Column Lineage:", {
-      selected: output.t_column_lineage ? "t_column_lineage" : "none",
-      count: dimensions.columnLineage.length,
-      available: output.t_column_lineage?.length ? `t_column_lineage(${output.t_column_lineage.length})` : "none",
-      sampleRecord: dimensions.columnLineage.length > 0 ? dimensions.columnLineage[0] : null
+    console.log("[LakehouseAnalyzer] *** RELATIONSHIPS (CRITICAL):", {
+      selected: output.t_dataset_relationships ? "t_dataset_relationships" : output.t_dataset_relations ? "t_dataset_relations" : output.t_datamodel_relationships ? "t_datamodel_relationships" : "none",
+      count: dimensions.relationships.length,
+      available: [
+        output.t_dataset_relationships?.length && `t_dataset_relationships(${output.t_dataset_relationships.length})`,
+        output.t_dataset_relations?.length && `t_dataset_relations(${output.t_dataset_relations.length})`,
+        output.t_datamodel_relationships?.length && `t_datamodel_relationships(${output.t_datamodel_relationships.length})`
+      ].filter(Boolean).join(", ") || "none"
     });
     console.log("[LakehouseAnalyzer] ===== END TABLE MAPPING =====");
 
@@ -929,8 +942,6 @@ class LakehouseAnalyzerService {
       measures: dimensions.measures.length,
       relationships: dimensions.relationships.length,
       lakehouses: dimensions.lakehouses.length,
-      lakehouseTables: dimensions.lakehouseTables.length,
-      lakehouseColumns: dimensions.lakehouseColumns.length,
       warehouses: dimensions.warehouses.length,
       // Legacy aliases for verification
       smTables: dimensions.smTables.length,

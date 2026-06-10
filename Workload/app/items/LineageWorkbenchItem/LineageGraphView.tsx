@@ -26,12 +26,11 @@ import { toPng } from "html-to-image";
 export interface LineageViewerNode {
   nodeId: string;
   displayName: string;
-  entityType: "report" | "page" | "visual" | "semantic_model" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "lakehouse_table" | "lakehouse_column" | "warehouse" | "unknown";
+  entityType: "report" | "page" | "visual" | "semantic_model" | "semantic_object" | "table" | "column" | "measure" | "dataflow" | "notebook" | "lakehouse" | "warehouse" | "unknown";
   datasetId?: string;
   modelName?: string;
   tableName?: string;
-  table_sk?: string;
-  columnName?: string; // Raw column name from dimension table for matching with t_column_lineage
+  columnName?: string;
   objectName?: string;
   objectSubtype?: string;
   dataType?: string;
@@ -42,8 +41,6 @@ export interface LineageViewerNode {
   visualId?: string;
   pageNumber?: number;
   visualType?: string;
-  lakehouseId?: string;
-  lakehouseTableId?: string;
   parentNodeId?: string;
   isGroupNode?: boolean;
 }
@@ -511,11 +508,19 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
               {data.typeLabel && (
                 <div
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    width: "fit-content",
+                    padding: "2px 6px",
+                    borderRadius: 999,
                     fontSize: 10,
-                    color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                    lineHeight: 1.2,
+                    color: isFocus ? "#ffffff" : nodeBorder,
+                    background: isFocus ? "rgba(255,255,255,0.14)" : "var(--colorNeutralBackground1, #fff)",
+                    border: `1px solid ${isFocus ? "rgba(255,255,255,0.3)" : nodeBorder}`,
                   }}
                 >
-                  Type: {data.typeLabel}
+                  {data.typeLabel}
                 </div>
               )}
 
@@ -523,7 +528,7 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
                 <div
                   style={{
                     fontSize: 10,
-                    color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                    color: isFocus ? "rgba(255,255,255,0.78)" : "var(--colorNeutralForeground2, #424242)",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -579,11 +584,19 @@ function LineageNodeComponent({ data, id }: NodeProps<LineageFlowNode>) {
             {data.typeLabel && (
               <div
                 style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  width: "fit-content",
+                  padding: "2px 6px",
+                  borderRadius: 999,
                   fontSize: 10,
-                  color: isFocus ? "rgba(255,255,255,0.75)" : "var(--colorNeutralForeground3, #757575)",
+                  lineHeight: 1.2,
+                  color: isFocus ? "#ffffff" : nodeBorder,
+                  background: isFocus ? "rgba(255,255,255,0.14)" : "var(--colorNeutralBackground1, #fff)",
+                  border: `1px solid ${isFocus ? "rgba(255,255,255,0.3)" : nodeBorder}`,
                 }}
               >
-                Type: {data.typeLabel}
+                {data.typeLabel}
               </div>
             )}
 

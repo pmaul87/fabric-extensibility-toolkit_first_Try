@@ -14,7 +14,7 @@ import {
   MessageBar,
   MessageBarBody,
 } from "@fluentui/react-components";
-import { PlayRegular, DatabaseRegular } from "@fluentui/react-icons";
+import { PlayRegular, DatabaseRegular, BuildingRegular } from "@fluentui/react-icons";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { ItemEditorDefaultView } from "../../components/ItemEditor";
 import { FabricNotebookClient } from "../../clients/FabricNotebookClient";
@@ -284,6 +284,27 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
           >
             {t("LineageWorkbench_Extraction_DeployButton", "Deploy Notebooks to Workspace")}
           </Button>
+        </div>
+      </div>
+
+      <Divider />
+
+      <div>
+        <Text className={styles.sectionTitle}>
+          {t("LineageWorkbench_Extraction_Section_Workspaces", "Workspaces to Extract")}
+        </Text>
+        <div className={styles.sectionBody}>
+          <Field label={t("LineageWorkbench_Extraction_Workspaces", "Source Workspaces")}>
+            <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM }}>
+              <Button
+                appearance="secondary"
+                icon={<BuildingRegular />}
+                onClick={undefined}
+              >
+                {t("LineageWorkbench_Extraction_Workspaces_Select", "Select Workspaces")}
+              </Button>
+            </div>
+          </Field>
         </div>
       </div>
 

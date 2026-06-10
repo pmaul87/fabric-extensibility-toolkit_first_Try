@@ -270,7 +270,7 @@ export function LineageDetailView({
           (m.measure_name === selectedNode.displayName && m.table === selectedNode.tableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || 
+          m.dataset_id === selectedNode.datasetId || 
           m.uid === selectedNode.datasetId || 
           m.model_pk === selectedNode.datasetId
         );
@@ -324,7 +324,7 @@ export function LineageDetailView({
           (c.column_name === selectedNode.displayName && c.table === selectedNode.tableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || 
+          m.dataset_id === selectedNode.datasetId || 
           m.uid === selectedNode.datasetId || 
           m.model_pk === selectedNode.datasetId
         );
@@ -464,7 +464,7 @@ export function LineageDetailView({
           );
         }
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
+          m.dataset_id === selectedNode.datasetId || m.uid === selectedNode.datasetId
         );
         return [
           { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId || reportDetails?.report_id },
@@ -515,10 +515,10 @@ export function LineageDetailView({
         const tableDetails = dimensions?.tables?.find((t: any) => 
           t.table_pk === selectedNode.nodeId || 
           t.uid === selectedNode.nodeId || 
-          (t.table_name === selectedNode.tableName && t.model_id === selectedNode.datasetId)
+          (t.table_name === selectedNode.tableName && t.dataset_id === selectedNode.datasetId)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
-          m.model_id === selectedNode.datasetId || 
+          m.dataset_id === selectedNode.datasetId || 
           m.uid === selectedNode.datasetId || 
           m.model_pk === selectedNode.datasetId
         );
@@ -663,15 +663,16 @@ export function LineageDetailView({
 
   // Compute all transitive upstream/downstream connections using BFS
   const allTransitiveConnections = useMemo(() => {
-    if (!selectedNode || !showAllConnections) return { upstream: [] as LineageViewerNode[], downstream: [] as LineageViewerNode[] };
+    if (!selectedNode || !showAllConnections) return { upstream: [] as LineageViewerNode[], downstream: [] as LineageViewerNode[], degreeMap: new Map<string, number>() };
 
-    const computeTransitive = (startNodeId: string, direction: "upstream" | "downstream"): LineageViewerNode[] => {
+    const computeTransitive = (startNodeId: string, direction: "upstream" | "downstream"): { nodes: LineageViewerNode[], degreeMap: Map<string, number> } => {
       const visited = new Set<string>();
-      const queue = [startNodeId];
+      const queue: { nodeId: string, degree: number }[] = [{ nodeId: startNodeId, degree: 0 }];
       const results: LineageViewerNode[] = [];
+      const degreeMap = new Map<string, number>();
 
       while (queue.length > 0) {
-        const currentNodeId = queue.shift()!;
+        const { nodeId: currentNodeId, degree: currentDegree } = queue.shift()!;
         if (visited.has(currentNodeId)) continue;
         visited.add(currentNodeId);
 
@@ -680,32 +681,36 @@ export function LineageDetailView({
           const currentNode = nodeById.get(currentNodeId);
           if (currentNode) {
             results.push(currentNode);
+            degreeMap.set(currentNodeId, currentDegree);
           }
         }
 
-        // Find edges in the specified direction
-        const relevantEdges = edges.filter(e => {
-          if (e.edgeType !== "dependency" && e.edgeType !== "relationship") return false;
-          return direction === "upstream" 
-            ? e.toNodeId === currentNodeId 
-            : e.fromNodeId === currentNodeId;
-        });
+        // Find edges in the specified direction.
+        // "Show all" should traverse the full lineage graph, not only dependency/relationship edges.
+        const relevantEdges = edges.filter((e) =>
+          direction === "upstream" ? e.toNodeId === currentNodeId : e.fromNodeId === currentNodeId,
+        );
 
-        // Add neighbors to queue
+        // Add neighbors to queue with incremented degree
         for (const edge of relevantEdges) {
           const nextNodeId = direction === "upstream" ? edge.fromNodeId : edge.toNodeId;
           if (!visited.has(nextNodeId)) {
-            queue.push(nextNodeId);
+            queue.push({ nodeId: nextNodeId, degree: currentDegree + 1 });
           }
         }
       }
 
-      return results;
+      return { nodes: results, degreeMap };
     };
 
+    const upstreamResult = computeTransitive(selectedNode.nodeId, "upstream");
+    const downstreamResult = computeTransitive(selectedNode.nodeId, "downstream");
+    const combinedDegreeMap = new Map([...upstreamResult.degreeMap, ...downstreamResult.degreeMap]);
+
     return {
-      upstream: computeTransitive(selectedNode.nodeId, "upstream"),
-      downstream: computeTransitive(selectedNode.nodeId, "downstream"),
+      upstream: upstreamResult.nodes,
+      downstream: downstreamResult.nodes,
+      degreeMap: combinedDegreeMap,
     };
   }, [selectedNode, showAllConnections, nodeById, edges]);
 
@@ -745,43 +750,22 @@ export function LineageDetailView({
 
   // Calculate "Filtered by" relationships
   const filteredByRelations = useMemo(() => {
-    if (!selectedNode || !dimensions?.smRelationships) {
-      console.log("[LineageDetail] No filteredBy data:", { 
-        hasSelectedNode: !!selectedNode, 
-        hasDimensions: !!dimensions,
-        hasSmRelationships: !!dimensions?.smRelationships 
-      });
-      return [];
+    if (!selectedNode || !dimensions?.relationships) {      return [];
     }
 
-    const smRelationships = Array.isArray(dimensions.smRelationships) ? dimensions.smRelationships : [];
-    const smTables = Array.isArray(dimensions.smTables) ? dimensions.smTables : [];
-    const nodeModelId = selectedNode.datasetId;
-
-    console.log("[LineageDetail] Processing filteredBy for:", { 
-      nodeId: selectedNode.nodeId,
-      entityType: selectedNode.entityType,
-      tableName: selectedNode.tableName,
-      nodeModelId,
-      totalRelationships: smRelationships.length,
-      totalTables: smTables.length
-    });
-
-    if (!nodeModelId) {
-      console.log("[LineageDetail] Missing model ID");
-      return [];
+    const smRelationships = Array.isArray(dimensions.relationships) ? dimensions.relationships : [];
+    const smTables = Array.isArray(dimensions.tables) ? dimensions.tables : [];
+    const nodeModelId = selectedNode.datasetId;    if (!nodeModelId) {      return [];
     }
 
     // Debug: log sample table object to see structure
-    if (smTables.length > 0) {
-      console.log("[LineageDetail filteredBy] Sample smTables object:", smTables[0]);
-      console.log("[LineageDetail filteredBy] smTables properties:", Object.keys(smTables[0]));
+    if (smTables.length > 0) {      console.log("[LineageDetail filteredBy] smTables properties:", Object.keys(smTables[0]));
     }
 
     // Build lookup map: table ID -> table name
     const tableIdToName = new Map<string, string>();
     smTables.forEach((table: any, idx: number) => {
-      if (table.model_id === nodeModelId) {
+      if (table.dataset_id === nodeModelId) {
         // LineageTag is the field that contains the GUID
         const tableId = table.lineagetag || table.LineageTag;
         const name = table.name || table.tablename || table.table_name;
@@ -810,22 +794,15 @@ export function LineageDetailView({
     });
 
     // If direct table ID mapping failed and we have columns, try column-based matching
-    if (tableIdToName.size === 0 && dimensions.smColumns) {
-      console.log("[LineageDetail] Table ID->name map empty, attempting column-based matching...");
-      
-      const smColumns = Array.isArray(dimensions.smColumns) ? dimensions.smColumns : [];
+    if (tableIdToName.size === 0 && dimensions.columns) {      const smColumns = Array.isArray(dimensions.columns) ? dimensions.columns : [];
       
       // Debug: log sample column object
-      if (smColumns.length > 0) {
-        console.log("[LineageDetail] Sample smColumns object:", smColumns[0]);
-        console.log("[LineageDetail] smColumns properties:", Object.keys(smColumns[0]));
-        console.log("[LineageDetail] Total columns:", smColumns.length);
-      }
+      if (smColumns.length > 0) {        console.log("[LineageDetail] smColumns properties:", Object.keys(smColumns[0]));      }
       
       const columnToTable = new Map<string, string>(); // column_id -> table_name
       
       smColumns.forEach((col: any, idx: number) => {
-        if (col.model_id === nodeModelId) {
+        if (col.dataset_id === nodeModelId) {
           // LineageTag is the field that contains the GUID
           const colId = col.lineagetag || col.LineageTag;
           const colTableName = col.tablename || col.table_name || col.table;
@@ -856,7 +833,7 @@ export function LineageDetailView({
       
       // Now map relationship table IDs via their referenced columns
       smRelationships.forEach((rel: any) => {
-        if (rel.model_id === nodeModelId) {
+        if (rel.dataset_id === nodeModelId) {
           const fromColId = rel.fromcolumn || rel.from_column;
           const toColId = rel.tocolumn || rel.to_column;
           const fromTableId = rel.fromtable || rel.from_table;
@@ -876,18 +853,13 @@ export function LineageDetailView({
             }
           }
         }
-      });
-      
-      console.log("[LineageDetail] After column-based matching, table ID->name map size:", tableIdToName.size);
-    }
+      });    }
 
     // Build a map of filtering relationships: table -> tables that filter it
     const filteringMap = new Map<string, Set<string>>();
     
     // Debug: log sample relationship to see actual property names
-    if (smRelationships.length > 0) {
-      console.log("[LineageDetail] Sample relationship object:", smRelationships[0]);
-      console.log("[LineageDetail] Relationship properties:", Object.keys(smRelationships[0]));
+    if (smRelationships.length > 0) {      console.log("[LineageDetail] Relationship properties:", Object.keys(smRelationships[0]));
     }
     
     let activeRelCount = 0;
@@ -898,7 +870,7 @@ export function LineageDetailView({
       if (activeRelCount < 3) {
         console.log("[LineageDetail] Processing relationship:", {
           name: rel.name,
-          model_id: rel.model_id,
+          dataset_id: rel.dataset_id,
           fromtable: rel.fromtable,
           totable: rel.totable,
           isactive: rel.isactive,
@@ -908,7 +880,7 @@ export function LineageDetailView({
         });
       }
       
-      if (rel.model_id !== nodeModelId) return;
+      if (rel.dataset_id !== nodeModelId) return;
 
       // Check if relationship is active (handle both number and string)
       const isActive = rel.isactive === 1 || rel.isactive === "1" || rel.isactive === true;
@@ -934,22 +906,6 @@ export function LineageDetailView({
         const toTableId = rel.totable || rel.to_table;
         const fromTableName = tableIdToName.get(fromTableId) || fromTableId;
         const toTableName = tableIdToName.get(toTableId) || toTableId;
-        
-        const fromLookupSuccess = tableIdToName.has(fromTableId);
-        const toLookupSuccess = tableIdToName.has(toTableId);
-        
-        if (matchingFilterCount <= 3) {
-          console.log(`[LineageDetail filteredBy] Matching filtering relationship #${matchingFilterCount}:`, {
-            fromTableId,
-            toTableId,
-            fromTableName,
-            toTableName,
-            fromLookupSuccess,
-            toLookupSuccess,
-            crossFilterDir,
-            toCard
-          });
-        }
         
         // In Power BI relationships:
         // - fromTable is the "many" side (fact table)
@@ -981,14 +937,10 @@ export function LineageDetailView({
     
     if (selectedNode.entityType === "table" && selectedNode.tableName) {
       // For table nodes, check direct filtering
-      tablesToCheck.add(selectedNode.tableName);
-      console.log("[LineageDetail] Checking table:", selectedNode.tableName);
-    } else if (selectedNode.entityType === "column" || selectedNode.entityType === "measure") {
+      tablesToCheck.add(selectedNode.tableName);    } else if (selectedNode.entityType === "column" || selectedNode.entityType === "measure") {
       // For columns/measures, inherit filtering from their parent table
       if (selectedNode.tableName) {
-        tablesToCheck.add(selectedNode.tableName);
-        console.log("[LineageDetail] Column/Measure inheriting filtering from parent table:", selectedNode.tableName);
-      }
+        tablesToCheck.add(selectedNode.tableName);      }
       
       // Also check all tables this node transitively depends on via dependency edges
       const visited = new Set<string>();
@@ -1010,14 +962,10 @@ export function LineageDetailView({
           if (depNode) {
             // If this node depends on a table, check that table's filtering
             if (depNode.entityType === "table" && depNode.tableName) {
-              tablesToCheck.add(depNode.tableName);
-              console.log("[LineageDetail] Adding dependent table:", depNode.tableName);
-            }
+              tablesToCheck.add(depNode.tableName);            }
             // If this node depends on a column/measure, check their parent table too
             else if ((depNode.entityType === "column" || depNode.entityType === "measure") && depNode.tableName) {
-              tablesToCheck.add(depNode.tableName);
-              console.log("[LineageDetail] Adding parent table of dependent column/measure:", depNode.tableName);
-            }
+              tablesToCheck.add(depNode.tableName);            }
             
             // Continue BFS traversal
             if (!visited.has(depNode.nodeId)) {
@@ -1041,9 +989,7 @@ export function LineageDetailView({
       if (filters) {
         console.log(`[LineageDetail] Table "${tableName}" is filtered by:`, Array.from(filters));
         filters.forEach(f => filteringTableNames.add(f));
-      } else {
-        console.log(`[LineageDetail] Table "${tableName}" has no filters`);
-      }
+      } else {      }
     }
 
     console.log("[LineageDetail] All filtering tables found:", {
@@ -1056,9 +1002,7 @@ export function LineageDetailView({
       .map(tableName => {
         const tableNodeId = `table:${nodeModelId}|${tableName}`;
         const node = nodeById.get(tableNodeId);
-        if (!node) {
-          console.log(`[LineageDetail] Could not find node for table "${tableName}" with ID "${tableNodeId}"`);
-        }
+        if (!node) {        }
         return node;
       })
       .filter((n: LineageViewerNode | undefined): n is LineageViewerNode => n !== undefined);
@@ -1077,12 +1021,12 @@ export function LineageDetailView({
 
   // Table relationships - show all relationships this table participates in
   const tableRelationships = useMemo(() => {
-    if (!selectedNode || selectedNode.entityType !== "table" || !dimensions?.smRelationships) {
+    if (!selectedNode || selectedNode.entityType !== "table" || !dimensions?.relationships) {
       return { asFrom: [], asTo: [] };
     }
 
-    const smRelationships = Array.isArray(dimensions.smRelationships) ? dimensions.smRelationships : [];
-    const smTables = Array.isArray(dimensions.smTables) ? dimensions.smTables : [];
+    const smRelationships = Array.isArray(dimensions.relationships) ? dimensions.relationships : [];
+    const smTables = Array.isArray(dimensions.tables) ? dimensions.tables : [];
     const nodeModelId = selectedNode.datasetId;
     const tableName = selectedNode.tableName || selectedNode.displayName;
 
@@ -1091,11 +1035,7 @@ export function LineageDetailView({
     }
 
     // Debug: log sample table object to see structure
-    if (smTables.length > 0) {
-      console.log("[LineageDetail] Sample smTables object:", smTables[0]);
-      console.log("[LineageDetail] smTables properties:", Object.keys(smTables[0]));
-      console.log("[LineageDetail] Total tables:", smTables.length);
-    }
+    if (smTables.length > 0) {      console.log("[LineageDetail] smTables properties:", Object.keys(smTables[0]));    }
 
     // Build lookup map: table ID -> table name
     // NOTE: smTables may not have table_id, we need to check what field contains the GUID
@@ -1103,7 +1043,7 @@ export function LineageDetailView({
     const tableNameToId = new Map<string, string>();
     
     smTables.forEach((table: any, idx: number) => {
-      if (table.model_id === nodeModelId) {
+      if (table.dataset_id === nodeModelId) {
         // LineageTag is the field that contains the GUID
         const tableId = table.lineagetag || table.LineageTag;
         const name = table.name || table.tablename || table.table_name;
@@ -1127,32 +1067,22 @@ export function LineageDetailView({
           tableNameToId.set(name, name);
         }
       }
-    });
-
-    console.log("[LineageDetail] Table ID lookup map size:", tableIdToName.size);
-    if (tableIdToName.size > 0) {
+    });    if (tableIdToName.size > 0) {
       console.log("[LineageDetail] Sample table mappings:", 
         Array.from(tableIdToName.entries()).slice(0, 5)
       );
     }
 
     // If direct table ID mapping failed and we have columns, try column-based matching
-    if (tableIdToName.size === 0 && dimensions.smColumns) {
-      console.log("[LineageDetail relationships] Table ID->name map empty, attempting column-based matching...");
-      
-      const smColumns = Array.isArray(dimensions.smColumns) ? dimensions.smColumns : [];
+    if (tableIdToName.size === 0 && dimensions.columns) {      const smColumns = Array.isArray(dimensions.columns) ? dimensions.columns : [];
       
       // Debug: log sample column object
-      if (smColumns.length > 0) {
-        console.log("[LineageDetail relationships] Sample smColumns object:", smColumns[0]);
-        console.log("[LineageDetail relationships] smColumns properties:", Object.keys(smColumns[0]));
-        console.log("[LineageDetail relationships] Total columns:", smColumns.length);
-      }
+      if (smColumns.length > 0) {        console.log("[LineageDetail relationships] smColumns properties:", Object.keys(smColumns[0]));      }
       
       const columnToTable = new Map<string, string>(); // column_id -> table_name
       
       smColumns.forEach((col: any, idx: number) => {
-        if (col.model_id === nodeModelId) {
+        if (col.dataset_id === nodeModelId) {
           // LineageTag is the field that contains the GUID
           const colId = col.lineagetag || col.LineageTag;
           const colTableName = col.tablename || col.table_name || col.table;
@@ -1183,7 +1113,7 @@ export function LineageDetailView({
       
       // Now map relationship table IDs via their referenced columns
       smRelationships.forEach((rel: any) => {
-        if (rel.model_id === nodeModelId) {
+        if (rel.dataset_id === nodeModelId) {
           const fromColId = rel.fromcolumn || rel.from_column;
           const toColId = rel.tocolumn || rel.to_column;
           const fromTableId = rel.fromtable || rel.from_table;
@@ -1203,16 +1133,13 @@ export function LineageDetailView({
             }
           }
         }
-      });
-      
-      console.log("[LineageDetail relationships] After column-based matching, table ID->name map size:", tableIdToName.size);
-    }
+      });    }
 
     const asFrom: any[] = [];
     const asTo: any[] = [];
 
     smRelationships.forEach((rel: any, idx: number) => {
-      if (rel.model_id !== nodeModelId) return;
+      if (rel.dataset_id !== nodeModelId) return;
 
       // Get table IDs (these are GUIDs)
       const fromTableId = rel.fromtable || rel.from_table;
@@ -1221,26 +1148,6 @@ export function LineageDetailView({
       // Look up actual table names
       const fromTableName = tableIdToName.get(fromTableId) || fromTableId;
       const toTableName = tableIdToName.get(toTableId) || toTableId;
-      
-      const fromLookupSuccess = tableIdToName.has(fromTableId);
-      const toLookupSuccess = tableIdToName.has(toTableId);
-
-      if (idx < 3) {
-        console.log(`[LineageDetail] Processing relationship #${idx}:`, {
-          name: rel.name,
-          fromTableId,
-          toTableId,
-          fromTableName,
-          toTableName,
-          fromLookupSuccess,
-          toLookupSuccess,
-          isactive: rel.isactive,
-          crossfilteringbehavior: rel.crossfilteringbehavior,
-          fromcardinality: rel.fromcardinality,
-          tocardinality: rel.tocardinality,
-          currentTableName: tableName
-        });
-      }
 
       // Check if this table is the "from" table
       if (fromTableName === tableName) {
@@ -1267,15 +1174,7 @@ export function LineageDetailView({
           toCardinality: rel.tocardinality || rel.to_cardinality || "Unknown",
         });
       }
-    });
-
-    console.log("[LineageDetail] Table relationships computed:", {
-      tableName,
-      asFromCount: asFrom.length,
-      asToCount: asTo.length
-    });
-
-    return { asFrom, asTo };
+    });    return { asFrom, asTo };
   }, [selectedNode, dimensions]);
 
   // Update relations with filteredBy data
@@ -1283,21 +1182,106 @@ export function LineageDetailView({
     const result = {
       ...relations,
       filteredBy: { label: t("LineageDetail_FilteredBy", "Filtered by"), nodes: filteredByRelations },
-    };
-    
-    console.log("[LineageDetail] relationsWithFilteredBy computed:", {
-      hasFilteredBy: !!result.filteredBy,
-      filteredByCount: result.filteredBy?.nodes?.length || 0,
-      filteredByLabel: result.filteredBy?.label
-    });
-    
-    return result;
+    };    return result;
   }, [relations, filteredByRelations, t]);
 
   const rel = relationsWithFilteredBy;
 
+  // Node relationships - show relationships for tables and columns (via parent table)
+  const nodeRelationships = useMemo(() => {
+    // Only show for tables and columns
+    if (!selectedNode || (selectedNode.entityType !== "table" && selectedNode.entityType !== "column")) {
+      return [];
+    }
+
+    if (!dimensions?.relationships) {
+      return [];
+    }
+
+    const smRelationships = Array.isArray(dimensions.relationships) ? dimensions.relationships : [];
+    const smColumns = Array.isArray(dimensions.columns) ? dimensions.columns : [];
+    const nodeModelId = selectedNode.datasetId;
+
+    // For columns, use parent table name; for tables, use the node's own name
+    const lookupTableName = selectedNode.entityType === "column" 
+      ? selectedNode.tableName 
+      : selectedNode.displayName;
+
+    if (!nodeModelId || !lookupTableName) {
+      return [];
+    }
+
+    // Build lookup map: table ID -> table name from columns
+    const tableIdToName = new Map<string, string>();
+    smColumns.forEach((col: any) => {
+      if (col.dataset_id === nodeModelId) {
+        const colId = col.lineagetag || col.LineageTag;
+        const colTableName = col.tablename || col.table_name || col.table;
+        if (colId && colTableName) {
+          // Also try to infer table IDs from relationship references
+          if (!tableIdToName.has(colTableName)) {
+            tableIdToName.set(colTableName, colTableName);
+          }
+        }
+      }
+    });
+
+    // Extract relationships involving this table
+    const relationships: any[] = [];
+
+    smRelationships.forEach((rel: any) => {
+      if (rel.dataset_id !== nodeModelId) return;
+
+      // Get table IDs
+      const fromTableId = rel.fromtable || rel.from_table;
+      const toTableId = rel.totable || rel.to_table;
+      const fromColId = rel.fromcolumn || rel.from_column;
+      const toColId = rel.tocolumn || rel.to_column;
+
+      // Resolve table names from column references
+      let fromTableName = tableIdToName.get(fromTableId);
+      let toTableName = tableIdToName.get(toTableId);
+
+      // If not found by table ID, try to resolve from columns
+      if (!fromTableName && fromColId) {
+        const fromCol = smColumns.find((c: any) => 
+          (c.lineagetag === fromColId || c.LineageTag === fromColId) && c.dataset_id === nodeModelId
+        );
+        fromTableName = fromCol?.tablename || fromCol?.table_name || fromCol?.table;
+      }
+
+      if (!toTableName && toColId) {
+        const toCol = smColumns.find((c: any) => 
+          (c.lineagetag === toColId || c.LineageTag === toColId) && c.dataset_id === nodeModelId
+        );
+        toTableName = toCol?.tablename || toCol?.table_name || toCol?.table;
+      }
+
+      // Check if this relationship involves the lookup table
+      if (fromTableName === lookupTableName || toTableName === lookupTableName) {
+        const isActive = rel.isactive === 1 || rel.isactive === "1" || rel.isactive === true;
+        const crossFilterDir = rel.crossfilteringbehavior || rel.crossfilterdirection || rel.cross_filter_direction || "None";
+        const fromCard = rel.fromcardinality || rel.from_cardinality || "Unknown";
+        const toCard = rel.tocardinality || rel.to_cardinality || "Unknown";
+
+        relationships.push({
+          name: rel.name || `${fromTableName} → ${toTableName}`,
+          fromTable: fromTableName || fromTableId,
+          toTable: toTableName || toTableId,
+          isActive,
+          crossFilterDirection: crossFilterDir,
+          fromCardinality: fromCard,
+          toCardinality: toCard,
+          direction: fromTableName === lookupTableName ? "outgoing" : "incoming",
+        });
+      }
+    });
+
+    return relationships;
+  }, [selectedNode, dimensions]);
+
   // Helper function to render connection items with expand capability
-  const renderConnectionItem = (node: LineageViewerNode, depth: number = 0) => {
+  const renderConnectionItem = (node: LineageViewerNode, depth: number = 0, degree?: number) => {
     const isExpanded = expandedNodes.has(node.nodeId);
     const downstream = isExpanded ? getNodeDownstream(node.nodeId) : [];
     const hasDownstream = downstream.length > 0;
@@ -1330,19 +1314,28 @@ export function LineageDetailView({
             onClick={() => onNodeSelect?.(node.nodeId)}
             style={{ flex: 1 }}
           >
-            <span className={styles.connectionItemName} title={node.displayName}>
-              {node.displayName}
-            </span>
-            {node.tableName && (
-              <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
-            )}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", flex: 1, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, width: "100%" }}>
+                <span className={styles.connectionItemName} title={node.displayName}>
+                  {node.displayName}
+                </span>
+                {degree !== undefined && showAllConnections && (
+                  <Badge size="small" appearance="outline" style={{ flexShrink: 0 }}>
+                    {degree === 1 ? "direct" : `${degree} hops`}
+                  </Badge>
+                )}
+              </div>
+              {node.tableName && (
+                <span className={styles.connectionItemSubLabel}>{node.tableName}</span>
+              )}
+            </div>
           </button>
         </div>
         
         {/* Expanded downstream items */}
         {isExpanded && downstream.length > 0 && (
           <div style={{ marginTop: tokens.spacingVerticalXXS }}>
-            {downstream.map(downstreamNode => renderConnectionItem(downstreamNode, depth + 1))}
+            {downstream.map(downstreamNode => renderConnectionItem(downstreamNode, depth + 1, degree))}
           </div>
         )}
       </div>
@@ -1391,60 +1384,132 @@ export function LineageDetailView({
         </div>
       </div>
 
-      {/* ── Connected elements ── */}
+      {/* ── Upstream & Downstream Connections ── */}
       {(nodeEdges.incoming.length > 0 || nodeEdges.outgoing.length > 0) && (
-        <Accordion className={styles.accordionPanel} collapsible>
-          <AccordionItem value="connected-elements">
-            <AccordionHeader>
-              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
-                <Text weight="semibold">{t("LineageDetail_ConnectedElements", "Connected Elements")}</Text>
-                <Badge>{nodeEdges.incoming.length + nodeEdges.outgoing.length}</Badge>
+        <>
+          {/* Connection Depth Toggle */}
+          <div className={styles.card}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: tokens.spacingHorizontalS }}>
+              <div>
+                <Text weight="semibold" size={300}>{t("LineageDetail_ConnectionDepth", "Connection Depth")}</Text>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: tokens.spacingVerticalXXS, display: "block" }}>
+                  {showAllConnections 
+                    ? t("LineageDetail_ShowingAll", "Showing all transitive upstream/downstream dependencies")
+                    : t("LineageDetail_ShowingDirect", "Showing only neighbors")}
+                </Text>
               </div>
-            </AccordionHeader>
-            <AccordionPanel>
-              <div className={styles.accordionContent}>
-          {nodeEdges.outgoing.length > 0 && (
-            <div className={styles.connectionGroup}>
-              <div className={styles.connectionGroupLabel}>{t("LineageDetail_IncomingConnections", "Incoming ({count})", { count: nodeEdges.outgoing.length })}</div>
-              {nodeEdges.outgoing.map((edge, index) => {
-                const node = nodeById.get(edge.toNodeId);
-                if (!node) return null;
-                return (
-                  <button
-                    key={`incoming-${edge.edgeId}-${index}`}
-                    className={styles.connectionItem}
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName}>{node.displayName}</span>
-                    <Badge size="small" appearance="outline">{edge.edgeType}</Badge>
-                  </button>
-                );
-              })}
+              <Switch
+                checked={!showAllConnections}
+                onChange={(_, data) => setShowAllConnections(!data.checked)}
+                label={t("LineageDetail_ShowOnlyNeighbors", "Show only neighbors")}
+              />
             </div>
-          )}
-          {nodeEdges.incoming.length > 0 && (
-            <div className={styles.connectionGroup}>
-              <div className={styles.connectionGroupLabel}>{t("LineageDetail_OutgoingConnections", "Outgoing ({count})", { count: nodeEdges.incoming.length })}</div>
-              {nodeEdges.incoming.map((edge, index) => {
-                const node = nodeById.get(edge.fromNodeId);
-                if (!node) return null;
-                return (
-                  <button
-                    key={`outgoing-${edge.edgeId}-${index}`}
-                    className={styles.connectionItem}
-                    onClick={() => onNodeSelect?.(node.nodeId)}
-                  >
-                    <span className={styles.connectionItemName}>{node.displayName}</span>
-                    <Badge size="small" appearance="outline">{edge.edgeType}</Badge>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-              </div>
-            </AccordionPanel>
-          </AccordionItem>
-        </Accordion>
+          </div>
+
+          {/* Upstream (incoming) connections */}
+          {(() => {
+            const upstreamNodes = showAllConnections ? allTransitiveConnections.upstream : nodeEdges.incoming
+              .map(e => nodeById.get(e.fromNodeId))
+              .filter((n): n is LineageViewerNode => n !== undefined);
+            
+            if (upstreamNodes.length === 0) return null;
+            
+            const grouped = new Map<string, LineageViewerNode[]>();
+            for (const n of upstreamNodes) {
+              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
+              grouped.get(n.entityType)!.push(n);
+            }
+            
+            return (
+              <Accordion className={styles.accordionPanel} collapsible>
+                <AccordionItem value="upstream">
+                  <AccordionHeader>
+                    <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                      <Text weight="semibold">
+                        {showAllConnections 
+                          ? t("LineageDetail_AllUpstream", "All Upstream (transitive)")
+                          : t("LineageDetail_Upstream", "Upstream")}
+                      </Text>
+                      <Badge>{upstreamNodes.length}</Badge>
+                    </div>
+                  </AccordionHeader>
+                  <AccordionPanel>
+                    <div className={styles.accordionContent}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                        {showAllConnections
+                          ? t("LineageDetail_AllUpstreamHint", "All nodes that this node transitively depends on")
+                          : t("LineageDetail_UpstreamHint", "Nodes that this node directly depends on")}
+                      </Text>
+                      {Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
+                        <div key={entityType} className={styles.connectionGroup}>
+                          <div className={styles.connectionGroupLabel}>
+                            {getEntityTypeLabel(entityType)} ({groupNodes.length})
+                          </div>
+                          {groupNodes.map((node) => {
+                            const degree = allTransitiveConnections.degreeMap.get(node.nodeId);
+                            return renderConnectionItem(node, 0, degree);
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionPanel>
+                </AccordionItem>
+              </Accordion>
+            );
+          })()}
+
+          {/* Downstream (outgoing) connections */}
+          {(() => {
+            const downstreamNodes = showAllConnections ? allTransitiveConnections.downstream : nodeEdges.outgoing
+              .map(e => nodeById.get(e.toNodeId))
+              .filter((n): n is LineageViewerNode => n !== undefined);
+            
+            if (downstreamNodes.length === 0) return null;
+            
+            const grouped = new Map<string, LineageViewerNode[]>();
+            for (const n of downstreamNodes) {
+              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
+              grouped.get(n.entityType)!.push(n);
+            }
+            
+            return (
+              <Accordion className={styles.accordionPanel} collapsible>
+                <AccordionItem value="downstream">
+                  <AccordionHeader>
+                    <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                      <Text weight="semibold">
+                        {showAllConnections 
+                          ? t("LineageDetail_AllDownstream", "All Downstream (transitive)")
+                          : t("LineageDetail_Downstream", "Downstream")}
+                      </Text>
+                      <Badge>{downstreamNodes.length}</Badge>
+                    </div>
+                  </AccordionHeader>
+                  <AccordionPanel>
+                    <div className={styles.accordionContent}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                        {showAllConnections
+                          ? t("LineageDetail_AllDownstreamHint", "All nodes that transitively depend on this node")
+                          : t("LineageDetail_DownstreamHint", "Nodes that directly depend on this node")}
+                      </Text>
+                      {Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
+                        <div key={entityType} className={styles.connectionGroup}>
+                          <div className={styles.connectionGroupLabel}>
+                            {getEntityTypeLabel(entityType)} ({groupNodes.length})
+                          </div>
+                          {groupNodes.map((node) => {
+                            const degree = allTransitiveConnections.degreeMap.get(node.nodeId);
+                            return renderConnectionItem(node, 0, degree);
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionPanel>
+                </AccordionItem>
+              </Accordion>
+            );
+          })()}
+        </>
       )}
 
       {/* ── Main properties card ── */}
@@ -1487,6 +1552,206 @@ export function LineageDetailView({
           ))}
         </div>
       </div>
+
+      {/* ── Visual Preview (canvas-based page layout) ── */}
+      {(() => {
+        // Only show for visual nodes
+        if (selectedNode.entityType !== "visual") return false;
+        
+        // Extract pageId and reportId from nodeId if not directly available
+        // NodeId format: reportId|pageId|visualId
+        let pageId = selectedNode.pageId;
+        let reportId = selectedNode.reportId;
+        let visualId = selectedNode.visualId;
+        
+        if (!pageId || !reportId) {
+          const parts = selectedNode.nodeId.split("|");
+          if (parts.length >= 3) {
+            reportId = reportId || parts[0];
+            pageId = pageId || parts[1];
+            visualId = visualId || parts[2];
+          }
+        }
+        
+        console.log("[LineageDetail] Visual Preview Check:", {
+          entityType: selectedNode.entityType,
+          pageId,
+          reportId,
+          visualId,
+          hasDimensions: !!dimensions,
+          hasVisuals: !!dimensions?.visuals,
+          visualsCount: dimensions?.visuals?.length || 0,
+          selectedNode: {
+            nodeId: selectedNode.nodeId,
+            displayName: selectedNode.displayName,
+            visualId: selectedNode.visualId,
+            pageId: selectedNode.pageId,
+            reportId: selectedNode.reportId,
+          }
+        });
+        
+        if (!pageId || !reportId || !dimensions?.visuals) {
+          console.log("[LineageDetail] Visual Preview SKIPPED - missing data");
+          return false;
+        }
+        
+        // Filter visuals for this page
+        const pageVisuals = dimensions.visuals.filter((v: any) => {
+          const vPageName = v.page_name || v.pageName || v.Page_display_name || v.page_display_name;
+          const vReportId = v.report_id || v.reportId || v.report_pk;
+          return vPageName === pageId && vReportId === reportId;
+        });
+        
+        console.log("[LineageDetail] Visual Preview Filtering:", {
+          totalVisuals: dimensions.visuals.length,
+          matchingPageVisuals: pageVisuals.length,
+          searchingFor: { pageId, reportId },
+          sampleVisual: dimensions.visuals[0],
+          visualKeys: dimensions.visuals[0] ? Object.keys(dimensions.visuals[0]) : [],
+        });
+        
+        return pageVisuals.length > 0;
+      })() && (() => {
+        // Extract IDs again for rendering
+        let pageId = selectedNode.pageId;
+        let reportId = selectedNode.reportId;
+        let visualId = selectedNode.visualId;
+        
+        if (!pageId || !reportId) {
+          const parts = selectedNode.nodeId.split("|");
+          if (parts.length >= 3) {
+            reportId = reportId || parts[0];
+            pageId = pageId || parts[1];
+            visualId = visualId || parts[2];
+          }
+        }
+        
+        const pageVisuals = dimensions.visuals.filter((v: any) => {
+          const vPageName = v.page_name || v.pageName || v.Page_display_name || v.page_display_name;
+          const vReportId = v.report_id || v.reportId || v.report_pk;
+          return vPageName === pageId && vReportId === reportId;
+        });
+        
+        // Calculate canvas dimensions based on visual positions
+        let maxX = 0;
+        let maxY = 0;
+        pageVisuals.forEach((v: any) => {
+          const x = parseFloat(v.x || 0);
+          const y = parseFloat(v.y || 0);
+          const w = parseFloat(v.width || 0);
+          const h = parseFloat(v.height || 0);
+          maxX = Math.max(maxX, x + w);
+          maxY = Math.max(maxY, y + h);
+        });
+        
+        // Use standard report page dimensions if we don't have valid coordinates
+        const canvasWidth = maxX > 0 ? maxX : 1280;
+        const canvasHeight = maxY > 0 ? maxY : 720;
+        const scale = 0.5; // Scale down for display
+        
+        return (
+          <Accordion className={styles.accordionPanel} collapsible>
+            <AccordionItem value="visual-preview">
+              <AccordionHeader>
+                <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                  <Text weight="semibold">{t("LineageDetail_PageLayout", "Page Layout")}</Text>
+                  <Badge>{pageVisuals.length}</Badge>
+                </div>
+              </AccordionHeader>
+              <AccordionPanel>
+                <div className={styles.accordionContent}>
+                  <div style={{ 
+                    width: "100%", 
+                    height: `${canvasHeight * scale + 20}px`,
+                    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+                    borderRadius: tokens.borderRadiusSmall,
+                    overflow: "auto",
+                    backgroundColor: tokens.colorNeutralBackground3,
+                    padding: tokens.spacingVerticalM,
+                  }}>
+                    <div style={{
+                      position: "relative",
+                      width: `${canvasWidth * scale}px`,
+                      height: `${canvasHeight * scale}px`,
+                      backgroundColor: tokens.colorNeutralBackground1,
+                      border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke1}`,
+                    }}>
+                {pageVisuals.map((visual: any, idx: number) => {
+                  const x = parseFloat(visual.x || 0) * scale;
+                  const y = parseFloat(visual.y || 0) * scale;
+                  const w = parseFloat(visual.width || 100) * scale;
+                  const h = parseFloat(visual.height || 100) * scale;
+                  const visualName = visual.visual_name || visual.name || `Visual ${idx + 1}`;
+                  const visualType = visual.display_type || visual.type || visual.visual_type || "unknown";
+                  
+                  // Check if this is the selected visual
+                  const isSelected = 
+                    (visual.visual_name || visual.name) === visualId ||
+                    (visual.LineageTag || visual.lineageTag) === visualId ||
+                    visual.LineageTag === selectedNode.nodeId;
+                  
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        position: "absolute",
+                        left: `${x}px`,
+                        top: `${y}px`,
+                        width: `${w}px`,
+                        height: `${h}px`,
+                        border: isSelected 
+                          ? `3px solid ${tokens.colorBrandStroke1}` 
+                          : `1px solid ${tokens.colorNeutralStroke2}`,
+                        backgroundColor: isSelected 
+                          ? tokens.colorBrandBackground2 
+                          : tokens.colorNeutralBackground2,
+                        borderRadius: tokens.borderRadiusSmall,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: tokens.fontSizeBase100,
+                        color: tokens.colorNeutralForeground2,
+                        textAlign: "center",
+                        padding: tokens.spacingVerticalXXS,
+                        overflow: "hidden",
+                        boxShadow: isSelected ? tokens.shadow8 : tokens.shadow4,
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      title={`${visualName} (${visualType})`}
+                    >
+                      <div style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "2px",
+                      }}>
+                        <Text size={100} weight={isSelected ? "semibold" : "regular"}>
+                          {visualType}
+                        </Text>
+                        {w > 60 && h > 30 && (
+                          <Text size={100} style={{ fontSize: "9px", opacity: 0.7 }}>
+                            {visualName.length > 15 ? visualName.substring(0, 15) + "..." : visualName}
+                          </Text>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: tokens.spacingVerticalS }}>
+              {t("LineageDetail_PageLayoutHint", "Showing {{count}} visuals on page '{{page}}'", { 
+                count: pageVisuals.length, 
+                page: pageId 
+              })}
+            </Text>
+          </div>
+              </AccordionPanel>
+            </AccordionItem>
+          </Accordion>
+        );
+      })()}
 
       {/* ── Expression card (for measures and columns with expressions) ── */}
       {(() => {
@@ -1533,19 +1798,7 @@ export function LineageDetailView({
         });
         
         // Sort by step_order (descending, so most recent step is first)
-        steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
-        
-        console.log("[LineageDetail] Query steps check:", {
-          entityType: selectedNode.entityType,
-          displayName: selectedNode.displayName,
-          tableName: selectedNode.tableName,
-          datasetId: selectedNode.datasetId,
-          totalColumnLineageRecords: columnLineage.length,
-          matchedSteps: steps.length,
-          steps: steps,
-        });
-        
-        return steps.length > 0;
+        steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));        return steps.length > 0;
       })() && (() => {
         const columnLineage = dimensions?.columnLineage || [];
         const steps = columnLineage.filter((step: any) => {
@@ -1558,7 +1811,7 @@ export function LineageDetailView({
         steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
         
         return (
-          <Accordion className={styles.accordionPanel} collapsible defaultOpenItems={["query-steps"]}>
+          <Accordion className={styles.accordionPanel} collapsible>
             <AccordionItem value="query-steps">
               <AccordionHeader>
                 <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
@@ -1573,57 +1826,46 @@ export function LineageDetailView({
                   </Text>
                   {steps.map((step: any, index: number) => (
                     <div key={index} className={styles.card} style={{ marginBottom: tokens.spacingVerticalS }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tokens.spacingVerticalXS }}>
-                        <Text weight="semibold" size={300}>
+                      {/* Row 1: All info in one line */}
+                      <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, marginBottom: step.step_expression ? tokens.spacingVerticalS : 0, flexWrap: "wrap" }}>
+                        {step.affects_entire_table && (
+                          <Badge size="small" appearance="filled" color="warning">
+                            {t("LineageDetail_AffectsTable", "Affects entire table")}
+                          </Badge>
+                        )}
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
                           {step.step_name || `Step ${step.step_order || index + 1}`}
                         </Text>
-                        <Badge size="small" appearance="outline">
+                        {step.transformation_function && (
+                          <>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>•</Text>
+                            <Text size={200} weight="semibold">
+                              {step.transformation_function}
+                            </Text>
+                          </>
+                        )}
+                        {step.column_name_at_step && step.column_name_at_step !== step.final_column_name && (
+                          <>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>•</Text>
+                            <Text size={200}>
+                              {step.column_name_at_step}
+                            </Text>
+                          </>
+                        )}
+                        {step.column_created_here && (
+                          <Badge size="small" appearance="filled" color="success">
+                            {t("LineageDetail_CreatedHere", "Column created here")}
+                          </Badge>
+                        )}
+                        <Badge size="small" appearance="outline" style={{ marginLeft: "auto" }}>
                           {step.step_order || index + 1}
                         </Badge>
                       </div>
                       
-                      {step.transformation_function && (
-                        <div style={{ marginTop: tokens.spacingVerticalXXS }}>
-                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                            {t("LineageDetail_TransformFunction", "Function")}:
-                          </Text>
-                          <Text size={200} weight="semibold" style={{ marginLeft: tokens.spacingHorizontalXXS }}>
-                            {step.transformation_function}
-                          </Text>
-                        </div>
-                      )}
-                      
-                      {step.column_name_at_step && step.column_name_at_step !== step.final_column_name && (
-                        <div style={{ marginTop: tokens.spacingVerticalXXS }}>
-                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                            {t("LineageDetail_ColumnAt", "Column at step")}:
-                          </Text>
-                          <Text size={200} weight="semibold" style={{ marginLeft: tokens.spacingHorizontalXXS }}>
-                            {step.column_name_at_step}
-                          </Text>
-                        </div>
-                      )}
-                      
-                      {step.affects_entire_table && (
-                        <Badge size="small" appearance="filled" color="warning" style={{ marginTop: tokens.spacingVerticalXXS }}>
-                          {t("LineageDetail_AffectsTable", "Affects entire table")}
-                        </Badge>
-                      )}
-                      
-                      {step.column_created_here && (
-                        <Badge size="small" appearance="filled" color="success" style={{ marginTop: tokens.spacingVerticalXXS, marginLeft: tokens.spacingHorizontalXS }}>
-                          {t("LineageDetail_CreatedHere", "Column created here")}
-                        </Badge>
-                      )}
-                      
+                      {/* Row 2: Expression only */}
                       {step.step_expression && (
-                        <div style={{ marginTop: tokens.spacingVerticalS }}>
-                          <Text size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground3, display: "block", marginBottom: tokens.spacingVerticalXXS }}>
-                            {t("LineageDetail_StepExpression", "Expression")}:
-                          </Text>
-                          <div className={styles.expressionBlock} style={{ maxHeight: "200px" }}>
-                            {step.step_expression}
-                          </div>
+                        <div className={styles.expressionBlock} style={{ maxHeight: "200px" }}>
+                          {step.step_expression}
                         </div>
                       )}
                     </div>
@@ -1635,144 +1877,74 @@ export function LineageDetailView({
         );
       })()}
 
-
-
-      {/* ── Connection Depth Toggle ── */}
-      {(rel.usedBy.nodes.length > 0 || rel.uses.nodes.length > 0) && (
-        <div className={styles.card}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: tokens.spacingHorizontalS }}>
-            <div>
-              <Text weight="semibold" size={300}>{t("LineageDetail_ConnectionDepth", "Connection Depth")}</Text>
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: tokens.spacingVerticalXXS, display: "block" }}>
-                {showAllConnections 
-                  ? t("LineageDetail_ShowingAll", "Showing all transitive upstream/downstream dependencies")
-                  : t("LineageDetail_ShowingDirect", "Showing only direct connections")}
-              </Text>
-            </div>
-            <Switch
-              checked={showAllConnections}
-              onChange={(_, data) => setShowAllConnections(data.checked)}
-              label={t("LineageDetail_ShowAll", "Show all")}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ── Direct neighbors list (always visible) ── */}
-      {rel.directNeighbors.nodes.length > 0 && (
+      {/* ── Relationships (for tables and columns) ── */}
+      {nodeRelationships.length > 0 && (
         <Accordion className={styles.accordionPanel} collapsible>
-          <AccordionItem value="direct-neighbors">
+          <AccordionItem value="relationships">
             <AccordionHeader>
               <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
-                <Text weight="semibold">
-                  {showAllConnections 
-                    ? t("LineageDetail_AllConnections", "All connections") 
-                    : t("LineageDetail_DirectConnections", "Direct connections")}
+                <Text weight="semibold">{t("LineageDetail_Relationships", "Relationships")}</Text>
+                <Badge>{nodeRelationships.length}</Badge>
+              </div>
+            </AccordionHeader>
+            <AccordionPanel>
+              <div className={styles.accordionContent}>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                  {selectedNode.entityType === "column"
+                    ? t("LineageDetail_RelationshipsColumnHint", "Relationships involving the parent table of this column")
+                    : t("LineageDetail_RelationshipsTableHint", "Relationships where this table is involved")}
                 </Text>
-                <Badge>{rel.directNeighbors.nodes.length}</Badge>
-              </div>
-            </AccordionHeader>
-            <AccordionPanel>
-              <div className={styles.accordionContent}>
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {showAllConnections
-                  ? t("LineageDetail_AllConnectionsHint", "All transitive upstream and downstream dependencies. Click to navigate.")
-                  : t("LineageDetail_ConnectionsHint", "Click a node to navigate to it in the graph")}
-              </Text>
-          
-          {(() => {
-            const grouped = new Map<string, LineageViewerNode[]>();
-            for (const n of rel.directNeighbors.nodes) {
-              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
-              grouped.get(n.entityType)!.push(n);
-            }
-            return Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
-              <div key={entityType} className={styles.connectionGroup}>
-                <div className={styles.connectionGroupLabel}>
-                  {getEntityTypeLabel(entityType)} ({groupNodes.length})
-                </div>
-                {groupNodes.map((node) => renderConnectionItem(node, 0))}
-              </div>
-            ));
-          })()}
-              </div>
-            </AccordionPanel>
-          </AccordionItem>
-        </Accordion>
-      )}
+                {nodeRelationships.map((relationship: any, idx: number) => (
+                  <div key={idx} className={styles.card} style={{ marginBottom: tokens.spacingVerticalS }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS }}>
+                      {/* Relationship name and direction */}
+                      <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, flexWrap: "wrap" }}>
+                        <Text weight="semibold" size={300}>
+                          {relationship.fromTable}
+                        </Text>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>→</Text>
+                        <Text weight="semibold" size={300}>
+                          {relationship.toTable}
+                        </Text>
+                        {!relationship.isActive && (
+                          <Badge size="small" appearance="outline" color="danger">
+                            {t("LineageDetail_Inactive", "Inactive")}
+                          </Badge>
+                        )}
+                      </div>
 
-      {/* ── Used by list (incoming dependencies) ── */}
-      {rel.usedBy && rel.usedBy.nodes.length > 0 && (
-        <Accordion className={styles.accordionPanel} collapsible>
-          <AccordionItem value="used-by">
-            <AccordionHeader>
-              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
-                <Text weight="semibold">{rel.usedBy.label}</Text>
-                <Badge>{rel.usedBy.nodes.length}</Badge>
-              </div>
-            </AccordionHeader>
-            <AccordionPanel>
-              <div className={styles.accordionContent}>
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {showAllConnections
-                  ? t("LineageDetail_AllUsedByHint", "All nodes that transitively depend on or reference this node")
-                  : t("LineageDetail_UsedByHint", "Nodes that depend on or reference this node")}
-              </Text>
-          
-          {(() => {
-            const grouped = new Map<string, LineageViewerNode[]>();
-            for (const n of rel.usedBy.nodes) {
-              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
-              grouped.get(n.entityType)!.push(n);
-            }
-            return Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
-              <div key={entityType} className={styles.connectionGroup}>
-                <div className={styles.connectionGroupLabel}>
-                  {getEntityTypeLabel(entityType)} ({groupNodes.length})
-                </div>
-                {groupNodes.map((node) => renderConnectionItem(node, 0))}
-              </div>
-            ));
-          })()}
-              </div>
-            </AccordionPanel>
-          </AccordionItem>
-        </Accordion>
-      )}
+                      {/* Relationship details */}
+                      <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM, flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                            {t("LineageDetail_Multiplicity", "Multiplicity")}:
+                          </Text>
+                          <Badge size="small" appearance="outline">
+                            {relationship.fromCardinality} : {relationship.toCardinality}
+                          </Badge>
+                        </div>
 
-      {/* ── Uses list (outgoing dependencies) ── */}
-      {rel.uses && rel.uses.nodes.length > 0 && (
-        <Accordion className={styles.accordionPanel} collapsible>
-          <AccordionItem value="uses">
-            <AccordionHeader>
-              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
-                <Text weight="semibold">{rel.uses.label}</Text>
-                <Badge>{rel.uses.nodes.length}</Badge>
-              </div>
-            </AccordionHeader>
-            <AccordionPanel>
-              <div className={styles.accordionContent}>
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                {showAllConnections
-                  ? t("LineageDetail_AllUsesHint", "All nodes that this node transitively depends on or references")
-                  : t("LineageDetail_UsesHint", "Nodes that this node depends on or references")}
-              </Text>
-          
-          {(() => {
-            const grouped = new Map<string, LineageViewerNode[]>();
-            for (const n of rel.uses.nodes) {
-              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
-              grouped.get(n.entityType)!.push(n);
-            }
-            return Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
-              <div key={entityType} className={styles.connectionGroup}>
-                <div className={styles.connectionGroupLabel}>
-                  {getEntityTypeLabel(entityType)} ({groupNodes.length})
-                </div>
-                {groupNodes.map((node) => renderConnectionItem(node, 0))}
-              </div>
-            ));
-          })()}
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                            {t("LineageDetail_CrossFilter", "Cross filter")}:
+                          </Text>
+                          <Badge size="small" appearance="outline">
+                            {relationship.crossFilterDirection}
+                          </Badge>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                            {t("LineageDetail_Direction", "Direction")}:
+                          </Text>
+                          <Badge size="small" appearance="outline">
+                            {relationship.direction === "outgoing" ? "↗" : "↙"} {relationship.direction}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </AccordionPanel>
           </AccordionItem>

@@ -33,7 +33,7 @@ import { buildGraphProjection, filterEdgesByNodes, filterNodes } from "./lineage
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const DEFAULT_GRAPH_NODE_LIMIT = 80;
-type ExploreLayoutMode = "stacked" | "side-by-side" | "top-bottom";
+type ExploreLayoutMode = "stacked" | "side-by-side" | "detail-focused";
 
 const useStyles = makeStyles({
   root: {
@@ -377,7 +377,10 @@ export function LineageWorkbenchItemLineageView({
       detailHeight;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = moveEvent.clientY - startY;
+      // Invert delta for detail panel (drag up = bigger, drag down = smaller)
+      const delta = panel === "detail" 
+        ? startY - moveEvent.clientY 
+        : moveEvent.clientY - startY;
       const newHeight = Math.max(150, startHeight + delta); // Minimum 150px
       
       if (panel === "table") {
@@ -405,7 +408,7 @@ export function LineageWorkbenchItemLineageView({
   const graphScope = "focused"; // Always use focused mode
   const [graphNodeLimit, setGraphNodeLimit] = useState<number>(DEFAULT_GRAPH_NODE_LIMIT);
   const [graphDisplayMode, setGraphDisplayMode] = useState<"highlight" | "filter">("filter");
-  const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("side-by-side");
+  const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("detail-focused");
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
 
   // ── Data source ───────────────────────────────────────────────────────────
@@ -1789,13 +1792,13 @@ export function LineageWorkbenchItemLineageView({
                     onChange={(_, data) => {
                       const value = String(data.value);
                       const next: ExploreLayoutMode =
-                        value === "side-by-side" || value === "top-bottom" ? value : "stacked";
+                        value === "side-by-side" || value === "stacked" ? value : "detail-focused";
                       setExploreLayout(next);
                     }}
                   >
+                    <Radio value="detail-focused" label={t("LineageWorkbench_ExploreLayout_DetailFocused", "Detail focused")} />
+                    <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side-by-Side")} />
                     <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
-                    <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side")} />
-                    <Radio value="top-bottom" label={t("LineageWorkbench_ExploreLayout_TopBottom", "Top")} />
                   </RadioGroup>
                 </div>
                 {dataSourceMode === "actual" && !targetLakehouseId && (
@@ -1810,11 +1813,235 @@ export function LineageWorkbenchItemLineageView({
                     </MessageBar>
                   </div>
                 )}
-                <div
-                  className={`${styles.splitExplore} ${
-                    exploreLayout === "side-by-side" ? styles.splitExploreHorizontal : styles.splitExploreVertical
-                  }`}
-                >
+                {exploreLayout === "detail-focused" ? (
+                  <>
+                  <div className={`${styles.splitExplore} ${styles.splitExploreHorizontal}`}>
+                    <div className={styles.splitTablePane}>
+                      <div className={styles.splitPaneHeader}>
+                        <span>{t("LineageWorkbench_Panel_Table", "Table")}</span>
+                        <span>{filtered.length}</span>
+                      </div>
+                      
+                      {/* Table filters */}
+                      <div style={{ 
+                        padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                        display: "flex",
+                        gap: tokens.spacingHorizontalM,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        backgroundColor: tokens.colorNeutralBackground2,
+                      }}>
+                        <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
+                          <Input
+                            contentBefore={<SearchRegular />}
+                            placeholder={t("LineageWorkbench_Search", "Search nodes...")}
+                            value={searchText}
+                            onChange={(_, data) => setSearchText(data.value)}
+                            size="small"
+                          />
+                        </div>
+                        <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                          <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                            {t("LineageWorkbench_AllTypes", "Type")}:
+                          </Text>
+                          <Select
+                            value={entityFilter}
+                            onChange={(_, data) => setEntityFilter(data.value)}
+                            size="small"
+                            style={{ minWidth: "120px" }}
+                          >
+                            <option value="all">{t("LineageWorkbench_AllTypes", "All types")}</option>
+                            {entityTypes.map((et) => (
+                              <option key={et} value={et}>{et}</option>
+                            ))}
+                          </Select>
+                        </div>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                          {t("LineageWorkbench_Showing", "Showing")} {filtered.length} / {nodes.length}
+                        </Text>
+                      </div>
+
+                      {isLoadingGraph ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            height: "100%",
+                            padding: tokens.spacingVerticalXXL,
+                            gap: tokens.spacingVerticalM,
+                            flexDirection: "column",
+                          }}
+                        >
+                          <Spinner size="medium" />
+                          <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
+                            {t("LineageWorkbench_LoadingTable", "Loading nodes and edges...")}
+                          </Text>
+                        </div>
+                      ) : (
+                        <LineageTableView
+                          nodes={filtered}
+                          edges={filteredEdges}
+                          selectedNodeId={selectedNodeId}
+                          onNodeSelect={(id) => {
+                            setSelectedNodeId(id);
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    <div className={styles.splitDividerVertical} />
+
+                    <div className={styles.splitGraphPane}>
+                      <div className={styles.splitPaneHeader}>
+                        <span>{t("LineageWorkbench_Panel_Details", "Details")}</span>
+                        <span>{selectedNodeId ? nodes.find((n) => n.nodeId === selectedNodeId)?.displayName : ""}</span>
+                      </div>
+                      <LineageDetailView
+                        nodes={nodes}
+                        edges={edges}
+                        dimensions={activeSnapshot?.dimensions}
+                        selectedNodeId={selectedNodeId}
+                        requirementsCount={lineage?.requirements?.length ?? 0}
+                        onOpenRequirementsBoard={onOpenRequirementsBoard}
+                        onCreateRequirement={handleCreateRequirement}
+                        onNodeSelect={(nodeId) => {
+                          setSelectedNodeId(nodeId);
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Resize handle for Graph panel in detail-focused mode */}
+                  {graphExpanded && !graphFills && (
+                    <ResizeHandle onMouseDown={handleResizeStart("graph")} />
+                  )}
+
+                  {/* Graph panel */}
+                  <CollapsiblePanel
+                    title={t("LineageWorkbench_Panel_Graph", "Graph")}
+                    icon={<DataTrendingRegular fontSize={16} />}
+                    meta={`${graphNodes.length}/${filtered.length} nodes · ${graphEdges.length}/${filteredEdges.length} edges`}
+                    expanded={graphExpanded}
+                    onToggle={() => setGraphExpanded((v) => !v)}
+                    fillHeight={graphFills}
+                    customHeight={graphExpanded && !graphFills ? graphHeight : undefined}
+                  >
+                    {/* Graph controls */}
+                    <div style={{ 
+                      padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
+                      borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+                      display: "flex",
+                      gap: tokens.spacingHorizontalL,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      backgroundColor: tokens.colorNeutralBackground2,
+                    }}>
+                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                          {t("LineageWorkbench_GraphDisplayMode", "Display mode")}:
+                        </Text>
+                        <RadioGroup
+                          layout="horizontal"
+                          value={graphDisplayMode}
+                          onChange={(_, data) => {
+                            setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
+                          }}
+                        >
+                          <Radio
+                            value="highlight"
+                            label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight")}
+                          />
+                          <Radio
+                            value="filter"
+                            label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter")}
+                          />
+                        </RadioGroup>
+                      </div>
+                      
+                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                          {t("LineageWorkbench_GraphNodeLimit", "Max nodes")}:
+                        </Text>
+                        <Select
+                          value={String(graphNodeLimit)}
+                          onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
+                          size="small"
+                          style={{ minWidth: "80px" }}
+                        >
+                          {[80, 120, 200, 350, 500].map((limit) => (
+                            <option key={limit} value={String(limit)}>{limit}</option>
+                          ))}
+                        </Select>
+                      </div>
+                    </div>
+
+                    {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (
+                      <div className={styles.graphHint}>
+                        <Text className={styles.graphHintText}>
+                          {t(
+                            "LineageWorkbench_GraphHint",
+                            "Large graph mode: {{hiddenNodes}} nodes and {{hiddenEdges}} edges are hidden to reduce visual noise.",
+                            { hiddenNodes: hiddenNodeCount, hiddenEdges: hiddenEdgeCount }
+                          )}
+                        </Text>
+                      </div>
+                    )}
+
+                    {focusWarning && (
+                      <div className={styles.graphHint}>
+                        <MessageBar intent="warning">
+                          <MessageBarBody>
+                            {t("LineageWorkbench_GraphFocusWarning", focusWarning)}
+                          </MessageBarBody>
+                        </MessageBar>
+                      </div>
+                    )}
+
+                    {requiresSelection ? (
+                      <div className={styles.graphEmptyBody}>
+                        <Text style={{ color: tokens.colorNeutralForeground3, maxWidth: 460 }}>
+                          {t(
+                            "LineageWorkbench_GraphRequiresSelection",
+                            "Focused neighborhood mode is enabled. Select a node in the table to render a local subgraph."
+                          )}
+                        </Text>
+                      </div>
+                    ) : (
+                      <LineageGraphView
+                        nodes={graphNodes}
+                        edges={graphEdges}
+                        isLoading={isLoadingGraph}
+                        focusNodeId={selectedNodeId || undefined}
+                        depthByNodeId={depthByNodeId}
+                        highlightedNodeIds={highlightedNodeIds}
+                        highlightedEdgeIds={highlightedEdgeIds}
+                        expandedGroups={expandedGroups}
+                        onToggleGroup={(groupId) => {
+                          setExpandedGroups(prev => {
+                            const next = new Set(prev);
+                            if (next.has(groupId)) {
+                              next.delete(groupId);
+                            } else {
+                              next.add(groupId);
+                            }
+                            return next;
+                          });
+                        }}
+                        onNodeClick={(id) => {
+                          setSelectedNodeId(id);
+                        }}
+                      />
+                    )}
+                  </CollapsiblePanel>
+                  </>
+                ) : (
+                  <div
+                    className={`${styles.splitExplore} ${
+                      exploreLayout === "side-by-side" ? styles.splitExploreHorizontal : styles.splitExploreVertical
+                    }`}
+                  >
                   <div className={styles.splitTablePane}>
                     <div className={styles.splitPaneHeader}>
                       <span>{t("LineageWorkbench_Panel_Table", "Table")}</span>
@@ -2008,11 +2235,18 @@ export function LineageWorkbenchItemLineageView({
                     )}
                   </div>
                 </div>
+                )}
               </CollapsiblePanel>
             )}
 
+            {/* Resize handle for Details panel */}
+            {exploreLayout !== "detail-focused" && detailExpanded && !detailFills && (
+              <ResizeHandle onMouseDown={handleResizeStart("detail")} />
+            )}
+
             {/* Details panel */}
-            <CollapsiblePanel
+            {exploreLayout !== "detail-focused" && (
+              <CollapsiblePanel
               title={t("LineageWorkbench_Panel_Details", "Details")}
               icon={<InfoRegular fontSize={16} />}
               meta={
@@ -2039,6 +2273,7 @@ export function LineageWorkbenchItemLineageView({
                 }}
               />
             </CollapsiblePanel>
+            )}
           </>
         )}
       </div>

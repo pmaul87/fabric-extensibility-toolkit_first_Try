@@ -1783,9 +1783,30 @@ export function LineageDetailView({
       {/* ── Query Steps (Column Transformation History) ── */}
       {(() => {
         // Only show for columns
-        if (selectedNode.entityType !== "column") return false;
+        if (selectedNode.entityType !== "column") return null;
         
         const columnLineage = dimensions?.columnLineage || [];
+        
+        // Debug logging - ALWAYS log to help diagnose issues
+        console.log("[LineageDetailView] Query Steps Debug:", {
+          totalColumnLineageRecords: columnLineage.length,
+          hasDimensionsObject: !!dimensions,
+          dimensionsKeys: dimensions ? Object.keys(dimensions) : [],
+          columnLineageType: Array.isArray(columnLineage) ? 'array' : typeof columnLineage,
+          selectedNodeInfo: {
+            displayName: selectedNode.displayName,
+            tableName: selectedNode.tableName,
+            datasetId: selectedNode.datasetId,
+            entityType: selectedNode.entityType,
+          },
+          sampleColumnLineageRecord: columnLineage[0] || "NO DATA",
+          allColumnLineageColumns: columnLineage[0] ? Object.keys(columnLineage[0]) : [],
+        });
+        
+        if (columnLineage.length === 0) {
+          console.warn("[LineageDetailView] Query Steps - No columnLineage data available. Check backend logs for 't_dataset_column_lineage' table query.");
+          return null;
+        }
         
         // Match by final_column_name and dataset_id (or table name)
         const steps = columnLineage.filter((step: any) => {
@@ -1794,21 +1815,36 @@ export function LineageDetailView({
           const matchesTable = step.power_bi_table_name === selectedNode.tableName;
           const matchesModel = !selectedNode.datasetId || step.dataset_id === selectedNode.datasetId;
           
+          // Log each step's matching criteria for first 3 records
+          if (columnLineage.indexOf(step) < 3) {
+            console.log(`[LineageDetailView] Query Steps - Testing step ${columnLineage.indexOf(step)}:`, {
+              stepData: {
+                final_column_name: step.final_column_name,
+                column_name_at_step: step.column_name_at_step,
+                power_bi_table_name: step.power_bi_table_name,
+                dataset_id: step.dataset_id,
+              },
+              matches: {
+                matchesColumn,
+                matchesTable,
+                matchesModel,
+                overall: matchesColumn && matchesTable && matchesModel,
+              },
+            });
+          }
+          
           return matchesColumn && matchesTable && matchesModel;
         });
         
         // Sort by step_order (descending, so most recent step is first)
-        steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));        return steps.length > 0;
-      })() && (() => {
-        const columnLineage = dimensions?.columnLineage || [];
-        const steps = columnLineage.filter((step: any) => {
-          const matchesColumn = step.final_column_name === selectedNode.displayName || 
-                              step.column_name_at_step === selectedNode.displayName;
-          const matchesTable = step.power_bi_table_name === selectedNode.tableName;
-          const matchesModel = !selectedNode.datasetId || step.dataset_id === selectedNode.datasetId;
-          return matchesColumn && matchesTable && matchesModel;
-        });
         steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
+        
+        if (steps.length === 0) {
+          console.log("[LineageDetailView] Query Steps - No matching steps found for this column");
+          return null;
+        }
+        
+        console.log("[LineageDetailView] Query Steps - Found matching steps:", steps.length);
         
         return (
           <Accordion className={styles.accordionPanel} collapsible>

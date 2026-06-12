@@ -328,6 +328,131 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
 
       <Divider />
 
+      {/* Azure OpenAI Configuration */}
+      <div>
+        <Text className={styles.sectionTitle}>
+          {t("LineageWorkbench_Extraction_Section_AzureOpenAI", "Azure OpenAI Configuration")}
+        </Text>
+        <div className={styles.sectionBody}>
+          <MessageBar intent="info">
+            <MessageBarBody>
+              {t("LineageWorkbench_Extraction_AzureOpenAI_Info",
+                "Configure Azure OpenAI for query explanation features during lineage extraction.")}
+            </MessageBarBody>
+          </MessageBar>
+
+          <Checkbox
+            checked={extraction.azureOpenAI?.enabled ?? false}
+            onChange={(_, data) =>
+              onExtractionChange({
+                ...extraction,
+                azureOpenAI: {
+                  ...extraction.azureOpenAI,
+                  enabled: data.checked as boolean,
+                },
+              })
+            }
+            label={t("LineageWorkbench_Extraction_AzureOpenAI_Enabled", "Enable Azure OpenAI Query Explanation")}
+          />
+
+          {extraction.azureOpenAI?.enabled && (
+            <>
+              <Field 
+                label={t("LineageWorkbench_Extraction_AzureOpenAI_Endpoint", "Azure OpenAI Endpoint")}
+                required
+              >
+                <Input
+                  value={extraction.azureOpenAI?.endpoint ?? ""}
+                  placeholder="https://your-resource.openai.azure.com"
+                  onChange={(_, data) =>
+                    onExtractionChange({
+                      ...extraction,
+                      azureOpenAI: {
+                        ...extraction.azureOpenAI,
+                        endpoint: data.value,
+                      },
+                    })
+                  }
+                />
+              </Field>
+
+              <Field 
+                label={t("LineageWorkbench_Extraction_AzureOpenAI_ApiKey", "API Key")}
+                required
+              >
+                <Input
+                  type="password"
+                  value={extraction.azureOpenAI?.apiKey ?? ""}
+                  placeholder="Enter your Azure OpenAI API key"
+                  onChange={(_, data) =>
+                    onExtractionChange({
+                      ...extraction,
+                      azureOpenAI: {
+                        ...extraction.azureOpenAI,
+                        apiKey: data.value,
+                      },
+                    })
+                  }
+                />
+              </Field>
+
+              <Field label={t("LineageWorkbench_Extraction_AzureOpenAI_DeploymentName", "Deployment Name")}>
+                <Input
+                  value={extraction.azureOpenAI?.deploymentName ?? "gpt-4"}
+                  placeholder="gpt-4"
+                  onChange={(_, data) =>
+                    onExtractionChange({
+                      ...extraction,
+                      azureOpenAI: {
+                        ...extraction.azureOpenAI,
+                        deploymentName: data.value,
+                      },
+                    })
+                  }
+                />
+              </Field>
+
+              <Field label={t("LineageWorkbench_Extraction_AzureOpenAI_MaxTokens", "Max Tokens")}>
+                <Input
+                  type="number"
+                  value={String(extraction.azureOpenAI?.maxTokens ?? 500)}
+                  onChange={(_, data) =>
+                    onExtractionChange({
+                      ...extraction,
+                      azureOpenAI: {
+                        ...extraction.azureOpenAI,
+                        maxTokens: parseInt(data.value) || 500,
+                      },
+                    })
+                  }
+                />
+              </Field>
+
+              <Field label={t("LineageWorkbench_Extraction_AzureOpenAI_Temperature", "Temperature (0-1)")}>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="1"
+                  value={String(extraction.azureOpenAI?.temperature ?? 0.3)}
+                  onChange={(_, data) =>
+                    onExtractionChange({
+                      ...extraction,
+                      azureOpenAI: {
+                        ...extraction.azureOpenAI,
+                        temperature: parseFloat(data.value) || 0.3,
+                      },
+                    })
+                  }
+                />
+              </Field>
+            </>
+          )}
+        </div>
+      </div>
+
+      <Divider />
+
       {/* Run Extraction Section */}
       <div className={styles.runSection}>
         <Text className={styles.sectionTitle}>

@@ -18,6 +18,16 @@ export interface LineageWorkbenchExtractionConfig {
     createNewLakehouse?: boolean;
     newLakehouseName?: string;
   };
+  
+  // Azure OpenAI configuration for query explanation
+  azureOpenAI?: {
+    enabled?: boolean;
+    endpoint?: string;
+    apiKey?: string;
+    deploymentName?: string;
+    maxTokens?: number;
+    temperature?: number;
+  };
 }
 
 export interface LineageWorkbenchItemDefinition {

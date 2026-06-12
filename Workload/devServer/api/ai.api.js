@@ -22,6 +22,14 @@ const { getAzureOpenAIService } = require('../services/AzureOpenAIService');
  *     tableName?: string,
  *     columnName?: string,
  *     datasetName?: string
+ *   },
+ *   azureOpenAI?: {           // Optional Azure OpenAI config (overrides default)
+ *     enabled: boolean,
+ *     endpoint: string,
+ *     apiKey: string,
+ *     deploymentName: string,
+ *     maxTokens?: number,
+ *     temperature?: number
  *   }
  * }
  * 
@@ -40,7 +48,7 @@ const { getAzureOpenAIService } = require('../services/AzureOpenAIService');
  */
 router.post('/api/ai/explain-query', async (req, res) => {
   try {
-    const { queryText, queryLanguage = 'M', context = {} } = req.body;
+    const { queryText, queryLanguage = 'M', context = {}, azureOpenAI = null } = req.body;
 
     if (!queryText || typeof queryText !== 'string') {
       return res.status(400).json({
@@ -54,10 +62,16 @@ router.post('/api/ai/explain-query', async (req, res) => {
       queryLanguage,
       queryLength: queryText.length,
       hasContext: !!context,
-      contextKeys: Object.keys(context)
+      contextKeys: Object.keys(context),
+      hasCustomConfig: !!azureOpenAI
     });
 
-    const aiService = getAzureOpenAIService();
+    // Create service instance with custom config if provided, otherwise use default
+    const { AzureOpenAIService } = require('../services/AzureOpenAIService');
+    const aiService = azureOpenAI 
+      ? new AzureOpenAIService(azureOpenAI)
+      : getAzureOpenAIService();
+      
     const result = await aiService.explainQuery(queryText, queryLanguage, context);
 
     if (!result.success) {

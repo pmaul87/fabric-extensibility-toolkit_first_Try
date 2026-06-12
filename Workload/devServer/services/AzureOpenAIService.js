@@ -11,18 +11,25 @@ const fs = require('fs');
 const path = require('path');
 
 class AzureOpenAIService {
-  constructor() {
-    this.config = this.loadConfig();
+  constructor(customConfig = null) {
+    this.config = customConfig || this.loadConfig();
   }
 
   /**
-   * Load Azure OpenAI configuration from config file
+   * Load Azure OpenAI configuration from config file (fallback)
    */
   loadConfig() {
     try {
       const configPath = path.join(__dirname, '../config/azureOpenAI.config.json');
       const configData = fs.readFileSync(configPath, 'utf8');
       const config = JSON.parse(configData);
+      
+      // Replace environment variable placeholders
+      if (config.azureOpenAI && config.azureOpenAI.apiKey && config.azureOpenAI.apiKey.startsWith('${') && config.azureOpenAI.apiKey.endsWith('}')) {
+        const envVarName = config.azureOpenAI.apiKey.slice(2, -1);
+        config.azureOpenAI.apiKey = process.env[envVarName] || '';
+      }
+      
       return config.azureOpenAI;
     } catch (error) {
       console.error('[AzureOpenAI] Failed to load config:', error.message);

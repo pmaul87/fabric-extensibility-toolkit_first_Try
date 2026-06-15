@@ -8,6 +8,9 @@ export interface LineageWorkbenchExtractionConfig {
   targetLakehouseId?: string;
   targetLakehouseDisplayName?: string;
   targetLakehouseWorkspaceId?: string;
+  targetEnvironmentId?: string;
+  targetEnvironmentDisplayName?: string;
+  targetEnvironmentWorkspaceId?: string;
   artifactTypes?: string[];
   lastRunAt?: string;
   lastRunStatus?: "idle" | "running" | "success" | "error";

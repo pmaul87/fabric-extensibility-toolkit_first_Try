@@ -2,7 +2,7 @@
  * FabricNotebookClient - Triggers and monitors Fabric Notebook execution via the Jobs API.
  *
  * Used by LineageWorkbenchItemExtractionView to run the extraction notebooks
- * (01_extract_semantic_models, 02_extract_reports, 03_extract_notebooks, etc.)
+ * (Extract_Datasets_and_Reports, Extract_Datasources_from_SemanticModels, etc.)
  * on-demand from the Workbench UI.
  *
  * API Reference:
@@ -12,7 +12,7 @@
  */
 
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
-import { FabricPlatformClient } from "./FabricPlatformClient";
+import { FabricPlatformClient, FabricPlatformError } from "./FabricPlatformClient";
 import { SCOPE_PAIRS } from "./FabricPlatformScopes";
 
 // ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ export class FabricNotebookClient extends FabricPlatformClient {
 
   /**
    * List all Notebook items in a workspace.
-   * Use this to map display names (e.g. "01_extract_semantic_models") to item IDs
+   * Use this to map display names (e.g. "Extract_Datasets_and_Reports") to item IDs
    * so the extraction view can present a selection UI.
    */
   async listNotebooks(workspaceId: string): Promise<FabricNotebookItem[]> {
@@ -128,37 +128,79 @@ export class FabricNotebookClient extends FabricPlatformClient {
     notebookId: string,
     parameters?: ExtractionJobParameters
   ): Promise<TriggerNotebookResult> {
-    const body: Record<string, unknown> = {
-      jobType: "RunNotebook",
-    };
+    const body: Record<string, unknown> = {};
 
     if (parameters) {
       body.executionData = {
         parameters: {
           targetWorkspaces: {
-            value: parameters.targetWorkspaces ?? [],
-            type: "list",
+            value: JSON.stringify(parameters.targetWorkspaces ?? []),
+            type: "string",
           },
           targetLakehouseId: {
             value: parameters.targetLakehouseId ?? "",
             type: "string",
           },
           artifactTypes: {
-            value: parameters.artifactTypes ?? [],
-            type: "list",
+            value: JSON.stringify(parameters.artifactTypes ?? []),
+            type: "string",
           },
         },
       };
     }
 
-    // The base class makeRequest handles 202 → returns AsyncOperationIndicator
-    // with operationId taken from x-ms-operation-id header.
-    const indicator = await this.post<{ operationId: string }>(
-      `/workspaces/${workspaceId}/items/${notebookId}/jobs/instances`,
-      body
-    );
+    // Custom fetch to capture Location header (Jobs API pattern)
+    // The job instance ID is returned in the Location header, not in the response body
+    const endpoint = `/workspaces/${workspaceId}/items/${notebookId}/jobs/instances?jobType=RunNotebook`;
+    const accessToken = await this.getAccessToken();
+    const fullUrl = `${this.baseUrl}/v1${endpoint}`;
+    
+    const response = await fetch(fullUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
+    });
 
-    const jobInstanceId = indicator.operationId;
+    if (!response.ok) {
+      let errorResponse;
+      const contentType = response.headers.get('content-type');
+      
+      try {
+        if (contentType && contentType.includes('application/json')) {
+          errorResponse = await response.json();
+        } else {
+          const errorText = await response.text();
+          errorResponse = { error: { message: errorText } };
+        }
+      } catch {
+        errorResponse = { error: { message: response.statusText } };
+      }
+      
+      // Throw FabricPlatformError for consistency with the rest of the codebase
+      throw new FabricPlatformError(
+        response.status,
+        response.statusText,
+        errorResponse,
+        response.headers.get('x-ms-request-id') || undefined
+      );
+    }
+
+    // Extract job instance ID from Location header
+    const location = response.headers.get('Location');
+    if (!location) {
+      throw new Error('Job instance ID not found in Location header');
+    }
+
+    // Location format: /workspaces/{workspaceId}/items/{itemId}/jobs/instances/{jobInstanceId}
+    const jobIdMatch = location.match(/\/jobs\/instances\/([^\/\?]+)/);
+    if (!jobIdMatch) {
+      throw new Error(`Could not extract job instance ID from Location header: ${location}`);
+    }
+
+    const jobInstanceId = jobIdMatch[1];
     const pollUrl = `${this.baseUrl}/v1/workspaces/${workspaceId}/items/${notebookId}/jobs/instances/${jobInstanceId}`;
 
     return { jobInstanceId, pollUrl };
@@ -233,9 +275,8 @@ export class FabricNotebookClient extends FabricPlatformClient {
 
   /** Display names of the extraction notebooks (must be uploaded to Fabric first) */
   static readonly EXTRACTION_NOTEBOOKS = [
-    "01_extract_semantic_models",
-    "02_extract_reports",
-    "03_extract_notebooks",
+    "Extract_Datasets_and_Reports",
+    "Extract_Datasources_from_SemanticModels",
   ] as const;
 
   /**

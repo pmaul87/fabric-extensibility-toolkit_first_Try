@@ -14,12 +14,15 @@ import {
   MessageBar,
   MessageBarBody,
 } from "@fluentui/react-components";
-import { PlayRegular, DatabaseRegular, BuildingRegular } from "@fluentui/react-icons";
+import { PlayRegular, DatabaseRegular, BuildingRegular, DocumentRegular } from "@fluentui/react-icons";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { ItemEditorDefaultView } from "../../components/ItemEditor";
 import { FabricNotebookClient } from "../../clients/FabricNotebookClient";
-import { callDatahubOpen } from "../../controller/DataHubController";
 import type { LineageWorkbenchExtractionConfig } from "./LineageWorkbenchItemDefinition";
+import { LineageSetupWizard, LakehouseSetupResult } from "./LineageSetupWizard";
+import { LineageEnvironmentSetupWizard, EnvironmentSetupResult } from "./LineageEnvironmentSetupWizard";
+import { LineageNotebookSetupWizard, NotebookSetupResult } from "./LineageNotebookSetupWizard";
+import { LineageWorkspaceSelectionWizard, WorkspaceSelectionResult } from "./LineageWorkspaceSelectionWizard";
 
 const useStyles = makeStyles({
   root: {
@@ -40,11 +43,6 @@ const useStyles = makeStyles({
     flexDirection: "column",
     gap: tokens.spacingVerticalM,
   },
-  checkboxGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: tokens.spacingVerticalXS,
-  },
   runSection: {
     display: "flex",
     flexDirection: "column",
@@ -61,27 +59,16 @@ const useStyles = makeStyles({
   },
 });
 
-const ARTIFACT_TYPES = [
-  "semantic_model",
-  "report",
-  "dataflow",
-  "lakehouse",
-  "warehouse",
-  "notebook",
-  "pipeline",
-  "eventhouse",
-  "dataset",
-];
-
 interface LineageWorkbenchItemExtractionViewProps {
   workloadClient: WorkloadClientAPI;
   workspaceId: string;
   extraction: LineageWorkbenchExtractionConfig;
   onExtractionChange: (next: LineageWorkbenchExtractionConfig) => void;
+  onSave?: () => Promise<void>;
 }
 
 export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemExtractionViewProps) {
-  const { workloadClient, workspaceId, extraction, onExtractionChange } = props;
+  const { workloadClient, workspaceId, extraction, onExtractionChange, onSave } = props;
   const { t } = useTranslation();
   const styles = useStyles();
 
@@ -89,60 +76,80 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
   const [currentNotebook, setCurrentNotebook] = useState<string | null>(null);
   const [completedNotebooks, setCompletedNotebooks] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isEnvironmentWizardOpen, setIsEnvironmentWizardOpen] = useState(false);
+  const [isNotebookWizardOpen, setIsNotebookWizardOpen] = useState(false);
+  const [isWorkspaceWizardOpen, setIsWorkspaceWizardOpen] = useState(false);
 
-  const selectedTypes = new Set(extraction.artifactTypes ?? []);
 
-  const toggleArtifactType = (type: string) => {
-    const next = new Set(selectedTypes);
-    if (next.has(type)) {
-      next.delete(type);
-    } else {
-      next.add(type);
-    }
-    onExtractionChange({ ...extraction, artifactTypes: Array.from(next) });
-  };
 
   const handleSelectLakehouse = async () => {
-    const result = await callDatahubOpen(
-      workloadClient,
-      ["Lakehouse"],
-      t("LineageWorkbench_Extraction_SelectLakehouse", "Select a Lakehouse for lineage storage"),
-      false
-    );
-
-    if (result) {
-      onExtractionChange({
-        ...extraction,
-        targetLakehouseId: result.id,
-        targetLakehouseDisplayName: result.displayName,
-        targetLakehouseWorkspaceId: result.workspaceId,
-      });
-    }
+    setIsWizardOpen(true);
   };
 
-  const handleCreateNewLakehouse = (checked: boolean) => {
+  const handleWizardComplete = (result: LakehouseSetupResult) => {
     onExtractionChange({
       ...extraction,
-      notebooks: {
-        ...extraction.notebooks,
-        createNewLakehouse: checked,
-      },
+      targetLakehouseId: result.lakehouseId,
+      targetLakehouseDisplayName: result.lakehouseDisplayName,
+      targetLakehouseWorkspaceId: result.lakehouseWorkspaceId,
     });
+    // Auto-save after lakehouse selection
+    setTimeout(() => {
+      if (onSave) {
+        onSave();
+      }
+    }, 100);
   };
 
-  const handleDeployClick = async () => {
-    if (!extraction.targetLakehouseId) {
-      setError("Please select a target lakehouse first");
-      return;
-    }
+  const handleSelectEnvironment = async () => {
+    setIsEnvironmentWizardOpen(true);
+  };
 
-    setError(null);
-    // TODO: Implement notebook deployment via Fabric API
-    // For now, show a message that deployment is not yet implemented
-    setError(
-      "Notebook deployment via UI is scaffolded. Use PowerShell script for now: " +
-      "pwsh .\\scripts\\Deploy\\DeployNotebooksToFabric.ps1 -WorkspaceId <workspace-id>"
-    );
+  const handleEnvironmentWizardComplete = (result: EnvironmentSetupResult) => {
+    onExtractionChange({
+      ...extraction,
+      targetEnvironmentId: result.environmentId,
+      targetEnvironmentDisplayName: result.environmentDisplayName,
+      targetEnvironmentWorkspaceId: result.environmentWorkspaceId,
+    });
+    // Auto-save after environment selection
+    setTimeout(() => {
+      if (onSave) {
+        onSave();
+      }
+    }, 100);
+  };
+
+  const handleDeployNotebooks = () => {
+    setIsNotebookWizardOpen(true);
+  };
+
+  const handleNotebookWizardComplete = (result: NotebookSetupResult) => {
+    console.log("Notebooks deployed:", result.deployedNotebooks, result.notebookIds);
+    // Auto-save after notebook deployment
+    setTimeout(() => {
+      if (onSave) {
+        onSave();
+      }
+    }, 100);
+  };
+
+  const handleSelectWorkspaces = () => {
+    setIsWorkspaceWizardOpen(true);
+  };
+
+  const handleWorkspaceSelectionComplete = (result: WorkspaceSelectionResult) => {
+    onExtractionChange({
+      ...extraction,
+      targetWorkspaces: result.workspaceIds,
+    });
+    // Auto-save after workspace selection
+    setTimeout(() => {
+      if (onSave) {
+        onSave();
+      }
+    }, 100);
   };
 
   const runExtraction = useCallback(async () => {
@@ -162,7 +169,7 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
       await client.runAllExtractionNotebooks(
         workspaceId,
         {
-          targetWorkspaces: [workspaceId], // Extract from current workspace
+          targetWorkspaces: extraction.targetWorkspaces || [workspaceId],
           targetLakehouseId: extraction.targetLakehouseId,
           artifactTypes: extraction.artifactTypes,
         },
@@ -237,53 +244,83 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
         </div>
       </div>
 
+      <div>
+        <Text className={styles.sectionTitle}>
+          {t("LineageWorkbench_Extraction_Section_Environment", "Spark Environment")}
+        </Text>
+        <div className={styles.sectionBody}>
+          <Field label={t("LineageWorkbench_Extraction_Environment", "Extraction Environment")}>
+            <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM }}>
+              <Button
+                appearance="secondary"
+                icon={<BuildingRegular />}
+                onClick={handleSelectEnvironment}
+              >
+                {extraction.targetEnvironmentId
+                  ? extraction.targetEnvironmentDisplayName || t("LineageWorkbench_Extraction_Environment_Selected", "Environment selected")
+                  : t("LineageWorkbench_Extraction_Environment_Select", "Select Environment")}
+              </Button>
+              {extraction.targetEnvironmentId && (
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                  {extraction.targetEnvironmentId}
+                </Text>
+              )}
+            </div>
+          </Field>
+          
+          <MessageBar intent="info">
+            <MessageBarBody>
+              {t("LineageWorkbench_Extraction_EnvironmentInfo", 
+                "The environment must have semantic-link and semantic-link-labs libraries installed for lineage extraction.")}
+            </MessageBarBody>
+          </MessageBar>
+        </div>
+      </div>
+
       <Divider />
 
       <div>
         <Text className={styles.sectionTitle}>
-          {t("LineageWorkbench_Extraction_Section_Deployment", "Deployment Configuration")}
+          {t("LineageWorkbench_Extraction_Section_Notebooks", "Extraction Notebooks")}
         </Text>
         <div className={styles.sectionBody}>
-          <MessageBar intent="info">
-            <MessageBarBody>
-              <strong>{t("LineageWorkbench_Extraction_NotebooksInfo", "Notebooks to deploy:")} </strong>
-              <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>
-                <li>Extract_Datasets_and_Reports.ipynb</li>
-                <li>Extract_Datasources_from_SemanticModels.ipynb</li>
-              </ul>
-            </MessageBarBody>
-          </MessageBar>
-          
-          <Checkbox
-            checked={extraction.notebooks?.createNewLakehouse ?? false}
-            onChange={(_, data) => handleCreateNewLakehouse(data.checked as boolean)}
-            label={t("LineageWorkbench_Extraction_CreateNewLakehouse", "Create new lakehouse for lineage storage")}
-          />
-          {extraction.notebooks?.createNewLakehouse && (
-            <Field label={t("LineageWorkbench_Extraction_NewLakehouseName", "New Lakehouse Name")}>
-              <Input
-                value={extraction.notebooks?.newLakehouseName ?? ""}
-                placeholder={t("LineageWorkbench_Extraction_NewLakehouseName_Placeholder", "Enter lakehouse name...")}
-                onChange={(_, data) =>
-                  onExtractionChange({
-                    ...extraction,
-                    notebooks: {
-                      ...extraction.notebooks,
-                      newLakehouseName: data.value,
-                    },
-                  })
-                }
-              />
-            </Field>
+          <Field label={t("LineageWorkbench_Extraction_Notebooks", "Deploy Notebooks")}>
+            <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM }}>
+              <Button
+                appearance="primary"
+                icon={<DocumentRegular />}
+                onClick={handleDeployNotebooks}
+                disabled={!extraction.targetLakehouseId || !extraction.targetEnvironmentId}
+              >
+                {t("LineageWorkbench_Extraction_DeployNotebooks", "Deploy Notebooks")}
+              </Button>
+            </div>
+          </Field>
+
+          {(!extraction.targetLakehouseId || !extraction.targetEnvironmentId) && (
+            <MessageBar intent="warning">
+              <MessageBarBody>
+                {t("LineageWorkbench_Extraction_NotebooksRequirement", 
+                  "Please configure both lakehouse and environment before deploying notebooks.")}
+              </MessageBarBody>
+            </MessageBar>
           )}
-          
-          <Button
-            appearance="primary"
-            onClick={handleDeployClick}
-            disabled={!extraction.targetLakehouseId}
-          >
-            {t("LineageWorkbench_Extraction_DeployButton", "Deploy Notebooks to Workspace")}
-          </Button>
+
+          {extraction.targetLakehouseId && extraction.targetEnvironmentId && (
+            <MessageBar intent="info">
+              <MessageBarBody>
+                <strong>{t("LineageWorkbench_Extraction_NotebooksInfo", "Available notebooks:")} </strong>
+                <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>
+                  <li>Extract_Datasets_and_Reports.ipynb</li>
+                  <li>Extract_Datasources_from_SemanticModels.ipynb</li>
+                </ul>
+                <Text size={200}>
+                  Notebooks will be configured with {extraction.targetLakehouseDisplayName} as default lakehouse
+                  and {extraction.targetEnvironmentDisplayName} environment.
+                </Text>
+              </MessageBarBody>
+            </MessageBar>
+          )}
         </div>
       </div>
 
@@ -299,30 +336,27 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
               <Button
                 appearance="secondary"
                 icon={<BuildingRegular />}
-                onClick={undefined}
+                onClick={handleSelectWorkspaces}
               >
-                {t("LineageWorkbench_Extraction_Workspaces_Select", "Select Workspaces")}
+                {extraction.targetWorkspaces && extraction.targetWorkspaces.length > 0
+                  ? t("LineageWorkbench_Extraction_Workspaces_Selected", "{{count}} workspace(s) selected", { count: extraction.targetWorkspaces.length })
+                  : t("LineageWorkbench_Extraction_Workspaces_Select", "Select Workspaces")}
               </Button>
             </div>
           </Field>
-        </div>
-      </div>
-
-      <Divider />
-
-      <div>
-        <Text className={styles.sectionTitle}>
-          {t("LineageWorkbench_Extraction_Section_ArtifactTypes", "Artifact Types to Extract")}
-        </Text>
-        <div className={styles.checkboxGroup}>
-          {ARTIFACT_TYPES.map((type) => (
-            <Checkbox
-              key={type}
-              label={type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-              checked={selectedTypes.has(type)}
-              onChange={() => toggleArtifactType(type)}
-            />
-          ))}
+          
+          {extraction.targetWorkspaces && extraction.targetWorkspaces.length > 0 && (
+            <MessageBar intent="success">
+              <MessageBarBody>
+                <strong>{t("LineageWorkbench_Extraction_SelectedWorkspaces", "Selected workspaces:")} </strong>
+                <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>
+                  {extraction.targetWorkspaces.map((wsId) => (
+                    <li key={wsId}>{wsId}</li>
+                  ))}
+                </ul>
+              </MessageBarBody>
+            </MessageBar>
+          )}
         </div>
       </div>
 
@@ -476,13 +510,21 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
         <Button
           appearance="primary"
           icon={<PlayRegular />}
-          disabled={isRunning || !extraction.targetLakehouseId}
+          disabled={isRunning || !extraction.targetLakehouseId || !extraction.targetWorkspaces || extraction.targetWorkspaces.length === 0}
           onClick={runExtraction}
         >
           {isRunning 
             ? t("LineageWorkbench_Extraction_Button_Running", "Running Extraction...")
             : t("LineageWorkbench_Extraction_Button_Run", "Run Extraction")}
         </Button>
+        
+        {(!extraction.targetWorkspaces || extraction.targetWorkspaces.length === 0) && (
+          <MessageBar intent="warning">
+            <MessageBarBody>
+              {t("LineageWorkbench_Extraction_NoWorkspaces", "Please select at least one workspace to extract from.")}
+            </MessageBarBody>
+          </MessageBar>
+        )}
 
         {isRunning && (
           <div>
@@ -505,6 +547,41 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
   );
 
   return (
-    <ItemEditorDefaultView center={{ content: centerContent }} />
+    <>
+      <LineageSetupWizard
+        workloadClient={workloadClient}
+        workspaceId={workspaceId}
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        onComplete={handleWizardComplete}
+      />
+      <LineageEnvironmentSetupWizard
+        workloadClient={workloadClient}
+        workspaceId={workspaceId}
+        isOpen={isEnvironmentWizardOpen}
+        onClose={() => setIsEnvironmentWizardOpen(false)}
+        onComplete={handleEnvironmentWizardComplete}
+      />
+      <LineageNotebookSetupWizard
+        workloadClient={workloadClient}
+        workspaceId={workspaceId}
+        lakehouseId={extraction.targetLakehouseId || ""}
+        lakehouseName={extraction.targetLakehouseDisplayName || ""}
+        environmentId={extraction.targetEnvironmentId}
+        environmentName={extraction.targetEnvironmentDisplayName}
+        isOpen={isNotebookWizardOpen}
+        onClose={() => setIsNotebookWizardOpen(false)}
+        onComplete={handleNotebookWizardComplete}
+      />
+      <LineageWorkspaceSelectionWizard
+        workloadClient={workloadClient}
+        currentWorkspaceId={workspaceId}
+        preSelectedWorkspaceIds={extraction.targetWorkspaces}
+        isOpen={isWorkspaceWizardOpen}
+        onClose={() => setIsWorkspaceWizardOpen(false)}
+        onComplete={handleWorkspaceSelectionComplete}
+      />
+      <ItemEditorDefaultView center={{ content: centerContent }} />
+    </>
   );
 }

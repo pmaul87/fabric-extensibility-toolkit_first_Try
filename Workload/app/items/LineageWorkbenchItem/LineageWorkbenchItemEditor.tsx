@@ -243,6 +243,7 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
           workspaceId={item?.workspaceId}
           extraction={definition.extraction ?? {}}
           onExtractionChange={handleExtractionChange}
+          onSave={handleSave}
         />
       ),
     },
@@ -278,14 +279,14 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
     return VIEW.HOME;
   };
 
-  // Sync view tracker with ItemEditor's own view state
+  // Sync view tracker with ItemEditor's own view state - only on initial load
   useEffect(() => {
     if (!isLoading && item && viewSetter) {
       const view = getInitialView();
       setCurrentViewState(view as LineageWorkbenchView);
       viewSetter(view);
     }
-  }, [isLoading, item]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, viewSetter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <ItemEditor

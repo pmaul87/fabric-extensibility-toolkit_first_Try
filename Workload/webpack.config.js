@@ -45,6 +45,11 @@ module.exports = {
                     to: './assets',
                 },
                 {
+                    context: './notebooks/',
+                    from: '**/*.ipynb',
+                    to: './notebooks',
+                },
+                {
                     from: './app/web.config',
                     to: './web.config',
                 },
@@ -83,6 +88,10 @@ module.exports = {
                 resolve: {
                     fullySpecified: false
                 }
+            },
+            {
+                test: /\.ipynb$/,
+                type: 'asset/source'
             }
         ],
     }

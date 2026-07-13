@@ -43,7 +43,7 @@ export function LineageWorkbenchItemRibbon(props: LineageWorkbenchItemRibbonProp
 
   const extractAction: RibbonAction = {
     key: "go-extract",
-    label: t("LineageWorkbench_Ribbon_Extract", "Extract"),
+    label: t("LineageWorkbench_Ribbon_Extract", "Configure Extraction"),
     icon: Play24Regular,
     onClick: props.onNavigateToExtract,
     tooltip: t("LineageWorkbench_Ribbon_Extract_Tooltip", "Open extraction configuration"),

@@ -22,34 +22,12 @@
         "customActions": [
         ]},
         "recommendedItemTypes": [
-          "RequirementBoard",
           "LineageWorkbench"
         ]
     },
     "createExperience": {
       "description": "Workload_Description",
       "cards": [
-        {
-          "title": "RequirementBoardItem_DisplayName",
-          "description": "RequirementBoardItem_Description",
-          "icon": {
-            "name": "assets/images/Workload_Icon.png"
-          },
-          "icon_small": {
-            "name": "assets/images/Workload_Icon.png"
-          },
-          "availableIn": [
-            "home",
-            "create-hub",
-            "workspace-plus-new",
-            "workspace-plus-new-teams"
-          ],
-          "itemType": "RequirementBoard",
-          "createItemDialogConfig": {
-            "onCreationFailure": { "action": "item.onCreationFailure" },
-            "onCreationSuccess": { "action": "item.onCreationSuccess" }
-          }
-        },
         {
           "title": "LineageWorkbenchItem_DisplayName",
           "description": "LineageWorkbenchItem_Description",
@@ -74,7 +52,7 @@
       ]
     },
     "productDetail": {
-      "publisher": "Microsoft",
+      "publisher": "Lineage Workbench",
       "slogan": "Workload_Hub_Slogan",
       "description": "Workload_Hub_Description",
       "image": {
@@ -92,9 +70,9 @@
         }
       ],
         "supportLink": {
-          "documentation": {"url": "https://learn.microsoft.com/fabric/extensibility-toolkit"},
+          "documentation": {"url": "https://github.com/pmaul87/fabric-extensibility-toolkit_first_Try/blob/main/docs/Project_Setup.md"},
           "certification": {"url": "https://learn.microsoft.com/en-us/fabric/workload-development-kit/publish-workload-requirements"},
-          "help": {"url": "https://github.com/microsoft/fabric-extensibility-toolkit/issues"},
+          "help": {"url": "https://github.com/pmaul87/fabric-extensibility-toolkit_first_Try/issues"},
           "privacy": {"url": "https://privacy.microsoft.com/privacystatement"},
           "terms": {"url": "https://learn.microsoft.com/en-us/legal/termsofuse"},
           "license": {"url": "https://azuremarketplace.microsoft.com"} 

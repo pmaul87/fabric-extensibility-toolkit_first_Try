@@ -1,4 +1,4 @@
-export { RequirementBoardItemEditor } from "./RequirementBoardItemEditor";
+export { RequirementBoardItemDefaultView } from "./RequirementBoardItemDefaultView";
 export type { RequirementBoardItemDefinition, Requirement, RequirementStatus, RequirementPriority, RequirementScope, RequirementUser } from "./RequirementBoardItemDefinition";
 export { KANBAN_COLUMNS, PRIORITY_CONFIG, SCOPE_CONFIG } from "./RequirementBoardItemDefinition";
 export { RequirementDialog } from "./RequirementDialog";

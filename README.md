@@ -1,123 +1,162 @@
-# Microsoft Fabric Extensibility Toolkit
+# Lineage Workbench for Microsoft Fabric
 
-Welcome to the Microsoft Fabric Extensibility Toolkit. This repository contains everything you need to start creating a new Extension for Fabric. Besides the source code itself with a HelloWorld Sample it also contains a comprehensive guide that covers everything you need to know to create custom Fabric items for your organization. We're here to assist you every step of the way, so please don't hesitate to reach out with any questions, via "Issues" tab in this GitHub repository. Happy developing!
+Lineage Workbench is a custom Fabric workload item that helps teams extract technical lineage, inspect dependencies, and track implementation requirements in one place.
 
-[!NOTE]
-The Microsoft Fabric Extensibility Toolkit is an evolution of the Workload Development Kit. If you are starting from scratch we encourage customers and partners to start building using the new Extensibility Toolkit which is focusing on easy fast development and enables Fabric Fundamentals out of the box.
+This repository contains the full workload implementation, including setup wizards, extraction notebooks, lineage graph views, and requirement ticket management.
 
-## Trademarks
+## What This App Does
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
-trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+- Guided setup for Lakehouse, Environment, and Notebook deployment.
+- Automated lineage extraction from Fabric artifacts.
+- Interactive lineage exploration with detail-side dependency views.
+- Column-level query step visibility.
+- Requirement tickets linked to lineage nodes.
 
-## Table of contents
+## Quick Start
 
-- [Microsoft Fabric Extensibility Toolkit](#microsoft-fabric-extensibility-toolkit)
-  - [Trademarks](#trademarks)
-  - [Table of contents](#table-of-contents)
-  - [Latest Release](#latest-release)
-- [Introduction](#introduction)
-  - [What is Fabric](#what-is-fabric)
-  - [What is a Fabric Workload](#what-is-a-fabric-workload)
-  - [What is a Fabric Item](#what-is-a-fabric-item)
-  - [What is the Fabric Extensibility Toolkit](#what-is-the-fabric-extensibility-toolkit)
-- [Build Your Own Workload](#build-your-own-workload)
-  - [Prerequisites](#prerequisites)
-  - [Setting things up](#setting-things-up)
+### 1. Prerequisites
 
-## Latest Release
+- Node.js
+- PowerShell 7
+- .NET SDK
+- VS Code
+- Microsoft Fabric tenant and workspace
+- Entra app (existing or created via setup scripts)
 
-📋 **[v2026.03 - Remote Hosting & Job Scheduling](docs/ReleaseNotes/2026/v2026.03.md)**
+Detailed prerequisites: [docs/Project_Setup.md](docs/Project_Setup.md)
 
-This release introduces major enhancements for remote workload hosting, comprehensive job scheduling capabilities, and improved operational APIs. The update focuses on production-ready remote hosting features, making it easier for workload developers to deploy and manage Fabric workloads at scale. [View all release notes →](docs/ReleaseNotes/)
+### 2. Setup
 
-## Introduction
+```powershell
+cd scripts\Setup
+.\Setup.ps1 -WorkloadName "Org.InsightWorkbench"
+```
 
-### What is Fabric
+### 3. Start Development Mode
 
-Microsoft Fabric is a comprehensive analytics solution designed for enterprise-level applications. This platform encompasses a wide range of services, including data engineering, real-time analytics, and business intelligence, all consolidated within a single, unified framework.
+```powershell
+cd scripts\Run
+.\StartDevServer.ps1
+.\StartDevGateway.ps1
+```
 
-The key advantage of Microsoft Fabric is its integrated approach, that eliminates the need for distinct services from multiple vendors. Users can leverage this platform to streamline their analytics processes, with all services accessible from a single source of truth.
+After startup, open the workload in Fabric Workload Hub.
 
-Microsoft Fabric provides integration and simplicity, as well as a transparent and flexible cost management experience. This cost management experience allows users to control expenses effectively by ensuring they only pay for the resources they require.
+## Product Walkthrough
 
-The Fabric platform is not just a tool, but a strategic asset that simplifies and enhances the analytics capabilities of any enterprise.
-More information about Fabric can be found in the [documentation](https://learn.microsoft.com/en-us/fabric/get-started/microsoft-fabric-overview).
+This section is structured for screenshots you can add later.
 
-### What is a Fabric Workload
+### 1. Set up Lakehouse and Notebooks
 
-In Microsoft Fabric, workloads are a package of different components that are integrated into the Fabric framework. Workloads enhance the usability of your service within the familiar Fabric workspace, eliminating the need to leave the Fabric environment for different services. [Data Factory](https://learn.microsoft.com/en-us/fabric/data-factory/data-factory-overview), [Data Warehouse](https://learn.microsoft.com/en-us/fabric/data-warehouse/data-warehousing) and  [Power BI](https://learn.microsoft.com/en-us/power-bi/enterprise/service-premium-what-is) are some of the built-in Fabric workloads.
+In the **Extraction** view of Lineage Workbench:
 
-### What is a Fabric Item
+1. Click **Select/Create Lakehouse** and either create a new lakehouse or choose an existing one.
+2. Click **Select/Create Environment** and configure semantic-link dependencies.
+3. Click **Deploy Extraction Notebooks** to deploy:
+   - `Extract_Datasets_and_Reports`
+   - `Extract_Datasources_from_SemanticModels`
+4. Click **Workspaces to Extract** and select one or more workspaces.
+5. Click **Run Extraction**.
 
-Items in Fabric represent the core functional building blocks that users interact with inside the Fabric platform. Each item encapsulates a specific capability or resource, such as data storage, analytics, or collaboration. Different workloads introduce different types of items, each tailored to a particular use case or service.
+Screenshot placeholder:
 
-Examples in Fabric include:
+```md
+![Setup Lakehouse and Notebooks](docs/images/01-setup-lakehouse-notebooks.png)
+```
 
-- **Lakehouse**: Combines the benefits of data lakes and data warehouses, enabling users to store, manage, and analyze large volumes of structured and unstructured data in a single, unified environment.
-- **Notebook**: Provides an interactive workspace for data exploration, analysis, and visualization using languages like Python, SQL, or R. Notebooks are ideal for data scientists and analysts to document and execute code alongside rich text and visualizations.
-- **Data Warehouse**: Offers scalable, high-performance analytics on large datasets, supporting complex queries and business intelligence workloads.
-- **Pipeline**: Automates data movement and transformation across various sources and destinations within Fabric.
+### 2. Open Lineage Explorer and Select a Node
 
-These are just a few examples—Fabric supports a wide range of item types, and new custom items can be created using the Extensibility Toolkit to address unique business needs.
+In the **Lineage** view:
 
-### What is the Fabric Extensibility Toolkit
+1. Open the lineage explorer panel.
+2. Select any node (dataset, table, column, report, visual, etc.).
+3. The selected node becomes the context for detail analysis.
 
-With the Fabric Extensibility Toolkit, you can create your own items and provide them as a workload in Fabric. Customers can create a workload for their own tenant to integrate their Data applications into the platform. Partners can build workloads and publish them into the Fabric Workload Hub which makes them available to all Fabric customers. The Microsoft Fabric Extensibility Toolkit provides you with all the necessary tools and interfaces to embed your data application into Microsoft Fabric.
+Screenshot placeholder:
 
-For more information on what workloads can offer Microsoft partners, and for useful examples, head to our official [Microsoft Fabric Extensibility Toolkit documentation](https://learn.microsoft.com/fabric/extensibility-toolkit).
+```md
+![Lineage Explorer Node Selection](docs/images/02-lineage-explorer-node-selection.png)
+```
 
-## Build Your Own Workload
+### 3. See Related Nodes in Detail View and Graph
 
-### Prerequisites
+After selecting a node:
 
-To run the development environment locally you need the following prerequisites:
+1. The detail panel shows related upstream/downstream nodes.
+2. The graph highlights connected nodes and relationships.
+3. Use depth/direction controls to refine visible dependencies.
 
-- [Node.js](https://nodejs.org/en/download/)
-- [Powershell 7](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell)
-- [Dotnet](https://dotnet.microsoft.com/en-us/download) for MacOS please make sure to install the x64 version - after installing make sure to restart the powershell.
-- [VSCode](https://code.visualstudio.com/download) or similar development environment
-- [Fabric Tenant](https://app.fabric.microsoft.com/) that you use for development and publishing the Workload later on
-- [Fabric Workspace](https://learn.microsoft.com/en-us/fabric/fundamentals/workspaces) that you can use to build your workload
-- [Fabric Capacity](https://learn.microsoft.com/en-us/fabric/enterprise/licenses) that is assigned to the workspace you are planning to use
-- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest) (only used for Entra App creation) - after installing make sure to restart powershell.
-- [Entra App](https://entra.microsoft.com/) You either need an existing Entra App you can use one that is configured correctly or you need permission to create a new Entra App.
+Screenshot placeholder:
 
-[!NOTE]
-After installing new software please make sure that you restart Powershell and Visual Studio, otherwise the scripts might file because the software is not part of the path variable.
+```md
+![Related Nodes in Detail and Graph](docs/images/03-related-nodes-detail-graph.png)
+```
 
-Alternatively we suggest to use a [Codespace](https://github.com/features/codespaces) in GitHub which has everything preconfigured:
+### 4. Showcase Query Steps for Columns
 
-If you use a codespace please make sure that you select at least an 8 core machine and open the Codespace in VSCode locally. This way everything will work out of the box.
+For a selected column-related node:
 
-### Project structure
+1. Open the detail view section showing transformation/query lineage.
+2. Inspect query steps that produced or transformed the selected field.
+3. Use this to validate impact before making semantic model changes.
 
-Use the [Project structure](./docs/Project_Structure.md) to get a better understanding about Extensibility projects are structured and where you can find and change it to your needs.
+Screenshot placeholder:
 
-### 🤖 AI Assistance
+```md
+![Query Steps for Columns](docs/images/04-query-steps-columns.png)
+```
 
-If you are using GitHub Copilot or other AI assistants, please refer to the **[AI Instructions](.github/copilot-instructions.md)**. This file contains critical architectural rules and context that will help the AI generate correct code for this repository.
+### 5. Requirement Tickets (In Progress)
 
-**Key Resources for AI:**
+In the **Requirements** view:
 
-- `.github/copilot-instructions.md` - Main entry point for AI github copilot
-- `.ai/` folder - Detailed context and command references for any AI assistant
+1. Create and edit requirement tickets directly from the integrated board.
+2. Link tickets to lineage nodes for impact-aware planning.
+3. Track status via Kanban columns (Backlog, To Do, In Progress, Review, Done).
 
-### Available Components
+Current status note:
 
-The toolkit includes pre-built components to accelerate your workload development. These components follow Fabric Design System guidelines for consistent user experiences.
+- Requirement tracking is functional and integrated.
+- Full enterprise workflow features (governance/compliance automation, advanced reporting, and lifecycle controls) are still under active implementation.
 
-**[📋 View All Components →](./docs/components/README.md)**
+Screenshot placeholder:
 
-Key highlights:
-- **ItemEditor Component** - Foundation for all item editors (mandatory)
-- **OneLakeView** - OneLake integration and file browsing  
-- **Wizard Component** - Multi-step guided workflows
+```md
+![Requirement Tickets Board](docs/images/05-requirement-tickets.png)
+```
 
-For complete documentation, examples, and implementation guides, see the [Components Documentation](./docs/components/README.md).
+## Recommended Additional Section
 
-### Setting things up
+### Troubleshooting
 
-To set things up follow the [Setup Guide](./docs/Project_Setup.md)
+Common issues and fixes:
+
+- **Notebook run fails with language metadata errors**
+  - Redeploy notebooks from the setup wizard.
+- **Extraction parameters fail to parse**
+  - Ensure workspaces are selected and extraction is launched from the current wizard flow.
+- **Changes not persisted**
+  - Requirements now auto-save. If not visible after reload, verify save permissions in the target workspace.
+
+## Repository Structure
+
+- `Workload/app/items/LineageWorkbenchItem/` - Main integrated item (Extraction, Lineage, Requirements)
+- `Workload/notebooks/` - Extraction notebooks
+- `Workload/Manifest/` - Workload/item manifest metadata
+- `scripts/Setup/` - Environment setup scripts
+- `scripts/Run/` - Local run scripts
+- `docs/` - Supporting documentation
+
+## Publishing Notes
+
+Before publishing:
+
+1. Verify manifest metadata under `Workload/Manifest/`.
+2. Build the manifest package.
+3. Validate in a test tenant.
+
+See: [docs/Project_Setup.md](docs/Project_Setup.md)
+
+## License
+
+See [LICENSE](LICENSE).

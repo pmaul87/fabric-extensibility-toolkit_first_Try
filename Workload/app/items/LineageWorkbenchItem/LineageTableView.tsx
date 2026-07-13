@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge, Text, makeStyles, tokens, RadioGroup, Radio, Input } from "@fluentui/react-components";
 import { ChevronDownRegular, ChevronRightRegular, SearchRegular } from "@fluentui/react-icons";
+import { getEntityTypeLabel } from "./lineageContracts";
 
 const useStyles = makeStyles({
   root: {
@@ -189,7 +190,7 @@ export function LineageTableView({
       return Array.from(typeMap.entries()).map(([type, items]) => ({
         groupType: type,
         groupId: type,
-        groupDisplayName: type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " "),
+        groupDisplayName: getEntityTypeLabel(type),
         nodes: items.sort((a, b) => a.displayName.localeCompare(b.displayName)),
       }));
     } else {

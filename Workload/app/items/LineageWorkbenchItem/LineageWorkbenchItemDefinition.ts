@@ -5,12 +5,17 @@
  */
 export interface LineageWorkbenchExtractionConfig {
   targetWorkspaces?: string[];
+  targetWorkspaceNames?: string[];
+  targetWorkspaceTypes?: string[];
+  workspaceReportExtractionWarnings?: string[];
   targetLakehouseId?: string;
   targetLakehouseDisplayName?: string;
   targetLakehouseWorkspaceId?: string;
   targetEnvironmentId?: string;
   targetEnvironmentDisplayName?: string;
   targetEnvironmentWorkspaceId?: string;
+  targetPipelineId?: string;
+  targetPipelineDisplayName?: string;
   artifactTypes?: string[];
   lastRunAt?: string;
   lastRunStatus?: "idle" | "running" | "success" | "error";

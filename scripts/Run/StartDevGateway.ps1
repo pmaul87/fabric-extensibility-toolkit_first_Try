@@ -1,5 +1,8 @@
 param (
-    [boolean]$InteractiveLogin = $true
+    [boolean]$InteractiveLogin = $true,
+    [switch]$AutoRestart,
+    [int]$RestartDelaySeconds = 5,
+    [int]$MaxRestarts = 0
 )
 
 ################################################
@@ -53,31 +56,55 @@ $devWorkspaceId = $config.WorkspaceGuid
 $logLevel = "Information"
 
 
-if($IsWindows) { 
-    if ($InteractiveLogin -and [string]::IsNullOrEmpty($token)) {
-        # Use interactive mode only when explicitly requested and no token available
-        Write-Host "Starting DevGateway in interactive mode..." -ForegroundColor Green
-        & $fileExe -LogLevel $logLevel -DevMode:LocalConfigFilePath $CONFIGURATIONFILE
-    } else {
-        # Use token-based authentication
-        Write-Host "Starting DevGateway with token-based authentication..." -ForegroundColor Green
-        & $fileExe -LogLevel $logLevel -DevMode:UserAuthorizationToken $token -DevMode:ManifestPackageFilePath $manifestPackageFilePath -DevMode:WorkspaceGuid $devWorkspaceId
-    }
-} else {   
-    # Check if we're on ARM64 Mac and need x64 runtime
-    $arch = uname -m
-    if ($arch -eq "arm64") {
-        $x64DotnetPath = "/usr/local/share/dotnet/x64/dotnet"
-        if (Test-Path $x64DotnetPath) {
-            Write-Host "Using x64 .NET runtime for ARM64 Mac compatibility..." -ForegroundColor Yellow
-            & $x64DotnetPath $fileExe -LogLevel $logLevel -DevMode:UserAuthorizationToken $token -DevMode:ManifestPackageFilePath $manifestPackageFilePath -DevMode:WorkspaceGuid $devWorkspaceId
+function Invoke-DevGateway {
+    if($IsWindows) {
+        if ($InteractiveLogin -and [string]::IsNullOrEmpty($token)) {
+            # Use interactive mode only when explicitly requested and no token available
+            Write-Host "Starting DevGateway in interactive mode..." -ForegroundColor Green
+            & $fileExe -LogLevel $logLevel -DevMode:LocalConfigFilePath $CONFIGURATIONFILE
         } else {
-            Write-Host "ERROR: This application requires x64 .NET runtime, but you're on ARM64 Mac." -ForegroundColor Red
-            Write-Host "Please install x64 .NET 8 Runtime from: https://dotnet.microsoft.com/download/dotnet/8.0" -ForegroundColor Red
-            Write-Host "Make sure to download the x64 version (not ARM64)." -ForegroundColor Red
-            exit 1
+            # Use token-based authentication
+            Write-Host "Starting DevGateway with token-based authentication..." -ForegroundColor Green
+            & $fileExe -LogLevel $logLevel -DevMode:UserAuthorizationToken $token -DevMode:ManifestPackageFilePath $manifestPackageFilePath -DevMode:WorkspaceGuid $devWorkspaceId
         }
     } else {
-        & dotnet $fileExe -LogLevel $logLevel -DevMode:UserAuthorizationToken $token -DevMode:ManifestPackageFilePath $manifestPackageFilePath -DevMode:WorkspaceGuid $devWorkspaceId
+        # Check if we're on ARM64 Mac and need x64 runtime
+        $arch = uname -m
+        if ($arch -eq "arm64") {
+            $x64DotnetPath = "/usr/local/share/dotnet/x64/dotnet"
+            if (Test-Path $x64DotnetPath) {
+                Write-Host "Using x64 .NET runtime for ARM64 Mac compatibility..." -ForegroundColor Yellow
+                & $x64DotnetPath $fileExe -LogLevel $logLevel -DevMode:UserAuthorizationToken $token -DevMode:ManifestPackageFilePath $manifestPackageFilePath -DevMode:WorkspaceGuid $devWorkspaceId
+            } else {
+                Write-Host "ERROR: This application requires x64 .NET runtime, but you're on ARM64 Mac." -ForegroundColor Red
+                Write-Host "Please install x64 .NET 8 Runtime from: https://dotnet.microsoft.com/download/dotnet/8.0" -ForegroundColor Red
+                Write-Host "Make sure to download the x64 version (not ARM64)." -ForegroundColor Red
+                exit 1
+            }
+        } else {
+            & dotnet $fileExe -LogLevel $logLevel -DevMode:UserAuthorizationToken $token -DevMode:ManifestPackageFilePath $manifestPackageFilePath -DevMode:WorkspaceGuid $devWorkspaceId
+        }
     }
+}
+
+if (-not $AutoRestart) {
+    Invoke-DevGateway
+    exit $LASTEXITCODE
+}
+
+$restartCount = 0
+Write-Host "Auto-restart enabled for DevGateway (delay: ${RestartDelaySeconds}s, max restarts: $MaxRestarts where 0 = infinite)." -ForegroundColor Yellow
+
+while ($true) {
+    Invoke-DevGateway
+    $exitCode = $LASTEXITCODE
+
+    if ($MaxRestarts -gt 0 -and $restartCount -ge $MaxRestarts) {
+        Write-Host "Reached max restart count ($MaxRestarts). Exiting with code $exitCode." -ForegroundColor Red
+        exit $exitCode
+    }
+
+    $restartCount++
+    Write-Host "DevGateway exited (code: $exitCode). Restart attempt #$restartCount in ${RestartDelaySeconds}s..." -ForegroundColor Yellow
+    Start-Sleep -Seconds $RestartDelaySeconds
 }

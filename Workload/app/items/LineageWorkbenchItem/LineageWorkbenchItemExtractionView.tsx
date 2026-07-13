@@ -18,11 +18,16 @@ import { PlayRegular, DatabaseRegular, BuildingRegular, DocumentRegular } from "
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { ItemEditorDefaultView } from "../../components/ItemEditor";
 import { FabricNotebookClient } from "../../clients/FabricNotebookClient";
+import { FabricPipelineClient } from "../../clients/FabricPipelineClient";
 import type { LineageWorkbenchExtractionConfig } from "./LineageWorkbenchItemDefinition";
 import { LineageSetupWizard, LakehouseSetupResult } from "./LineageSetupWizard";
 import { LineageEnvironmentSetupWizard, EnvironmentSetupResult } from "./LineageEnvironmentSetupWizard";
 import { LineageNotebookSetupWizard, NotebookSetupResult } from "./LineageNotebookSetupWizard";
 import { LineageWorkspaceSelectionWizard, WorkspaceSelectionResult } from "./LineageWorkspaceSelectionWizard";
+import bronzeExtractTemplate from "../../../notebooks/1_LineageWorkbench_Extract_Raw_Metadata.ipynb";
+import silverNodeTemplate from "../../../notebooks/2_LineageWorkbench_Build_Node_View.ipynb";
+import edgeExtractTemplate from "../../../notebooks/3_LineageWorkbench_BuildEdges.ipynb";
+import mapDatasourcesTemplate from "../../../notebooks/4_LineageWorkbench_Map_M_Datasources.ipynb";
 
 const useStyles = makeStyles({
   root: {
@@ -72,6 +77,14 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
   const { t } = useTranslation();
   const styles = useStyles();
 
+  const buildItemPath = (itemWorkspaceId: string, itemTypePath: string, itemId: string): string => {
+    return `/groups/${itemWorkspaceId}/${itemTypePath}/${itemId}`;
+  };
+
+  const openInNewTab = (path: string) => {
+    window.open(path, "_blank", "noopener,noreferrer");
+  };
+
   const [isRunning, setIsRunning] = useState(false);
   const [currentNotebook, setCurrentNotebook] = useState<string | null>(null);
   const [completedNotebooks, setCompletedNotebooks] = useState<string[]>([]);
@@ -79,7 +92,54 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isEnvironmentWizardOpen, setIsEnvironmentWizardOpen] = useState(false);
   const [isNotebookWizardOpen, setIsNotebookWizardOpen] = useState(false);
+  const [isPipelineOnlyWizard, setIsPipelineOnlyWizard] = useState(false);
   const [isWorkspaceWizardOpen, setIsWorkspaceWizardOpen] = useState(false);
+  const [isStartingPipeline, setIsStartingPipeline] = useState(false);
+  const [pipelineRunId, setPipelineRunId] = useState<string | null>(null);
+  const [pipelineRunError, setPipelineRunError] = useState<string | null>(null);
+  const [currentNotebookCellProgress, setCurrentNotebookCellProgress] = useState<{
+    completed?: number;
+    total?: number;
+    percent?: number;
+    status?: string;
+  } | null>(null);
+
+  const NOTEBOOK_TEMPLATE_BY_NAME: Record<string, string> = {
+    "1_LineageWorkbench_Extract_Raw_Metadata": bronzeExtractTemplate,
+    "2_LineageWorkbench_Build_Node_View": silverNodeTemplate,
+    "3_LineageWorkbench_BuildEdges": edgeExtractTemplate,
+    "4_LineageWorkbench_Map_M_Datasources": mapDatasourcesTemplate,
+  };
+
+  const notebookOrder = [...FabricNotebookClient.EXTRACTION_NOTEBOOKS];
+
+  const notebookCellCounts = notebookOrder.reduce<Record<string, number>>((acc, notebookName) => {
+    const template = NOTEBOOK_TEMPLATE_BY_NAME[notebookName];
+    if (!template) {
+      acc[notebookName] = 0;
+      return acc;
+    }
+
+    try {
+      const parsed = JSON.parse(template) as { cells?: Array<{ cell_type?: string }> };
+      acc[notebookName] = (parsed.cells || []).filter((cell) => cell?.cell_type === "code").length;
+    } catch {
+      acc[notebookName] = 0;
+    }
+
+    return acc;
+  }, {});
+
+  const totalCodeCells = notebookOrder.reduce((sum, notebookName) => sum + (notebookCellCounts[notebookName] || 0), 0);
+
+  const completedCodeCells = completedNotebooks.reduce(
+    (sum, notebookName) => sum + (notebookCellCounts[notebookName] || 0),
+    0
+  );
+
+  const activeNotebookTemplateCells = currentNotebook ? notebookCellCounts[currentNotebook] || 0 : 0;
+  const activeNotebookCompletedCells = currentNotebookCellProgress?.completed || 0;
+  const processedCodeCells = completedCodeCells + Math.min(activeNotebookCompletedCells, activeNotebookTemplateCells || activeNotebookCompletedCells);
 
 
 
@@ -122,11 +182,50 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
   };
 
   const handleDeployNotebooks = () => {
+    setIsPipelineOnlyWizard(false);
     setIsNotebookWizardOpen(true);
+  };
+
+  const handleCreateOrUpdatePipeline = () => {
+    setIsPipelineOnlyWizard(true);
+    setIsNotebookWizardOpen(true);
+  };
+
+  const handleStartPipeline = async () => {
+    if (!extraction.targetPipelineId) {
+      setPipelineRunError("Please configure a deployment pipeline first.");
+      return;
+    }
+
+    setIsStartingPipeline(true);
+    setPipelineRunError(null);
+    setPipelineRunId(null);
+
+    try {
+      const client = new FabricPipelineClient(workloadClient);
+      const targetWorkspaces = (extraction.targetWorkspaces && extraction.targetWorkspaces.length > 0)
+        ? extraction.targetWorkspaces
+        : [workspaceId];
+
+      const result = await client.triggerPipeline(workspaceId, extraction.targetPipelineId, {
+        targetWorkspaces,
+      });
+      setPipelineRunId(result.jobInstanceId);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setPipelineRunError(errorMessage);
+    } finally {
+      setIsStartingPipeline(false);
+    }
   };
 
   const handleNotebookWizardComplete = (result: NotebookSetupResult) => {
     console.log("Notebooks deployed:", result.deployedNotebooks, result.notebookIds);
+    onExtractionChange({
+      ...extraction,
+      targetPipelineId: result.pipelineId,
+      targetPipelineDisplayName: result.pipelineDisplayName,
+    });
     // Auto-save after notebook deployment
     setTimeout(() => {
       if (onSave) {
@@ -143,6 +242,9 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
     onExtractionChange({
       ...extraction,
       targetWorkspaces: result.workspaceIds,
+      targetWorkspaceNames: result.workspaceNames,
+      targetWorkspaceTypes: result.workspaceTypes,
+      workspaceReportExtractionWarnings: result.reportExtractionWarnings,
     });
     // Auto-save after workspace selection
     setTimeout(() => {
@@ -162,6 +264,7 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
     setError(null);
     setCurrentNotebook(null);
     setCompletedNotebooks([]);
+    setCurrentNotebookCellProgress(null);
 
     try {
       const client = new FabricNotebookClient(workloadClient);
@@ -175,10 +278,24 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
         },
         (name) => {
           setCurrentNotebook(name);
+          setCurrentNotebookCellProgress({ status: "InProgress" });
         },
         (name) => {
           setCompletedNotebooks((prev) => [...prev, name]);
           setCurrentNotebook(null);
+          setCurrentNotebookCellProgress(null);
+        },
+        (progress) => {
+          if (progress.notebookName !== currentNotebook && progress.status !== "Completed") {
+            setCurrentNotebook(progress.notebookName);
+          }
+
+          setCurrentNotebookCellProgress({
+            completed: progress.completedCells,
+            total: progress.totalCells,
+            percent: progress.progressPercent,
+            status: progress.status,
+          });
         }
       );
 
@@ -191,7 +308,7 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
     } finally {
       setIsRunning(false);
     }
-  }, [extraction, onExtractionChange, workloadClient, workspaceId]);
+  }, [extraction, onExtractionChange, workloadClient, workspaceId, currentNotebook]);
 
   const centerContent = (
     <div className={styles.root}>
@@ -228,9 +345,26 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
                   : t("LineageWorkbench_Extraction_Lakehouse_Select", "Select Lakehouse")}
               </Button>
               {extraction.targetLakehouseId && (
-                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                  {extraction.targetLakehouseId}
-                </Text>
+                <>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                    {extraction.targetLakehouseId}
+                  </Text>
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    onClick={() =>
+                      openInNewTab(
+                        buildItemPath(
+                          extraction.targetLakehouseWorkspaceId || workspaceId,
+                          "lakehouses",
+                          extraction.targetLakehouseId as string
+                        )
+                      )
+                    }
+                  >
+                    {t("LineageWorkbench_Extraction_OpenLakehouse", "Open")}
+                  </Button>
+                </>
               )}
             </div>
           </Field>
@@ -261,9 +395,26 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
                   : t("LineageWorkbench_Extraction_Environment_Select", "Select Environment")}
               </Button>
               {extraction.targetEnvironmentId && (
-                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                  {extraction.targetEnvironmentId}
-                </Text>
+                <>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                    {extraction.targetEnvironmentId}
+                  </Text>
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    onClick={() =>
+                      openInNewTab(
+                        buildItemPath(
+                          extraction.targetEnvironmentWorkspaceId || workspaceId,
+                          "synapseenvironments",
+                          extraction.targetEnvironmentId as string
+                        )
+                      )
+                    }
+                  >
+                    {t("LineageWorkbench_Extraction_OpenEnvironment", "Open")}
+                  </Button>
+                </>
               )}
             </div>
           </Field>
@@ -271,7 +422,7 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
           <MessageBar intent="info">
             <MessageBarBody>
               {t("LineageWorkbench_Extraction_EnvironmentInfo", 
-                "The environment must have semantic-link and semantic-link-labs libraries installed for lineage extraction.")}
+                "The environment must have semantic-link and semantic-link-labs libraries installed for lineage extraction. The workbench uses a configuration designed for F4 capacity. For faster processing, open the environment, go to Compute, and adjust the compute properties accordingly.")}
             </MessageBarBody>
           </MessageBar>
         </div>
@@ -284,7 +435,7 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
           {t("LineageWorkbench_Extraction_Section_Notebooks", "Extraction Notebooks")}
         </Text>
         <div className={styles.sectionBody}>
-          <Field label={t("LineageWorkbench_Extraction_Notebooks", "Deploy Notebooks")}>
+          <Field label={t("LineageWorkbench_Extraction_Notebooks", "Notebook Deployment") }>
             <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM }}>
               <Button
                 appearance="primary"
@@ -311,8 +462,9 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
               <MessageBarBody>
                 <strong>{t("LineageWorkbench_Extraction_NotebooksInfo", "Available notebooks:")} </strong>
                 <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>
-                  <li>Extract_Datasets_and_Reports.ipynb</li>
-                  <li>Extract_Datasources_from_SemanticModels.ipynb</li>
+                  {notebookOrder.map((name) => (
+                    <li key={name}>{name}.ipynb</li>
+                  ))}
                 </ul>
                 <Text size={200}>
                   Notebooks will be configured with {extraction.targetLakehouseDisplayName} as default lakehouse
@@ -328,10 +480,10 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
 
       <div>
         <Text className={styles.sectionTitle}>
-          {t("LineageWorkbench_Extraction_Section_Workspaces", "Workspaces to Extract")}
+          {t("LineageWorkbench_Extraction_Section_Workspaces", "Workspaces to extract")}
         </Text>
         <div className={styles.sectionBody}>
-          <Field label={t("LineageWorkbench_Extraction_Workspaces", "Source Workspaces")}>
+          <Field label={t("LineageWorkbench_Extraction_Workspaces", "Source workspaces")}>
             <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM }}>
               <Button
                 appearance="secondary"
@@ -340,21 +492,135 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
               >
                 {extraction.targetWorkspaces && extraction.targetWorkspaces.length > 0
                   ? t("LineageWorkbench_Extraction_Workspaces_Selected", "{{count}} workspace(s) selected", { count: extraction.targetWorkspaces.length })
-                  : t("LineageWorkbench_Extraction_Workspaces_Select", "Select Workspaces")}
+                  : t("LineageWorkbench_Extraction_Workspaces_Select", "Select workspaces")}
               </Button>
             </div>
           </Field>
-          
+
           {extraction.targetWorkspaces && extraction.targetWorkspaces.length > 0 && (
             <MessageBar intent="success">
               <MessageBarBody>
                 <strong>{t("LineageWorkbench_Extraction_SelectedWorkspaces", "Selected workspaces:")} </strong>
                 <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>
-                  {extraction.targetWorkspaces.map((wsId) => (
-                    <li key={wsId}>{wsId}</li>
+                  {(extraction.targetWorkspaceNames && extraction.targetWorkspaceNames.length > 0
+                    ? extraction.targetWorkspaceNames
+                    : extraction.targetWorkspaces).map((workspaceName, index) => (
+                    <li key={`${workspaceName}-${index}`}>
+                      <span>{workspaceName}</span>
+                      {extraction.targetWorkspaceTypes && extraction.targetWorkspaceTypes[index] && (
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginLeft: tokens.spacingHorizontalS }}>
+                          ({extraction.targetWorkspaceTypes[index]})
+                        </Text>
+                      )}
+                      {extraction.targetWorkspaces && extraction.targetWorkspaces[index] && (
+                        <Button
+                          appearance="subtle"
+                          size="small"
+                          onClick={() => openInNewTab(`/groups/${extraction.targetWorkspaces?.[index]}`)}
+                          style={{ marginLeft: tokens.spacingHorizontalS }}
+                        >
+                          {t("LineageWorkbench_Extraction_OpenWorkspace", "Open")}
+                        </Button>
+                      )}
+                    </li>
                   ))}
                 </ul>
               </MessageBarBody>
+            </MessageBar>
+          )}
+
+          {extraction.workspaceReportExtractionWarnings && extraction.workspaceReportExtractionWarnings.length > 0 && (
+            <MessageBar intent="warning">
+              <MessageBarBody>
+                <strong>{t("LineageWorkbench_Extraction_WorkspaceWarning_Title", "Workspace capacity warning:")}</strong>
+                <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>
+                  {extraction.workspaceReportExtractionWarnings.map((warning, index) => (
+                    <li key={`workspace-warning-${index}`}>{warning}</li>
+                  ))}
+                </ul>
+              </MessageBarBody>
+            </MessageBar>
+          )}
+        </div>
+      </div>
+
+      <Divider />
+
+      <div>
+        <Text className={styles.sectionTitle}>
+          {t("LineageWorkbench_Extraction_Section_DeploymentPipeline", "Deployment Pipeline")}
+        </Text>
+        <div className={styles.sectionBody}>
+          <Field label={t("LineageWorkbench_Extraction_DeploymentPipeline", "Pipeline Deployment") }>
+            <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM }}>
+              <Button
+                appearance="secondary"
+                icon={<DocumentRegular />}
+                onClick={handleCreateOrUpdatePipeline}
+              >
+                {t("LineageWorkbench_Extraction_ConfigurePipeline", "Create/Update Pipeline")}
+              </Button>
+              <Button
+                appearance="primary"
+                icon={<PlayRegular />}
+                onClick={handleStartPipeline}
+                disabled={!extraction.targetPipelineId || isStartingPipeline}
+              >
+                {isStartingPipeline
+                  ? t("LineageWorkbench_Extraction_StartPipeline_Starting", "Starting pipeline...")
+                  : t("LineageWorkbench_Extraction_StartPipeline", "Start Pipeline")}
+              </Button>
+            </div>
+          </Field>
+
+          <MessageBar intent="info">
+            <MessageBarBody>
+              {t("LineageWorkbench_Extraction_DeploymentPipelineInfo", "Creates an orchestration pipeline that chains the selected notebooks.")}
+            </MessageBarBody>
+          </MessageBar>
+
+          {extraction.targetPipelineId && (
+            <MessageBar intent="success">
+              <MessageBarBody>
+                <strong>Pipeline configured:</strong> {extraction.targetPipelineDisplayName || "Lineage pipeline"}
+                <div style={{ marginTop: tokens.spacingVerticalXS }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS }}>
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                      {extraction.targetPipelineId}
+                    </Text>
+                    <Button
+                      appearance="subtle"
+                      size="small"
+                      onClick={() =>
+                        openInNewTab(
+                          buildItemPath(workspaceId, "pipelines", extraction.targetPipelineId as string)
+                        )
+                      }
+                    >
+                      {t("LineageWorkbench_Extraction_OpenPipeline", "Open")}
+                    </Button>
+                  </div>
+                </div>
+              </MessageBarBody>
+            </MessageBar>
+          )}
+
+          {pipelineRunId && (
+            <MessageBar intent="success">
+              <MessageBarBody>
+                {t("LineageWorkbench_Extraction_PipelineRunStarted", "Pipeline run started successfully.")}
+                <div style={{ marginTop: tokens.spacingVerticalXS }}>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                    Job instance ID: {pipelineRunId}
+                  </Text>
+                </div>
+              </MessageBarBody>
+            </MessageBar>
+          )}
+
+          {pipelineRunError && (
+            <MessageBar intent="error">
+              <MessageBarBody>{pipelineRunError}</MessageBarBody>
             </MessageBar>
           )}
         </div>
@@ -371,7 +637,7 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
           <MessageBar intent="info">
             <MessageBarBody>
               {t("LineageWorkbench_Extraction_AzureOpenAI_Info",
-                "Configure Azure OpenAI for query explanation features during lineage extraction.")}
+                "NOT YET IMPLEMENTED! Configure Azure OpenAI for query explanation features during lineage extraction.")}
             </MessageBarBody>
           </MessageBar>
 
@@ -485,9 +751,8 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
         </div>
       </div>
 
-      <Divider />
-
-      {/* Run Extraction Section */}
+      {/* Run Extraction Section hidden for now */}
+      {false && (
       <div className={styles.runSection}>
         <Text className={styles.sectionTitle}>
           {t("LineageWorkbench_Extraction_Section_Run", "Run Extraction")}
@@ -510,13 +775,31 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
         <Button
           appearance="primary"
           icon={<PlayRegular />}
-          disabled={isRunning || !extraction.targetLakehouseId || !extraction.targetWorkspaces || extraction.targetWorkspaces.length === 0}
+          disabled={
+            isRunning ||
+            !extraction.targetLakehouseId ||
+            !extraction.targetEnvironmentId ||
+            !extraction.targetWorkspaces ||
+            extraction.targetWorkspaces.length === 0
+          }
           onClick={runExtraction}
         >
           {isRunning 
             ? t("LineageWorkbench_Extraction_Button_Running", "Running Extraction...")
             : t("LineageWorkbench_Extraction_Button_Run", "Run Extraction")}
         </Button>
+
+        {isRunning && (
+          <MessageBar intent="info">
+            <MessageBarBody>
+              {t(
+                "LineageWorkbench_Extraction_Progress_Cells",
+                "Processed code cells: {{processed}} / {{total}}",
+                { processed: processedCodeCells, total: totalCodeCells }
+              )}
+            </MessageBarBody>
+          </MessageBar>
+        )}
         
         {(!extraction.targetWorkspaces || extraction.targetWorkspaces.length === 0) && (
           <MessageBar intent="warning">
@@ -532,17 +815,29 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
             {currentNotebook && (
               <div className={styles.progressItem}>
                 <Spinner size="tiny" />
-                <Text>{t("LineageWorkbench_Extraction_Progress_Current", "Running: {{name}}", { name: currentNotebook })}</Text>
+                <Text>
+                  {t("LineageWorkbench_Extraction_Progress_Current", "Running: {{name}}", { name: currentNotebook })}
+                  {currentNotebookCellProgress?.completed !== undefined &&
+                    (currentNotebookCellProgress.total !== undefined || activeNotebookTemplateCells > 0) &&
+                    ` (${currentNotebookCellProgress.completed}/${currentNotebookCellProgress.total ?? activeNotebookTemplateCells})`}
+                </Text>
               </div>
             )}
-            {completedNotebooks.map((name) => (
+            {notebookOrder.map((name) => (
               <div key={name} className={styles.progressItem}>
-                <Text>✅ {name}</Text>
+                <Text>
+                  {completedNotebooks.includes(name)
+                    ? `✅ ${name} (${notebookCellCounts[name] || 0} cells)`
+                    : currentNotebook === name
+                    ? `⏳ ${name}`
+                    : `⬜ ${name}`}
+                </Text>
               </div>
             ))}
           </div>
         )}
       </div>
+      )}
     </div>
   );
 
@@ -565,12 +860,19 @@ export function LineageWorkbenchItemExtractionView(props: LineageWorkbenchItemEx
       <LineageNotebookSetupWizard
         workloadClient={workloadClient}
         workspaceId={workspaceId}
+        extractionWorkspaceIds={extraction.targetWorkspaces && extraction.targetWorkspaces.length > 0 ? extraction.targetWorkspaces : [workspaceId]}
         lakehouseId={extraction.targetLakehouseId || ""}
         lakehouseName={extraction.targetLakehouseDisplayName || ""}
+        lakehouseWorkspaceId={extraction.targetLakehouseWorkspaceId}
         environmentId={extraction.targetEnvironmentId}
         environmentName={extraction.targetEnvironmentDisplayName}
+        environmentWorkspaceId={extraction.targetEnvironmentWorkspaceId}
+        pipelineOnly={isPipelineOnlyWizard}
         isOpen={isNotebookWizardOpen}
-        onClose={() => setIsNotebookWizardOpen(false)}
+        onClose={() => {
+          setIsNotebookWizardOpen(false);
+          setIsPipelineOnlyWizard(false);
+        }}
         onComplete={handleNotebookWizardComplete}
       />
       <LineageWorkspaceSelectionWizard

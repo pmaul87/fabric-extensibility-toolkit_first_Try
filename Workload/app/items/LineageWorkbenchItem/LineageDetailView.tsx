@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Badge,
@@ -16,11 +16,13 @@ import {
   ArrowRight16Regular, 
   Add16Regular, 
   ChevronRight16Regular, 
-  ChevronDown16Regular 
+  ChevronDown16Regular,
+  Dismiss12Regular,
 } from "@fluentui/react-icons";
 import { LineageViewerEdge, LineageViewerNode } from "./LineageGraphView";
 import type { Requirement } from "../RequirementBoardItem";
 import { RequirementDialog } from "../RequirementBoardItem";
+import { getEntityTypeLabel } from "./lineageContracts";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -161,28 +163,82 @@ const useStyles = makeStyles({
     maxHeight: "300px",
     overflowY: "auto",
   },
+  tabBar: {
+    display: "flex",
+    gap: tokens.spacingHorizontalS,
+    flexWrap: "wrap",
+  },
+  tabItem: {
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    background: tokens.colorNeutralBackground1,
+    borderRadius: tokens.borderRadiusMedium,
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalS,
+    maxWidth: "340px",
+    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalXS}`,
+  },
+  tabItemActive: {
+    background: tokens.colorBrandBackground2,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorBrandStroke1}`,
+  },
+  tabButton: {
+    cursor: "pointer",
+    border: "none",
+    background: "transparent",
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalS,
+    minWidth: 0,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+  },
+  tabCloseButton: {
+    minWidth: "22px",
+    width: "22px",
+    height: "22px",
+    padding: 0,
+  },
+  tabText: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  tabMeta: {
+    color: tokens.colorNeutralForeground3,
+  },
+  splitView: {
+    display: "flex",
+    gap: tokens.spacingHorizontalM,
+    alignItems: "stretch",
+    flexWrap: "wrap",
+  },
+  splitPane: {
+    flex: "1 1 480px",
+    minWidth: "320px",
+    maxWidth: "100%",
+  },
+  paneHeader: {
+    background: tokens.colorNeutralBackground2,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusSmall,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalM}`,
+    marginBottom: tokens.spacingVerticalS,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: tokens.spacingHorizontalS,
+  },
+  splitDivider: {
+    width: tokens.strokeWidthThin,
+    backgroundColor: tokens.colorNeutralStroke2,
+    alignSelf: "stretch",
+    minHeight: "100%",
+  },
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getEntityTypeLabel(entityType: string): string {
-  const labels: Record<string, string> = {
-    report: "Reports",
-    page: "Pages",
-    visual: "Visuals",
-    semantic_model: "Semantic Models",
-    measure: "Measures",
-    column: "Columns",
-    table: "Tables",
-    dataflow: "Dataflows",
-    notebook: "Notebooks",
-    lakehouse: "Lakehouses",
-    warehouse: "Warehouses",
-    semantic_object: "Semantic Objects",
-    unknown: "Unknown",
-  };
-  return labels[entityType] ?? entityType;
-}
+
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -194,7 +250,9 @@ interface LineageDetailViewProps {
   requirementsCount?: number;
   onOpenRequirementsBoard?: () => void;
   onCreateRequirement?: (requirement: Requirement) => void;
-  onNodeSelect?: (nodeId: string) => void;
+  onNodeSelect?: (nodeId: string, source?: "table" | "graph" | "detail") => void;
+  selectionSource?: "table" | "graph" | "detail";
+  embedded?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -208,6 +266,8 @@ export function LineageDetailView({
   onOpenRequirementsBoard,
   onCreateRequirement,
   onNodeSelect,
+  selectionSource = "table",
+  embedded = false,
 }: LineageDetailViewProps) {
   const { t } = useTranslation();
   const styles = useStyles();
@@ -215,6 +275,104 @@ export function LineageDetailView({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [showAllConnections, setShowAllConnections] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [detailTabs, setDetailTabs] = useState<string[]>(selectedNodeId ? [selectedNodeId] : []);
+  const [activeTabId, setActiveTabId] = useState<string | undefined>(selectedNodeId);
+
+  useEffect(() => {
+    if (embedded) {
+      return;
+    }
+
+    if (!selectedNodeId) {
+      setDetailTabs([]);
+      setActiveTabId(undefined);
+      return;
+    }
+
+    if (selectionSource === "table") {
+      setDetailTabs([selectedNodeId]);
+      setActiveTabId(selectedNodeId);
+      return;
+    }
+
+    setDetailTabs((prev) => {
+      if (prev.includes(selectedNodeId)) {
+        return prev;
+      }
+      return [...prev, selectedNodeId];
+    });
+    setActiveTabId(selectedNodeId);
+  }, [selectedNodeId, embedded, selectionSource, activeTabId]);
+
+  const openNodeInTab = (nodeId: string) => {
+    if (embedded) {
+      onNodeSelect?.(nodeId, "detail");
+      return;
+    }
+
+    setDetailTabs((prev) => {
+      if (prev.includes(nodeId)) {
+        return prev;
+      }
+      return [...prev, nodeId];
+    });
+    setActiveTabId(nodeId);
+    onNodeSelect?.(nodeId, "detail");
+  };
+
+  const closeDetailTab = (tabId: string) => {
+    if (embedded) {
+      return;
+    }
+
+    const tabIndex = detailTabs.indexOf(tabId);
+    if (tabIndex < 0) {
+      return;
+    }
+
+    const nextTabs = detailTabs.filter((id) => id !== tabId);
+    setDetailTabs(nextTabs);
+
+    if (activeTabId === tabId) {
+      const fallbackTab = nextTabs[tabIndex - 1] ?? nextTabs[tabIndex] ?? nextTabs[0];
+      setActiveTabId(fallbackTab);
+      if (fallbackTab) {
+        onNodeSelect?.(fallbackTab, "detail");
+      }
+      return;
+    }
+
+    if (nextTabs.length === 0) {
+      setActiveTabId(undefined);
+    }
+  };
+
+  const effectiveSelectedNodeId = embedded ? selectedNodeId : (activeTabId || selectedNodeId);
+  const splitPaneTargets = useMemo(() => {
+    if (embedded) {
+      return {
+        leftTabId: undefined as string | undefined,
+        rightTabId: undefined as string | undefined,
+      };
+    }
+
+    const leftTabId = detailTabs[0] || effectiveSelectedNodeId;
+    if (!leftTabId) {
+      return {
+        leftTabId: undefined as string | undefined,
+        rightTabId: undefined as string | undefined,
+      };
+    }
+
+    let rightTabId: string | undefined;
+    if (effectiveSelectedNodeId && effectiveSelectedNodeId !== leftTabId) {
+      rightTabId = effectiveSelectedNodeId;
+    } else {
+      rightTabId = detailTabs.find((tabId) => tabId !== leftTabId);
+    }
+
+    return { leftTabId, rightTabId };
+  }, [detailTabs, effectiveSelectedNodeId, embedded]);
 
   const toggleNodeExpansion = (nodeId: string) => {
     setExpandedNodes(prev => {
@@ -234,15 +392,113 @@ export function LineageDetailView({
     return m;
   }, [nodes]);
 
-  const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : undefined;
+  const selectedNode = effectiveSelectedNodeId ? nodeById.get(effectiveSelectedNodeId) : undefined;
+  const resolvedSelectedTableName = useMemo(() => {
+    if (!selectedNode) {
+      return undefined;
+    }
+
+    if (selectedNode.tableName) {
+      return selectedNode.tableName;
+    }
+
+    if (selectedNode.entityType !== "column" && selectedNode.entityType !== "measure") {
+      return selectedNode.displayName;
+    }
+
+    if (selectedNode.parentNodeId) {
+      const parentNode = nodeById.get(selectedNode.parentNodeId);
+      if (parentNode?.tableName) {
+        return parentNode.tableName;
+      }
+      if (parentNode?.displayName) {
+        return parentNode.displayName;
+      }
+    }
+
+    const parts = selectedNode.nodeId.split("|").map((part) => part.replace(/^[^:]+:/, ""));
+    if (parts.length >= 3) {
+      return parts[1];
+    }
+    if (parts.length >= 2) {
+      return parts[0];
+    }
+
+    return undefined;
+  }, [nodeById, selectedNode]);
+
+  const selectedVisualDetails = useMemo(() => {
+    if (!selectedNode || selectedNode.entityType !== "visual") {
+      return undefined;
+    }
+
+    const visuals = Array.isArray(dimensions?.visuals) ? dimensions.visuals : [];
+    const parsedNodeParts = selectedNode.nodeId.split("|").map((part) => part.replace(/^[^:]+:/, ""));
+    const fallbackReportId = selectedNode.reportId || parsedNodeParts[0];
+    const fallbackPageId = selectedNode.pageId || parsedNodeParts[1];
+    const fallbackVisualId = selectedNode.visualId || parsedNodeParts[parsedNodeParts.length - 1];
+
+    return visuals.find((visual: any) => {
+      const visualPk = visual.visual_pk;
+      const visualUid = visual.LineageTag || visual.lineageTag || visual.lineage_tag || visual.uid || visual.data_uid || visual.visual_uid;
+      const visualName = visual.visual_name || visual.visualName || visual.name;
+      const reportId = visual.report_id || visual.reportId || visual.report_pk;
+      const pageName = visual.page_name || visual.pageName || visual.Page_display_name || visual.page_display_name;
+
+      if (visualPk === selectedNode.nodeId || visualUid === selectedNode.nodeId) {
+        return true;
+      }
+
+      if (!fallbackVisualId) {
+        return false;
+      }
+
+      return visualName === fallbackVisualId &&
+        (!fallbackReportId || reportId === fallbackReportId) &&
+        (!fallbackPageId || pageName === fallbackPageId);
+    });
+  }, [dimensions, selectedNode]);
+
+  const visualPreviewContext = useMemo(() => {
+    if (!selectedNode || selectedNode.entityType !== "visual") {
+      return undefined;
+    }
+
+    const visuals = Array.isArray(dimensions?.visuals) ? dimensions.visuals : [];
+    if (visuals.length === 0) {
+      return undefined;
+    }
+
+    const parsedNodeParts = selectedNode.nodeId.split("|").map((part) => part.replace(/^[^:]+:/, ""));
+    const reportId = selectedVisualDetails?.report_id || selectedVisualDetails?.reportId || selectedVisualDetails?.report_pk || selectedNode.reportId || parsedNodeParts[0];
+    const pageId = selectedVisualDetails?.page_name || selectedVisualDetails?.pageName || selectedVisualDetails?.Page_display_name || selectedVisualDetails?.page_display_name || selectedNode.pageId || parsedNodeParts[1];
+    const visualId = selectedVisualDetails?.visual_name || selectedVisualDetails?.visualName || selectedVisualDetails?.name || selectedNode.visualId || parsedNodeParts[parsedNodeParts.length - 1];
+
+    if (!reportId || !pageId) {
+      return undefined;
+    }
+
+    const pageVisuals = visuals.filter((visual: any) => {
+      const visualReportId = visual.report_id || visual.reportId || visual.report_pk;
+      const visualPageName = visual.page_name || visual.pageName || visual.Page_display_name || visual.page_display_name;
+      return visualReportId === reportId && visualPageName === pageId;
+    });
+
+    return {
+      reportId,
+      pageId,
+      visualId,
+      pageVisuals,
+    };
+  }, [dimensions, selectedNode, selectedVisualDetails]);
 
   const inferredExpression = useMemo(() => {
-    if (!selectedNodeId) {
+    if (!effectiveSelectedNodeId) {
       return undefined;
     }
 
     const evidence = edges.find((edge) => {
-      if (edge.toNodeId !== selectedNodeId) {
+      if (edge.toNodeId !== effectiveSelectedNodeId) {
         return false;
       }
       if (!edge.edgeType.includes("depends_on")) {
@@ -252,7 +508,7 @@ export function LineageDetailView({
     })?.evidence;
 
     return evidence?.trim() || undefined;
-  }, [selectedNodeId, edges]);
+  }, [effectiveSelectedNodeId, edges]);
 
   const typeSpecificFields = useMemo(() => {
     if (!selectedNode) return [] as Array<{ label: string; value?: string; isLink?: boolean }>;
@@ -267,7 +523,7 @@ export function LineageDetailView({
         const measureDetails = dimensions?.measures?.find((m: any) => 
           m.measure_pk === selectedNode.nodeId || 
           m.uid === selectedNode.nodeId || 
-          (m.measure_name === selectedNode.displayName && m.table === selectedNode.tableName)
+          (m.measure_name === selectedNode.displayName && m.table === resolvedSelectedTableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
           m.dataset_id === selectedNode.datasetId || 
@@ -286,6 +542,7 @@ export function LineageDetailView({
         console.log("[LineageDetail] Measure metadata lookup:", {
           nodeId: selectedNode.nodeId,
           searchingFor: { measure_pk: selectedNode.nodeId, uid: selectedNode.nodeId, measure_name: selectedNode.displayName, table: selectedNode.tableName },
+          resolvedTableName: resolvedSelectedTableName,
           totalMeasuresInDimensions: dimensions?.measures?.length || 0,
           sampleMeasure: dimensions?.measures?.[0],
           foundMeasureDetails: !!measureDetails,
@@ -302,7 +559,7 @@ export function LineageDetailView({
         const isKPI = !!(measureDetails?.kpistatus || measureDetails?.kpi_status || measureDetails?.isKPI);
         
         return [
-          { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
+          { label: t("LineageDetail_Table", "Table"), value: resolvedSelectedTableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || measureDetails?.name },
@@ -321,7 +578,7 @@ export function LineageDetailView({
         const columnDetails = dimensions?.columns?.find((c: any) => 
           c.column_pk === selectedNode.nodeId || 
           c.uid === selectedNode.nodeId || 
-          (c.column_name === selectedNode.displayName && c.table === selectedNode.tableName)
+          (c.column_name === selectedNode.displayName && c.table === resolvedSelectedTableName)
         );
         const modelDetails = dimensions?.semanticModels?.find((m: any) => 
           m.dataset_id === selectedNode.datasetId || 
@@ -345,8 +602,9 @@ export function LineageDetailView({
             column_pk: selectedNode.nodeId, 
             uid: selectedNode.nodeId, 
             column_name: selectedNode.displayName, 
-            table: selectedNode.tableName 
+              table: resolvedSelectedTableName 
           },
+          resolvedTableName: resolvedSelectedTableName,
           totalColumnsInDimensions: dimensions?.columns?.length || 0,
           sampleColumn: dimensions?.columns?.[0],
           sampleColumnFields: dimensions?.columns?.[0] ? Object.keys(dimensions.columns[0]) : [],
@@ -361,7 +619,7 @@ export function LineageDetailView({
         const isCalculated = !!(expression || columnDetails?.type === "Calculated" || columnDetails?.column_type === "Calculated");
         
         return [
-          { label: t("LineageDetail_Table", "Table"), value: selectedNode.tableName },
+          { label: t("LineageDetail_Table", "Table"), value: resolvedSelectedTableName },
           { label: t("LineageDetail_Model", "Model"), value: modelDetails?.model_name || modelDetails?.displayName || selectedNode.datasetId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: modelDetails?.workspace_name },
           { label: t("LineageDetail_ObjectName", "Object"), value: selectedNode.objectName || columnDetails?.name },
@@ -380,31 +638,7 @@ export function LineageDetailView({
         ];
       }
       case "visual": {
-        // Lookup visual details from dimensions using multiple matching strategies
-        // Strategy 1: Match by primary key field
-        let visualDetails = dimensions?.visuals?.find((v: any) => 
-          v.visual_pk === selectedNode.nodeId
-        );
-        
-        // Strategy 2: Match by uid/LineageTag (same as node enrichment)
-        if (!visualDetails) {
-          visualDetails = dimensions?.visuals?.find((v: any) => {
-            const uid = v.LineageTag || v.lineageTag || v.lineage_tag || v.uid || v.data_uid || v.visual_uid;
-            return uid === selectedNode.nodeId;
-          });
-        }
-        
-        // Strategy 3: Match by composite key (visual_name + report_id + page_name)
-        if (!visualDetails && selectedNode.visualId) {
-          visualDetails = dimensions?.visuals?.find((v: any) => {
-            const visualName = v.visual_name || v.visualName || v.name;
-            const reportId = v.report_id || v.reportId;
-            const pageName = v.page_name || v.pageName;
-            return visualName === selectedNode.visualId && 
-                   reportId === selectedNode.reportId &&
-                   (!selectedNode.pageId || pageName === selectedNode.pageId);
-          });
-        }
+        const visualDetails = selectedVisualDetails;
         
         // Debug logging for visual lookup
         console.log("[LineageDetailView] Visual lookup:", {
@@ -422,26 +656,26 @@ export function LineageDetailView({
         const pageDetails = dimensions?.pages?.find((p: any) => {
           const pageName = p.page_name || p.pageName || p.name;
           const reportId = p.report_id || p.reportId;
-          return pageName === selectedNode.pageId && reportId === selectedNode.reportId;
+          return pageName === (visualPreviewContext?.pageId || selectedNode.pageId) && reportId === (visualPreviewContext?.reportId || selectedNode.reportId);
         });
         
         const reportDetails = dimensions?.reports?.find((r: any) => 
-          r.report_pk === selectedNode.reportId ||
-          r.report_id === selectedNode.reportId || 
-          r.uid === selectedNode.reportId ||
-          r.LineageTag === selectedNode.reportId
+          r.report_pk === (visualPreviewContext?.reportId || selectedNode.reportId) ||
+          r.report_id === (visualPreviewContext?.reportId || selectedNode.reportId) || 
+          r.uid === (visualPreviewContext?.reportId || selectedNode.reportId) ||
+          r.LineageTag === (visualPreviewContext?.reportId || selectedNode.reportId)
         );
         
         return [
           { label: t("LineageDetail_VisualType", "Visual type"), value: visualDetails?.display_type || visualDetails?.type || visualDetails?.visual_type || selectedNode.visualType },
-          { label: t("LineageDetail_Page", "Page"), value: visualDetails?.Page_display_name || visualDetails?.page_display_name || pageDetails?.page_display_name || pageDetails?.Page_display_name || pageDetails?.displayName || selectedNode.pageId },
-          { label: t("LineageDetail_Report", "Report"), value: reportDetails?.report_name || reportDetails?.displayName || selectedNode.reportId },
+          { label: t("LineageDetail_Page", "Page"), value: visualDetails?.Page_display_name || visualDetails?.page_display_name || pageDetails?.page_display_name || pageDetails?.Page_display_name || pageDetails?.displayName || visualPreviewContext?.pageId || selectedNode.pageId },
+          { label: t("LineageDetail_Report", "Report"), value: reportDetails?.report_name || reportDetails?.displayName || visualPreviewContext?.reportId || selectedNode.reportId },
           { label: t("LineageDetail_Workspace", "Workspace"), value: reportDetails?.workspace_name },
           { label: t("LineageDetail_VisualTitle", "Visual title"), value: visualDetails?.title || visualDetails?.visual_title || visualDetails?.display_name },
-          { label: t("LineageDetail_VisualName", "Visual name"), value: visualDetails?.visual_name || visualDetails?.name || selectedNode.visualId },
+          { label: t("LineageDetail_VisualName", "Visual name"), value: visualDetails?.visual_name || visualDetails?.name || visualPreviewContext?.visualId || selectedNode.visualId },
           { label: t("LineageDetail_Hidden", "Hidden"), value: visualDetails?.hidden !== undefined ? (visualDetails.hidden ? "Yes" : "No") : "N/A" },
           { label: t("LineageDetail_URL", "URL"), value: visualDetails?.url || visualDetails?.URL || visualDetails?.link, isLink: true },
-          { label: t("LineageDetail_ReportId", "Report ID"), value: selectedNode.reportId },
+          { label: t("LineageDetail_ReportId", "Report ID"), value: visualPreviewContext?.reportId || selectedNode.reportId },
           ...common,
         ];
       }
@@ -601,7 +835,7 @@ export function LineageDetailView({
   }, [selectedNode, typeSpecificFields, t]);
 
   const nodeEdges = useMemo(() => {
-    if (!selectedNodeId) return { 
+    if (!effectiveSelectedNodeId) return { 
       incoming: [] as LineageViewerEdge[], 
       outgoing: [] as LineageViewerEdge[],
       incomingRelationships: [] as LineageViewerEdge[],
@@ -609,10 +843,10 @@ export function LineageDetailView({
       incomingDependencies: [] as LineageViewerEdge[],
       outgoingDependencies: [] as LineageViewerEdge[],
     };
-    const incoming = edges.filter((e) => e.toNodeId === selectedNodeId);
-    const outgoing = edges.filter((e) => e.fromNodeId === selectedNodeId);
+    const incoming = edges.filter((e) => e.toNodeId === effectiveSelectedNodeId);
+    const outgoing = edges.filter((e) => e.fromNodeId === effectiveSelectedNodeId);
     
-    console.log("[LineageDetail] Node edges for", selectedNodeId, ":", {
+    console.log("[LineageDetail] Node edges for", effectiveSelectedNodeId, ":", {
       incomingCount: incoming.length,
       outgoingCount: outgoing.length,
       totalEdges: edges.length,
@@ -628,7 +862,66 @@ export function LineageDetailView({
       incomingDependencies: incoming.filter((e) => e.edgeType === "dependency"),
       outgoingDependencies: outgoing.filter((e) => e.edgeType === "dependency"),
     };
-  }, [selectedNodeId, edges]);
+  }, [effectiveSelectedNodeId, edges]);
+
+  const edgeCountByNodeId = useMemo(() => {
+    const counts = new Map<string, { incoming: number; outgoing: number }>();
+
+    for (const edge of edges) {
+      const source = counts.get(edge.fromNodeId) || { incoming: 0, outgoing: 0 };
+      source.outgoing += 1;
+      counts.set(edge.fromNodeId, source);
+
+      const target = counts.get(edge.toNodeId) || { incoming: 0, outgoing: 0 };
+      target.incoming += 1;
+      counts.set(edge.toNodeId, target);
+    }
+
+    return counts;
+  }, [edges]);
+
+  const hierarchyConnections = useMemo(() => {
+    if (!selectedNode) {
+      return {
+        parents: [] as LineageViewerNode[],
+        children: [] as LineageViewerNode[],
+      };
+    }
+
+    const parents: LineageViewerNode[] = [];
+    const parentVisited = new Set<string>();
+
+    let currentParentId = selectedNode.parentNodeId;
+    while (currentParentId && !parentVisited.has(currentParentId)) {
+      parentVisited.add(currentParentId);
+      const parentNode = nodeById.get(currentParentId);
+      if (!parentNode) {
+        break;
+      }
+      parents.push(parentNode);
+      currentParentId = parentNode.parentNodeId;
+    }
+
+    const children: LineageViewerNode[] = [];
+    const childVisited = new Set<string>();
+    const queue: string[] = [selectedNode.nodeId];
+
+    while (queue.length > 0) {
+      const currentNodeId = queue.shift()!;
+      const directChildren = nodes.filter((n) => n.parentNodeId === currentNodeId);
+
+      for (const child of directChildren) {
+        if (childVisited.has(child.nodeId)) {
+          continue;
+        }
+        childVisited.add(child.nodeId);
+        children.push(child);
+        queue.push(child.nodeId);
+      }
+    }
+
+    return { parents, children };
+  }, [selectedNode, nodeById, nodes]);
 
   // Get downstream dependencies for a specific node (for expansion)
   const getNodeDownstream = (startNodeId: string): LineageViewerNode[] => {
@@ -1028,7 +1321,7 @@ export function LineageDetailView({
     const smRelationships = Array.isArray(dimensions.relationships) ? dimensions.relationships : [];
     const smTables = Array.isArray(dimensions.tables) ? dimensions.tables : [];
     const nodeModelId = selectedNode.datasetId;
-    const tableName = selectedNode.tableName || selectedNode.displayName;
+    const tableName = selectedNode.tableName || selectedNode.displayName; // No change here
 
     if (!nodeModelId) {
       return { asFrom: [], asTo: [] };
@@ -1204,7 +1497,7 @@ export function LineageDetailView({
 
     // For columns, use parent table name; for tables, use the node's own name
     const lookupTableName = selectedNode.entityType === "column" 
-      ? selectedNode.tableName 
+      ? resolvedSelectedTableName 
       : selectedNode.displayName;
 
     if (!nodeModelId || !lookupTableName) {
@@ -1281,11 +1574,17 @@ export function LineageDetailView({
   }, [selectedNode, dimensions]);
 
   // Helper function to render connection items with expand capability
-  const renderConnectionItem = (node: LineageViewerNode, depth: number = 0, degree?: number) => {
+  const renderConnectionItem = (
+    node: LineageViewerNode,
+    depth: number = 0,
+    degree?: number,
+    showEdgeCounts: boolean = false
+  ) => {
     const isExpanded = expandedNodes.has(node.nodeId);
     const downstream = isExpanded ? getNodeDownstream(node.nodeId) : [];
     const hasDownstream = downstream.length > 0;
-    const isSelected = node.nodeId === selectedNodeId;
+    const isSelected = node.nodeId === effectiveSelectedNodeId;
+    const edgeCounts = edgeCountByNodeId.get(node.nodeId) || { incoming: 0, outgoing: 0 };
     
     return (
       <div key={node.nodeId} style={{ marginLeft: depth > 0 ? `${depth * 20}px` : 0 }}>
@@ -1311,7 +1610,7 @@ export function LineageDetailView({
           <button
             type="button"
             className={`${styles.connectionItem}${isSelected ? ` ${styles.connectionItemSelected}` : ""}`}
-            onClick={() => onNodeSelect?.(node.nodeId)}
+            onClick={() => openNodeInTab(node.nodeId)}
             style={{ flex: 1 }}
           >
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", flex: 1, overflow: "hidden" }}>
@@ -1322,6 +1621,11 @@ export function LineageDetailView({
                 {degree !== undefined && showAllConnections && (
                   <Badge size="small" appearance="outline" style={{ flexShrink: 0 }}>
                     {degree === 1 ? "direct" : `${degree} hops`}
+                  </Badge>
+                )}
+                {showEdgeCounts && (
+                  <Badge size="small" appearance="outline" style={{ flexShrink: 0 }}>
+                    In {edgeCounts.incoming} | Out {edgeCounts.outgoing}
                   </Badge>
                 )}
               </div>
@@ -1335,7 +1639,9 @@ export function LineageDetailView({
         {/* Expanded downstream items */}
         {isExpanded && downstream.length > 0 && (
           <div style={{ marginTop: tokens.spacingVerticalXXS }}>
-            {downstream.map(downstreamNode => renderConnectionItem(downstreamNode, depth + 1, degree))}
+            {downstream.map((downstreamNode) =>
+              renderConnectionItem(downstreamNode, depth + 1, degree, showEdgeCounts)
+            )}
           </div>
         )}
       </div>
@@ -1352,35 +1658,148 @@ export function LineageDetailView({
     );
   }
 
+  if (!embedded) {
+    const leftNode = splitPaneTargets.leftTabId ? nodeById.get(splitPaneTargets.leftTabId) : undefined;
+    const rightNode = splitPaneTargets.rightTabId ? nodeById.get(splitPaneTargets.rightTabId) : undefined;
+
+    return (
+      <div className={styles.root}>
+        {detailTabs.length > 0 && (
+          <div className={styles.card}>
+            <div className={styles.tabBar}>
+              {detailTabs.map((tabId) => {
+                const tabNode = nodeById.get(tabId);
+                if (!tabNode) return null;
+                const active = tabId === effectiveSelectedNodeId;
+                return (
+                  <div
+                    key={tabId}
+                    className={`${styles.tabItem}${active ? ` ${styles.tabItemActive}` : ""}`}
+                    title={tabNode.displayName}
+                  >
+                    <button
+                      type="button"
+                      className={styles.tabButton}
+                      onClick={() => {
+                        setActiveTabId(tabId);
+                        onNodeSelect?.(tabId, "detail");
+                      }}
+                    >
+                      <Text size={200} weight={active ? "semibold" : "regular"} className={styles.tabText}>
+                        {tabNode.displayName}
+                      </Text>
+                      <Text size={100} className={styles.tabMeta}>
+                        {getEntityTypeLabel(tabNode.entityType)}
+                      </Text>
+                    </button>
+                    <Button
+                      appearance="subtle"
+                      size="small"
+                      className={styles.tabCloseButton}
+                      icon={<Dismiss12Regular />}
+                      aria-label={t("LineageDetail_CloseTab", "Close tab")}
+                      onClick={() => closeDetailTab(tabId)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <Text size={100} className={styles.tabMeta}>
+              {t("LineageDetail_TabHint", "Tabs keep your navigation history. Two detail panes are shown side by side.")}
+            </Text>
+          </div>
+        )}
+
+        <div className={styles.splitView}>
+          <div className={styles.splitPane}>
+            {leftNode && (
+              <div className={styles.paneHeader}>
+                <Text weight="semibold">{leftNode.displayName}</Text>
+                <Text size={100} className={styles.tabMeta}>{getEntityTypeLabel(leftNode.entityType)}</Text>
+              </div>
+            )}
+            <LineageDetailView
+              key={`primary-${splitPaneTargets.leftTabId || "empty"}`}
+              embedded
+              selectedNodeId={splitPaneTargets.leftTabId}
+              nodes={nodes}
+              edges={edges}
+              dimensions={dimensions}
+              requirementsCount={requirementsCount}
+              onOpenRequirementsBoard={onOpenRequirementsBoard}
+              onCreateRequirement={onCreateRequirement}
+              onNodeSelect={onNodeSelect}
+            />
+          </div>
+          {splitPaneTargets.rightTabId && (
+            <>
+              <div className={styles.splitDivider} />
+              <div className={styles.splitPane}>
+                {rightNode && (
+                  <div className={styles.paneHeader}>
+                    <Text weight="semibold">{rightNode.displayName}</Text>
+                    <Text size={100} className={styles.tabMeta}>{getEntityTypeLabel(rightNode.entityType)}</Text>
+                  </div>
+                )}
+                <LineageDetailView
+                  key={`secondary-${splitPaneTargets.rightTabId}`}
+                  embedded
+                  selectedNodeId={splitPaneTargets.rightTabId}
+                  nodes={nodes}
+                  edges={edges}
+                  dimensions={dimensions}
+                  requirementsCount={requirementsCount}
+                  onOpenRequirementsBoard={onOpenRequirementsBoard}
+                  onCreateRequirement={onCreateRequirement}
+                  onNodeSelect={onNodeSelect}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.root}>
       <div className={styles.card}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: tokens.spacingHorizontalS }}>
-          <div>
-            <div className={styles.cardTitle}>{t("LineageDetail_Requirements_Title", "Requirements")}</div>
-            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-              {t("LineageDetail_Requirements_Count", "{{count}} linked tickets in board", { count: requirementsCount ?? 0 })}
-            </Text>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
-            <Button
-              size="small"
-              appearance="subtle"
-              icon={<ArrowRight16Regular />}
-              iconPosition="after"
-              onClick={() => onOpenRequirementsBoard?.()}
-            >
-              {t("LineageDetail_OpenRequirementsBoard", "Open board")}
-            </Button>
-            <Button
-              size="small"
-              appearance="primary"
-              icon={<Add16Regular />}
-              onClick={() => setCreateDialogOpen(true)}
-            >
-              {t("LineageDetail_CreateTicket", "Create ticket")}
-            </Button>
-          </div>
+        <div className={styles.cardTitle}>{t("LineageDetail_SelectedInfo", "Selected info")}</div>
+        <div className={styles.badgeList}>
+          {selectedInfoCards.map((card, idx) => (
+            <React.Fragment key={card.key}>
+              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{card.label}:</Text>
+                {card.isLink && card.value ? (
+                  <a 
+                    href={card.value} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(card.value, '_blank', 'noopener,noreferrer');
+                    }}
+                    style={{ 
+                      color: tokens.colorBrandForeground1, 
+                      textDecoration: "none",
+                      fontSize: tokens.fontSizeBase200,
+                      fontWeight: tokens.fontWeightSemibold,
+                      cursor: "pointer"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
+                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
+                  >
+                    {card.value}
+                  </a>
+                ) : (
+                  <Text size={200} weight="semibold" title={card.value}>
+                    {card.value}
+                  </Text>
+                )}
+              </div>
+              {idx < selectedInfoCards.length - 1 && <span className={styles.badgeSeparator}>•</span>}
+            </React.Fragment>
+          ))}
         </div>
       </div>
 
@@ -1447,7 +1866,7 @@ export function LineageDetailView({
                           </div>
                           {groupNodes.map((node) => {
                             const degree = allTransitiveConnections.degreeMap.get(node.nodeId);
-                            return renderConnectionItem(node, 0, degree);
+                            return renderConnectionItem(node, 0, degree, true);
                           })}
                         </div>
                       ))}
@@ -1499,7 +1918,7 @@ export function LineageDetailView({
                           </div>
                           {groupNodes.map((node) => {
                             const degree = allTransitiveConnections.degreeMap.get(node.nodeId);
-                            return renderConnectionItem(node, 0, degree);
+                            return renderConnectionItem(node, 0, degree, true);
                           })}
                         </div>
                       ))}
@@ -1512,66 +1931,101 @@ export function LineageDetailView({
         </>
       )}
 
-      {/* ── Main properties card ── */}
-      <div className={styles.card}>
-        <div className={styles.cardTitle}>{t("LineageDetail_SelectedInfo", "Selected info")}</div>
-        <div className={styles.badgeList}>
-          {selectedInfoCards.map((card, idx) => (
-            <React.Fragment key={card.key}>
-              <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXXS }}>
-                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{card.label}:</Text>
-                {card.isLink && card.value ? (
-                  <a 
-                    href={card.value} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      window.open(card.value, '_blank', 'noopener,noreferrer');
-                    }}
-                    style={{ 
-                      color: tokens.colorBrandForeground1, 
-                      textDecoration: "none",
-                      fontSize: tokens.fontSizeBase200,
-                      fontWeight: tokens.fontWeightSemibold,
-                      cursor: "pointer"
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
-                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
-                  >
-                    {card.value}
-                  </a>
-                ) : (
-                  <Text size={200} weight="semibold" title={card.value}>
-                    {card.value}
-                  </Text>
-                )}
-              </div>
-              {idx < selectedInfoCards.length - 1 && <span className={styles.badgeSeparator}>•</span>}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
+      {/* ── Parent & Child Objects ── */}
+      {(hierarchyConnections.parents.length > 0 || hierarchyConnections.children.length > 0) && (
+        <>
+          {(() => {
+            const parentNodes = hierarchyConnections.parents;
+            if (parentNodes.length === 0) return null;
+
+            const grouped = new Map<string, LineageViewerNode[]>();
+            for (const n of parentNodes) {
+              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
+              grouped.get(n.entityType)!.push(n);
+            }
+
+            return (
+              <Accordion className={styles.accordionPanel} collapsible>
+                <AccordionItem value="parents">
+                  <AccordionHeader>
+                    <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                      <Text weight="semibold">
+                        {t("LineageDetail_ParentObjects", "Parent objects")}
+                      </Text>
+                      <Badge>{parentNodes.length}</Badge>
+                    </div>
+                  </AccordionHeader>
+                  <AccordionPanel>
+                    <div className={styles.accordionContent}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                        {t("LineageDetail_ParentObjectsHint", "All parent objects in the hierarchy chain (for example table → semantic model).")}
+                      </Text>
+                      {Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
+                        <div key={entityType} className={styles.connectionGroup}>
+                          <div className={styles.connectionGroupLabel}>
+                            {getEntityTypeLabel(entityType)} ({groupNodes.length})
+                          </div>
+                          {groupNodes.map((node) => renderConnectionItem(node, 0, undefined, true))}
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionPanel>
+                </AccordionItem>
+              </Accordion>
+            );
+          })()}
+
+          {(() => {
+            const childNodes = hierarchyConnections.children;
+            if (childNodes.length === 0) return null;
+
+            const grouped = new Map<string, LineageViewerNode[]>();
+            for (const n of childNodes) {
+              if (!grouped.has(n.entityType)) grouped.set(n.entityType, []);
+              grouped.get(n.entityType)!.push(n);
+            }
+
+            return (
+              <Accordion className={styles.accordionPanel} collapsible>
+                <AccordionItem value="children">
+                  <AccordionHeader>
+                    <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                      <Text weight="semibold">
+                        {t("LineageDetail_ChildObjects", "Child objects")}
+                      </Text>
+                      <Badge>{childNodes.length}</Badge>
+                    </div>
+                  </AccordionHeader>
+                  <AccordionPanel>
+                    <div className={styles.accordionContent}>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                        {t("LineageDetail_ChildObjectsHint", "All child objects in the hierarchy (for example semantic model → table → column).")}
+                      </Text>
+                      {Array.from(grouped.entries()).map(([entityType, groupNodes]) => (
+                        <div key={entityType} className={styles.connectionGroup}>
+                          <div className={styles.connectionGroupLabel}>
+                            {getEntityTypeLabel(entityType)} ({groupNodes.length})
+                          </div>
+                          {groupNodes.map((node) => renderConnectionItem(node, 0, undefined, true))}
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionPanel>
+                </AccordionItem>
+              </Accordion>
+            );
+          })()}
+        </>
+      )}
 
       {/* ── Visual Preview (canvas-based page layout) ── */}
       {(() => {
         // Only show for visual nodes
         if (selectedNode.entityType !== "visual") return false;
-        
-        // Extract pageId and reportId from nodeId if not directly available
-        // NodeId format: reportId|pageId|visualId
-        let pageId = selectedNode.pageId;
-        let reportId = selectedNode.reportId;
-        let visualId = selectedNode.visualId;
-        
-        if (!pageId || !reportId) {
-          const parts = selectedNode.nodeId.split("|");
-          if (parts.length >= 3) {
-            reportId = reportId || parts[0];
-            pageId = pageId || parts[1];
-            visualId = visualId || parts[2];
-          }
-        }
+
+        const pageId = visualPreviewContext?.pageId;
+        const reportId = visualPreviewContext?.reportId;
+        const visualId = visualPreviewContext?.visualId;
         
         console.log("[LineageDetail] Visual Preview Check:", {
           entityType: selectedNode.entityType,
@@ -1581,6 +2035,7 @@ export function LineageDetailView({
           hasDimensions: !!dimensions,
           hasVisuals: !!dimensions?.visuals,
           visualsCount: dimensions?.visuals?.length || 0,
+          matchedVisual: selectedVisualDetails,
           selectedNode: {
             nodeId: selectedNode.nodeId,
             displayName: selectedNode.displayName,
@@ -1590,47 +2045,25 @@ export function LineageDetailView({
           }
         });
         
-        if (!pageId || !reportId || !dimensions?.visuals) {
+        if (!pageId || !reportId || !visualPreviewContext) {
           console.log("[LineageDetail] Visual Preview SKIPPED - missing data");
           return false;
         }
-        
-        // Filter visuals for this page
-        const pageVisuals = dimensions.visuals.filter((v: any) => {
-          const vPageName = v.page_name || v.pageName || v.Page_display_name || v.page_display_name;
-          const vReportId = v.report_id || v.reportId || v.report_pk;
-          return vPageName === pageId && vReportId === reportId;
-        });
+        const pageVisuals = visualPreviewContext.pageVisuals;
         
         console.log("[LineageDetail] Visual Preview Filtering:", {
-          totalVisuals: dimensions.visuals.length,
+          totalVisuals: dimensions?.visuals?.length || 0,
           matchingPageVisuals: pageVisuals.length,
           searchingFor: { pageId, reportId },
-          sampleVisual: dimensions.visuals[0],
-          visualKeys: dimensions.visuals[0] ? Object.keys(dimensions.visuals[0]) : [],
+          sampleVisual: dimensions?.visuals?.[0],
+          visualKeys: dimensions?.visuals?.[0] ? Object.keys(dimensions.visuals[0]) : [],
         });
         
         return pageVisuals.length > 0;
       })() && (() => {
-        // Extract IDs again for rendering
-        let pageId = selectedNode.pageId;
-        let reportId = selectedNode.reportId;
-        let visualId = selectedNode.visualId;
-        
-        if (!pageId || !reportId) {
-          const parts = selectedNode.nodeId.split("|");
-          if (parts.length >= 3) {
-            reportId = reportId || parts[0];
-            pageId = pageId || parts[1];
-            visualId = visualId || parts[2];
-          }
-        }
-        
-        const pageVisuals = dimensions.visuals.filter((v: any) => {
-          const vPageName = v.page_name || v.pageName || v.Page_display_name || v.page_display_name;
-          const vReportId = v.report_id || v.reportId || v.report_pk;
-          return vPageName === pageId && vReportId === reportId;
-        });
+        const pageId = visualPreviewContext?.pageId;
+        const visualId = visualPreviewContext?.visualId;
+        const pageVisuals = visualPreviewContext?.pageVisuals || [];
         
         // Calculate canvas dimensions based on visual positions
         let maxX = 0;
@@ -1779,139 +2212,6 @@ export function LineageDetailView({
           </div>
         </div>
       )}
-
-      {/* ── Query Steps (Column Transformation History) ── */}
-      {(() => {
-        // Only show for columns
-        if (selectedNode.entityType !== "column") return null;
-        
-        const columnLineage = dimensions?.columnLineage || [];
-        
-        // Debug logging - ALWAYS log to help diagnose issues
-        console.log("[LineageDetailView] Query Steps Debug:", {
-          totalColumnLineageRecords: columnLineage.length,
-          hasDimensionsObject: !!dimensions,
-          dimensionsKeys: dimensions ? Object.keys(dimensions) : [],
-          columnLineageType: Array.isArray(columnLineage) ? 'array' : typeof columnLineage,
-          selectedNodeInfo: {
-            displayName: selectedNode.displayName,
-            tableName: selectedNode.tableName,
-            datasetId: selectedNode.datasetId,
-            entityType: selectedNode.entityType,
-          },
-          sampleColumnLineageRecord: columnLineage[0] || "NO DATA",
-          allColumnLineageColumns: columnLineage[0] ? Object.keys(columnLineage[0]) : [],
-        });
-        
-        if (columnLineage.length === 0) {
-          console.warn("[LineageDetailView] Query Steps - No columnLineage data available. Check backend logs for 't_dataset_column_lineage' table query.");
-          return null;
-        }
-        
-        // Match by final_column_name and dataset_id (or table name)
-        const steps = columnLineage.filter((step: any) => {
-          const matchesColumn = step.final_column_name === selectedNode.displayName || 
-                              step.column_name_at_step === selectedNode.displayName;
-          const matchesTable = step.power_bi_table_name === selectedNode.tableName;
-          const matchesModel = !selectedNode.datasetId || step.dataset_id === selectedNode.datasetId;
-          
-          // Log each step's matching criteria for first 3 records
-          if (columnLineage.indexOf(step) < 3) {
-            console.log(`[LineageDetailView] Query Steps - Testing step ${columnLineage.indexOf(step)}:`, {
-              stepData: {
-                final_column_name: step.final_column_name,
-                column_name_at_step: step.column_name_at_step,
-                power_bi_table_name: step.power_bi_table_name,
-                dataset_id: step.dataset_id,
-              },
-              matches: {
-                matchesColumn,
-                matchesTable,
-                matchesModel,
-                overall: matchesColumn && matchesTable && matchesModel,
-              },
-            });
-          }
-          
-          return matchesColumn && matchesTable && matchesModel;
-        });
-        
-        // Sort by step_order (descending, so most recent step is first)
-        steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
-        
-        if (steps.length === 0) {
-          console.log("[LineageDetailView] Query Steps - No matching steps found for this column");
-          return null;
-        }
-        
-        console.log("[LineageDetailView] Query Steps - Found matching steps:", steps.length);
-        
-        return (
-          <Accordion className={styles.accordionPanel} collapsible>
-            <AccordionItem value="query-steps">
-              <AccordionHeader>
-                <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
-                  <Text weight="semibold">{t("LineageDetail_QuerySteps", "Query Steps")}</Text>
-                  <Badge>{steps.length}</Badge>
-                </div>
-              </AccordionHeader>
-              <AccordionPanel>
-                <div className={styles.accordionContent}>
-                  <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
-                    {t("LineageDetail_QueryStepsHint", "Power Query M transformation steps applied to this column")}
-                  </Text>
-                  {steps.map((step: any, index: number) => (
-                    <div key={index} className={styles.card} style={{ marginBottom: tokens.spacingVerticalS }}>
-                      {/* Row 1: All info in one line */}
-                      <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, marginBottom: step.step_expression ? tokens.spacingVerticalS : 0, flexWrap: "wrap" }}>
-                        {step.affects_entire_table && (
-                          <Badge size="small" appearance="filled" color="warning">
-                            {t("LineageDetail_AffectsTable", "Affects entire table")}
-                          </Badge>
-                        )}
-                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                          {step.step_name || `Step ${step.step_order || index + 1}`}
-                        </Text>
-                        {step.transformation_function && (
-                          <>
-                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>•</Text>
-                            <Text size={200} weight="semibold">
-                              {step.transformation_function}
-                            </Text>
-                          </>
-                        )}
-                        {step.column_name_at_step && step.column_name_at_step !== step.final_column_name && (
-                          <>
-                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>•</Text>
-                            <Text size={200}>
-                              {step.column_name_at_step}
-                            </Text>
-                          </>
-                        )}
-                        {step.column_created_here && (
-                          <Badge size="small" appearance="filled" color="success">
-                            {t("LineageDetail_CreatedHere", "Column created here")}
-                          </Badge>
-                        )}
-                        <Badge size="small" appearance="outline" style={{ marginLeft: "auto" }}>
-                          {step.step_order || index + 1}
-                        </Badge>
-                      </div>
-                      
-                      {/* Row 2: Expression only */}
-                      {step.step_expression && (
-                        <div className={styles.expressionBlock} style={{ maxHeight: "200px" }}>
-                          {step.step_expression}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </AccordionPanel>
-            </AccordionItem>
-          </Accordion>
-        );
-      })()}
 
       {/* ── Relationships (for tables and columns) ── */}
       {nodeRelationships.length > 0 && (
@@ -2146,6 +2446,137 @@ export function LineageDetailView({
           </AccordionItem>
         </Accordion>
       )}
+
+      {/* ── Query Steps (Column Transformation History) — MOVED TO SECOND-TO-LAST, COLLAPSED BY DEFAULT ── */}
+      {selectedNode.entityType === "column" && (() => {
+        const columnLineage = dimensions?.columnLineage || [];
+
+        console.log("[LineageDetailView] Query Steps Debug:", {
+          totalColumnLineageRecords: columnLineage.length,
+          hasDimensionsObject: !!dimensions,
+          dimensionsKeys: dimensions ? Object.keys(dimensions) : [],
+          columnLineageType: Array.isArray(columnLineage) ? 'array' : typeof columnLineage,
+          selectedNodeInfo: {
+            displayName: selectedNode.displayName,
+            tableName: resolvedSelectedTableName,
+            datasetId: selectedNode.datasetId,
+            entityType: selectedNode.entityType,
+          },
+          sampleColumnLineageRecord: columnLineage[0] || "NO DATA",
+          allColumnLineageColumns: columnLineage[0] ? Object.keys(columnLineage[0]) : [],
+        });
+
+        if (columnLineage.length === 0) {
+          return null;
+        }
+
+        const steps = columnLineage.filter((step: any) => {
+          const matchesColumn = step.final_column_name === selectedNode.displayName || step.column_name_at_step === selectedNode.displayName;
+          const matchesTable = step.power_bi_table_name === resolvedSelectedTableName;
+          const matchesModel = !selectedNode.datasetId || step.dataset_id === selectedNode.datasetId;
+          return matchesColumn && matchesTable && matchesModel;
+        });
+
+        steps.sort((a: any, b: any) => (b.step_order || 0) - (a.step_order || 0));
+
+        if (steps.length === 0) {
+          return null;
+        }
+
+        return (
+          <Accordion className={styles.accordionPanel} collapsible>
+            <AccordionItem value="query-steps">
+              <AccordionHeader>
+                <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                  <Text weight="semibold">{t("LineageDetail_QuerySteps", "Query Steps")}</Text>
+                  <Badge>{steps.length}</Badge>
+                </div>
+              </AccordionHeader>
+              <AccordionPanel>
+                <div className={styles.accordionContent}>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginBottom: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM }}>
+                    {t("LineageDetail_QueryStepsHint", "Power Query M transformation steps applied to this column")}
+                  </Text>
+                  {steps.map((step: any, index: number) => (
+                    <div key={index} className={styles.card} style={{ marginBottom: tokens.spacingVerticalS }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, marginBottom: step.step_expression ? tokens.spacingVerticalS : 0, flexWrap: "wrap" }}>
+                        {step.affects_entire_table && (
+                          <Badge size="small" appearance="filled" color="warning">
+                            {t("LineageDetail_AffectsTable", "Affects entire table")}
+                          </Badge>
+                        )}
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                          {step.step_name || `Step ${step.step_order || index + 1}`}
+                        </Text>
+                        {step.transformation_function && (
+                          <>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>•</Text>
+                            <Text size={200} weight="semibold">
+                              {step.transformation_function}
+                            </Text>
+                          </>
+                        )}
+                        {step.column_name_at_step && step.column_name_at_step !== step.final_column_name && (
+                          <>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>•</Text>
+                            <Text size={200}>
+                              {step.column_name_at_step}
+                            </Text>
+                          </>
+                        )}
+                        {step.column_created_here && (
+                          <Badge size="small" appearance="filled" color="success">
+                            {t("LineageDetail_CreatedHere", "Column created here")}
+                          </Badge>
+                        )}
+                        <Badge size="small" appearance="outline" style={{ marginLeft: "auto" }}>
+                          {step.step_order || index + 1}
+                        </Badge>
+                      </div>
+
+                      {step.step_expression && (
+                        <div className={styles.expressionBlock} style={{ maxHeight: "200px" }}>
+                          {step.step_expression}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </AccordionPanel>
+            </AccordionItem>
+          </Accordion>
+        );
+      })()}
+
+      <div className={styles.card}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: tokens.spacingHorizontalS }}>
+          <div>
+            <div className={styles.cardTitle}>{t("LineageDetail_Requirements_Title", "Requirements")}</div>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+              {t("LineageDetail_Requirements_Count", "{{count}} linked tickets in board", { count: requirementsCount ?? 0 })}
+            </Text>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+            <Button
+              size="small"
+              appearance="subtle"
+              icon={<ArrowRight16Regular />}
+              iconPosition="after"
+              onClick={() => onOpenRequirementsBoard?.()}
+            >
+              {t("LineageDetail_OpenRequirementsBoard", "Open board")}
+            </Button>
+            <Button
+              size="small"
+              appearance="primary"
+              icon={<Add16Regular />}
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              {t("LineageDetail_CreateTicket", "Create ticket")}
+            </Button>
+          </div>
+        </div>
+      </div>
 
       <RequirementDialog
         open={createDialogOpen}

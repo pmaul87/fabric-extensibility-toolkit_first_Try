@@ -193,11 +193,6 @@ export abstract class FabricPlatformClient {
         );
       }
 
-      // Handle empty responses (like 204 No Content)
-      if (response.status === 204 || response.headers.get('content-length') === '0') {
-        return undefined as unknown as T;
-      }
-
       // Handle 202 Accepted responses (Long Running Operations)
       // 202 indicates the request was accepted but processing is asynchronous
       // The response body typically contains operation details (id, status, etc.)
@@ -213,6 +208,11 @@ export abstract class FabricPlatformClient {
         }
         
         return result as unknown as T;
+      }
+
+      // Handle empty responses (like 204 No Content)
+      if (response.status === 204 || response.headers.get('content-length') === '0') {
+        return undefined as unknown as T;
       }
 
       const result = await response.json();

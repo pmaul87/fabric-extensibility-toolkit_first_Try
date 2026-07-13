@@ -175,7 +175,7 @@ export function LineageWorkbenchItemDefaultView(props: LineageWorkbenchItemDefau
           <div className={styles.cardIconRow}>
             <Play24Regular />
             <Text className={styles.cardTitle}>
-              {t("LineageWorkbench_Hub_ExtractCard_Title", "Extract Lineage")}
+              {t("LineageWorkbench_Hub_ExtractCard_Title", "Configure Extraction")}
             </Text>
           </div>
           <Text className={styles.cardDescription}>

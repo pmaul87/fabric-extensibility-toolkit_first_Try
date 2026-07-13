@@ -262,9 +262,9 @@ export function convertGetItemResultToWorkloadItem<T>(
             // Iterate through all parts once and categorize them
             for (const part of itemDefinitionResult.definition.parts) {
                 if (part.path === ItemDefinitionPath.Default) {
-                    payload = JSON.parse(atob(part.payload));
+                    payload = JSON.parse(decodeBase64ToString(part.payload));
                 } else if (part.path === ItemDefinitionPath.Platform) {
-                    const itemPlatformPayload = JSON.parse(atob(part.payload));
+                    const itemPlatformPayload = JSON.parse(decodeBase64ToString(part.payload));
                     itemPlatformMetadata = itemPlatformPayload ? itemPlatformPayload.metadata : undefined;
                 } else {
                     // Add any other parts to additionalParts
@@ -298,7 +298,7 @@ export function convertGetItemResultToWorkloadItem<T>(
 function createDefaultDefinitionPart<T>(definition: T): ItemDefinitionPart {
     return {
         path: ItemDefinitionPath.Default,
-        payload: btoa(JSON.stringify(definition, null, 2)),
+        payload: encodeStringToBase64(JSON.stringify(definition, null, 2)),
         payloadType: PayloadType.InlineBase64
     };
 }
@@ -318,7 +318,7 @@ export function buildPublicAPIPayloadWithParts(
 ): UpdateItemDefinitionPayload {
     const itemDefinitionParts: ItemDefinitionPart[] = parts.map(({ payloadPath, payloadData }) => ({
         path: payloadPath,
-        payload: btoa(JSON.stringify(payloadData, null, 2)),
+        payload: encodeStringToBase64(JSON.stringify(payloadData, null, 2)),
         payloadType: PayloadType.InlineBase64
     }));
     return {
@@ -359,4 +359,19 @@ export function convertGetDefinitionResponseToItemDefinition(responseBody: strin
         console.error(`Failed parsing item definition, responseBody: ${responseBody}`, itemDefParseError);
     }
     return itemDefinition;
+}
+
+function encodeStringToBase64(value: string): string {
+    const bytes = new TextEncoder().encode(value);
+    let binary = "";
+    bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+    });
+    return btoa(binary);
+}
+
+function decodeBase64ToString(base64: string): string {
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
 }

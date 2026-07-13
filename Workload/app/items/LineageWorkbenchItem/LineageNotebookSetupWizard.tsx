@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogSurface,
@@ -11,16 +11,39 @@ import {
   Spinner,
   MessageBar,
   MessageBarBody,
+  Divider,
   makeStyles,
   tokens,
   Checkbox,
+  Field,
+  Input,
   Radio,
   RadioGroup,
 } from "@fluentui/react-components";
 import { CheckmarkCircleRegular, ErrorCircleRegular } from "@fluentui/react-icons";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { ItemClient } from "../../clients/ItemClient";
+import { FolderClient } from "../../clients/FolderClient";
+import { FabricNotebookClient } from "../../clients/FabricNotebookClient";
 import { FabricPlatformError } from "../../clients/FabricPlatformClient";
+import bronzeExtractTemplate from "../../../notebooks/1_LineageWorkbench_Extract_Raw_Metadata.ipynb";
+import silverNodeTemplate from "../../../notebooks/2_LineageWorkbench_Build_Node_View.ipynb";
+import edgeExtractTemplate from "../../../notebooks/3_LineageWorkbench_BuildEdges.ipynb";
+import mapDatasourcesTemplate from "../../../notebooks/4_LineageWorkbench_Map_M_Datasources.ipynb";
+function encodeBase64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(value: string): string {
+  const binary = atob(value);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
 
 const useStyles = makeStyles({
   content: {
@@ -71,15 +94,21 @@ const useStyles = makeStyles({
 export interface NotebookSetupResult {
   deployedNotebooks: string[];
   notebookIds: string[];
+  pipelineId?: string;
+  pipelineDisplayName?: string;
 }
 
 interface Props {
   workloadClient: WorkloadClientAPI;
   workspaceId: string;
+  extractionWorkspaceIds?: string[];
   lakehouseId: string;
   lakehouseName: string;
+  lakehouseWorkspaceId?: string;
   environmentId?: string;
   environmentName?: string;
+  environmentWorkspaceId?: string;
+  pipelineOnly?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onComplete: (result: NotebookSetupResult) => void;
@@ -87,35 +116,101 @@ interface Props {
 
 type SetupMode = "existing" | "new";
 type WizardStep = "select-mode" | "select-notebooks" | "deploying" | "success" | "error";
+type DeploymentOperation = "notebook" | "pipeline" | null;
 
-const AVAILABLE_NOTEBOOKS = [
-  {
-    name: "Extract_Datasets_and_Reports",
-    description: "Extracts semantic models, reports, and relationships from Fabric workspaces",
-    fileName: "Extract_Datasets_and_Reports.ipynb",
+type NotebookConfig = {
+  name: string;
+  description: string;
+  fileName: string;
+};
+
+const NOTEBOOK_METADATA_BY_NAME: Record<string, Omit<NotebookConfig, "name">> = {
+  "1_LineageWorkbench_Extract_Raw_Metadata": {
+    description: "Bronze extraction notebook that captures raw lineage source metadata",
+    fileName: "1_LineageWorkbench_Extract_Raw_Metadata.ipynb",
   },
-  {
-    name: "Extract_Datasources_from_SemanticModels",
-    description: "Parses M queries to extract datasource connections from semantic models",
-    fileName: "Extract_Datasources_from_SemanticModels.ipynb",
+  "2_LineageWorkbench_Build_Node_View": {
+    description: "Silver notebook that builds stable node views and primary keys",
+    fileName: "2_LineageWorkbench_Build_Node_View.ipynb",
   },
-];
+  "3_LineageWorkbench_BuildEdges": {
+    description: "Edge notebook that extracts datasources and builds lineage edges",
+    fileName: "3_LineageWorkbench_BuildEdges.ipynb",
+  },
+  "4_LineageWorkbench_Map_M_Datasources": {
+    description: "Enrichment notebook that parses M queries and maps datasource references to existing Fabric nodes",
+    fileName: "4_LineageWorkbench_Map_M_Datasources.ipynb",
+  },
+};
+
+const AVAILABLE_NOTEBOOKS: NotebookConfig[] = FabricNotebookClient.EXTRACTION_NOTEBOOKS.reduce<NotebookConfig[]>(
+  (configs, name) => {
+    const metadata = NOTEBOOK_METADATA_BY_NAME[name];
+    if (!metadata) {
+      return configs;
+    }
+
+    configs.push({
+      name,
+      description: metadata.description,
+      fileName: metadata.fileName,
+    });
+
+    return configs;
+  },
+  []
+);
+
+const NOTEBOOK_TEMPLATES: Record<string, string> = {
+  "1_LineageWorkbench_Extract_Raw_Metadata.ipynb": bronzeExtractTemplate,
+  "2_LineageWorkbench_Build_Node_View.ipynb": silverNodeTemplate,
+  "3_LineageWorkbench_BuildEdges.ipynb": edgeExtractTemplate,
+  "4_LineageWorkbench_Map_M_Datasources.ipynb": mapDatasourcesTemplate,
+};
+
+const DEFAULT_PIPELINE_NAME = "LineageWorkbench_Notebook_Orchestration";
+
+async function loadNotebookTemplate(fileName: string): Promise<any> {
+  const templateContent = NOTEBOOK_TEMPLATES[fileName];
+  if (!templateContent) {
+    throw new Error(`Notebook template is not bundled for ${fileName}`);
+  }
+
+  try {
+    return JSON.parse(templateContent);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Notebook template ${fileName} is invalid JSON. ${reason}`);
+  }
+}
 
 export const LineageNotebookSetupWizard: React.FC<Props> = ({
   workloadClient,
   workspaceId,
+  extractionWorkspaceIds,
   lakehouseId,
   lakehouseName,
+  lakehouseWorkspaceId,
   environmentId,
   environmentName,
+  environmentWorkspaceId,
+  pipelineOnly = false,
   isOpen,
   onClose,
   onComplete,
 }) => {
   const styles = useStyles();
+  const normalizedExtractionWorkspaceIds = (extractionWorkspaceIds || [])
+    .map((id) => (id ?? "").trim())
+    .filter((id) => Boolean(id));
+  const extractedWorkspaces = normalizedExtractionWorkspaceIds.length > 0
+    ? normalizedExtractionWorkspaceIds
+    : [workspaceId];
+  const resolvedLakehouseWorkspaceId = lakehouseWorkspaceId || workspaceId;
+  const resolvedEnvironmentWorkspaceId = environmentWorkspaceId || workspaceId;
 
-  const [currentStep, setCurrentStep] = useState<WizardStep>("select-mode");
-  const [setupMode, setSetupMode] = useState<SetupMode>("new");
+  const [currentStep, setCurrentStep] = useState<WizardStep>(pipelineOnly ? "select-notebooks" : "select-mode");
+  const [setupMode, setSetupMode] = useState<SetupMode>(pipelineOnly ? "existing" : "new");
   const [selectedNotebooks, setSelectedNotebooks] = useState<Set<string>>(
     new Set(AVAILABLE_NOTEBOOKS.map((n) => n.name))
   );
@@ -125,22 +220,249 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
   const [loadingNotebooks, setLoadingNotebooks] = useState(false);
   const [deployedNotebooks, setDeployedNotebooks] = useState<string[]>([]);
   const [deployedIds, setDeployedIds] = useState<string[]>([]);
+  const [createPipeline, setCreatePipeline] = useState(true);
+  const [pipelineName, setPipelineName] = useState(DEFAULT_PIPELINE_NAME);
+  const [createdPipelineId, setCreatedPipelineId] = useState<string | undefined>(undefined);
+  const [createdPipelineDisplayName, setCreatedPipelineDisplayName] = useState<string | undefined>(undefined);
   const [currentlyDeploying, setCurrentlyDeploying] = useState<string | null>(null);
+  const [currentOperation, setCurrentOperation] = useState<DeploymentOperation>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const createNotebookOrchestrationPipeline = async (
+    itemClient: ItemClient,
+    notebookIds: string[],
+    notebookNames: string[]
+  ): Promise<{ id: string; displayName: string } | undefined> => {
+    if (!createPipeline || notebookIds.length === 0) {
+      return undefined;
+    }
+
+    const displayName = pipelineName.trim() || DEFAULT_PIPELINE_NAME;
+    const serializedTargetWorkspaces = extractedWorkspaces.join(",");
+    const notebookExecutionParameters = {
+      targetWorkspaces: {
+        type: "string",
+        value: serializedTargetWorkspaces,
+      },
+    };
+
+    const activities = notebookIds.map((notebookId, index) => {
+      const notebookName = notebookNames[index] || `Notebook_${index + 1}`;
+      const activityName = `Run_${notebookName}`.replace(/[^a-zA-Z0-9_]/g, "_");
+      const previousNotebookName = notebookNames[index - 1] || `Notebook_${index}`;
+      const previousActivityName = `Run_${previousNotebookName}`.replace(/[^a-zA-Z0-9_]/g, "_");
+
+      return {
+        name: activityName,
+        type: "TridentNotebook",
+        dependsOn:
+          index === 0
+            ? []
+            : [
+                {
+                  activity: previousActivityName,
+                  dependencyConditions: ["Succeeded"],
+                },
+              ],
+        policy: {
+          retry: 3,
+          retryIntervalInSeconds: 60,
+        },
+        typeProperties: {
+          notebookId,
+          workspaceId,
+          parameters: notebookExecutionParameters,
+        },
+      };
+    });
+
+    const definitionJson = {
+      name: displayName,
+      properties: {
+        activities,
+      },
+    };
+
+    const definitionPart = {
+      path: "pipeline-content.json",
+      payload: encodeBase64Utf8(JSON.stringify(definitionJson)),
+      payloadType: "InlineBase64" as const,
+    };
+
+    const upsertExistingPipeline = async () => {
+      const pipelines = await itemClient.getItemsByType(workspaceId, "DataPipeline");
+      const existing = pipelines.find(
+        (item) => (item.displayName || "").trim().toLowerCase() === displayName.toLowerCase()
+      );
+
+      if (!existing) {
+        return undefined;
+      }
+
+      await itemClient.updateItemDefinitionWithPolling(workspaceId, existing.id, {
+        definition: {
+          parts: [definitionPart],
+        },
+      });
+
+      await itemClient.updateItem(workspaceId, existing.id, {
+        description: `Lineage orchestration pipeline for notebook execution. Notebooks: ${notebookNames.join(", ")}.`,
+      });
+
+      return { id: existing.id, displayName: existing.displayName };
+    };
+
+    const existingPipeline = await upsertExistingPipeline();
+    if (existingPipeline) {
+      return existingPipeline;
+    }
+
+    let pipeline;
+    try {
+      pipeline = await itemClient.createItem(workspaceId, {
+        displayName,
+        type: "DataPipeline",
+        description: `Lineage orchestration pipeline for notebook execution. Notebooks: ${notebookNames.join(", ")}.`,
+        definition: {
+          parts: [definitionPart],
+        },
+      });
+    } catch (err) {
+      // Some workspaces reject definition on create. Retry with bare create then update definition.
+      if (err instanceof FabricPlatformError && err.statusCode === 400) {
+        pipeline = await itemClient.createItem(workspaceId, {
+          displayName,
+          type: "DataPipeline",
+          description: `Lineage orchestration pipeline for notebook execution. Notebooks: ${notebookNames.join(", ")}.`,
+        });
+
+        await itemClient.updateItemDefinitionWithPolling(workspaceId, pipeline.id, {
+          definition: {
+            parts: [definitionPart],
+          },
+        });
+      } else if (err instanceof FabricPlatformError && err.statusCode === 409) {
+        const conflictPipeline = await upsertExistingPipeline();
+        if (conflictPipeline) {
+          return conflictPipeline;
+        }
+        throw err;
+      } else {
+        throw err;
+      }
+    }
+
+    return { id: pipeline.id, displayName: pipeline.displayName };
+  };
+
+  const applyNotebookBindings = (notebookJson: any) => {
+    if (!notebookJson.metadata) {
+      notebookJson.metadata = {};
+    }
+    if (!notebookJson.metadata.language_info) {
+      notebookJson.metadata.language_info = { name: "python" };
+    } else if (!notebookJson.metadata.language_info.name) {
+      notebookJson.metadata.language_info.name = "python";
+    }
+
+    if (!notebookJson.metadata.dependencies) {
+      notebookJson.metadata.dependencies = {};
+    }
+
+    notebookJson.metadata.dependencies.lakehouse = {
+      default_lakehouse: lakehouseId,
+      default_lakehouse_name: lakehouseName,
+      default_lakehouse_workspace_id: resolvedLakehouseWorkspaceId,
+      known_lakehouses: [{ id: lakehouseId }],
+    };
+
+    if (environmentId) {
+      notebookJson.metadata.dependencies.environment = {
+        environmentId,
+        workspaceId: resolvedEnvironmentWorkspaceId,
+      };
+    } else {
+      delete notebookJson.metadata.dependencies.environment;
+    }
+  };
+
+  const buildNotebookMetadata = () => ({
+    defaultLakehouse: {
+      id: lakehouseId,
+      name: lakehouseName,
+      workspaceId: resolvedLakehouseWorkspaceId,
+    },
+    ...(environmentId && {
+      environment: {
+        id: environmentId,
+        name: environmentName || "Environment",
+        workspaceId: resolvedEnvironmentWorkspaceId,
+      },
+    }),
+  });
+
+  const validateHostingArtifacts = async (itemClient: ItemClient) => {
+    try {
+      await itemClient.getItem(resolvedLakehouseWorkspaceId, lakehouseId);
+    } catch (err) {
+      if (err instanceof FabricPlatformError) {
+        throw new Error(
+          `Selected lakehouse is not accessible (workspace: ${resolvedLakehouseWorkspaceId}, id: ${lakehouseId}). ` +
+          `Fabric returned HTTP ${err.statusCode}: ${err.message}`
+        );
+      }
+      throw err;
+    }
+
+    if (environmentId) {
+      try {
+        await itemClient.getItem(resolvedEnvironmentWorkspaceId, environmentId);
+      } catch (err) {
+        if (err instanceof FabricPlatformError) {
+          throw new Error(
+            `Selected Spark environment is not accessible (workspace: ${resolvedEnvironmentWorkspaceId}, id: ${environmentId}). ` +
+            `Fabric returned HTTP ${err.statusCode}: ${err.message}`
+          );
+        }
+        throw err;
+      }
+    }
+  };
+
   const handleClose = () => {
-    setCurrentStep("select-mode");
-    setSetupMode("new");
+    setCurrentStep(pipelineOnly ? "select-notebooks" : "select-mode");
+    setSetupMode(pipelineOnly ? "existing" : "new");
     setSelectedNotebooks(new Set(AVAILABLE_NOTEBOOKS.map((n) => n.name)));
     setSelectedExistingNotebooks([]);
     setSelectedExistingIds([]);
     setAvailableNotebooks([]);
     setDeployedNotebooks([]);
     setDeployedIds([]);
+    setCreatePipeline(pipelineOnly);
+    setPipelineName(DEFAULT_PIPELINE_NAME);
+    setCreatedPipelineId(undefined);
+    setCreatedPipelineDisplayName(undefined);
     setCurrentlyDeploying(null);
+    setCurrentOperation(null);
     setError(null);
     onClose();
   };
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    // Always reinitialize the wizard according to the mode that opened it.
+    setSetupMode(pipelineOnly ? "existing" : "new");
+    setCurrentStep(pipelineOnly ? "select-notebooks" : "select-mode");
+    setCreatePipeline(pipelineOnly);
+    setError(null);
+
+    if (pipelineOnly && availableNotebooks.length === 0 && !loadingNotebooks) {
+      void handleListExistingNotebooks();
+    }
+  }, [isOpen, pipelineOnly]);
 
   const toggleNotebook = (notebookName: string) => {
     const next = new Set(selectedNotebooks);
@@ -190,10 +512,10 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
       if (err instanceof FabricPlatformError) {
         switch (err.statusCode) {
           case 403:
-            errorMessage = "You don't have permission to list notebooks in this workspace.";
+            errorMessage = `You don't have permission to list notebooks in workspace ${workspaceId}.`;
             break;
           case 404:
-            errorMessage = "Workspace not found. Please ensure you have access.";
+            errorMessage = `Workspace ${workspaceId} not found. Please ensure you have access.`;
             break;
           default:
             errorMessage = `Failed to list notebooks: ${err.message} (HTTP ${err.statusCode})`;
@@ -222,6 +544,13 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
 
     try {
       const itemClient = new ItemClient(workloadClient);
+      const folderClient = new FolderClient(workloadClient);
+      const notebooksFolder = await folderClient.createFolderHierarchy(workspaceId, ["Notebooks"]);
+      await validateHostingArtifacts(itemClient);
+      const existingNotebooks = await itemClient.listItems(workspaceId, { type: "Notebook" });
+      const existingByName = new Map(
+        (existingNotebooks.value || []).map((item) => [item.displayName.toLowerCase(), item])
+      );
 
       for (const notebookConfig of AVAILABLE_NOTEBOOKS) {
         if (!selectedNotebooks.has(notebookConfig.name)) {
@@ -229,92 +558,80 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
         }
 
         setCurrentlyDeploying(notebookConfig.name);
+        setCurrentOperation("notebook");
 
-        // Read the notebook file from the workspace
-        const notebookPath = `/Workload/notebooks/${notebookConfig.fileName}`;
+        // Load notebook template from packaged static assets.
         let notebookContent: string;
         let notebookJson: any;
 
-        try {
-          const response = await fetch(notebookPath);
-          if (!response.ok) {
-            throw new Error(`Failed to load notebook: ${notebookConfig.fileName}`);
-          }
-          const fileContent = await response.text();
-          notebookJson = JSON.parse(fileContent);
-          
-          // Ensure notebook has required metadata with language_info
-          if (!notebookJson.metadata) {
-            notebookJson.metadata = {};
-          }
-          if (!notebookJson.metadata.language_info) {
-            notebookJson.metadata.language_info = { name: "python" };
-          } else if (!notebookJson.metadata.language_info.name) {
-            notebookJson.metadata.language_info.name = "python";
-          }
-          
-          notebookContent = JSON.stringify(notebookJson);
-        } catch (err) {
-          console.warn(`Could not load notebook file ${notebookPath}, using placeholder`);
-          notebookJson = {
-            cells: [
-              {
-                cell_type: "markdown",
-                source: [`# ${notebookConfig.name}`, "", notebookConfig.description],
-              },
-            ],
-            metadata: {
-              language_info: {
-                name: "python"
-              }
-            },
-            nbformat: 4,
-            nbformat_minor: 5,
-          };
-          notebookContent = JSON.stringify(notebookJson);
-        }
+        notebookJson = await loadNotebookTemplate(notebookConfig.fileName);
 
-        // Create notebook metadata with lakehouse and environment
-        const notebookMetadata = {
-          defaultLakehouse: {
-            id: lakehouseId,
-            name: lakehouseName,
-            workspaceId: workspaceId,
-          },
-          ...(environmentId && {
-            environment: {
-              id: environmentId,
-              name: environmentName || "Environment",
-              workspaceId: workspaceId,
+        applyNotebookBindings(notebookJson);
+
+        notebookContent = JSON.stringify(notebookJson);
+
+        const notebookMetadata = buildNotebookMetadata();
+
+        const notebookDefinition = {
+          format: "ipynb",
+          parts: [
+            {
+              path: "notebook-content.ipynb",
+              payload: encodeBase64Utf8(notebookContent),
+              payloadType: "InlineBase64" as const,
             },
-          }),
+            {
+              path: "notebookMetadata.json",
+              payload: encodeBase64Utf8(JSON.stringify(notebookMetadata, null, 2)),
+              payloadType: "InlineBase64" as const,
+            },
+          ],
         };
 
-        // Create the notebook with definition
-        const notebook = await itemClient.createItem(workspaceId, {
-          displayName: notebookConfig.name,
-          type: "Notebook",
-          description: notebookConfig.description,
-          definition: {
-            format: "ipynb",
-            parts: [
-              {
-                path: "notebook-content.py",
-                payload: btoa(notebookContent),
-                payloadType: "InlineBase64",
-              },
-              {
-                path: "notebookMetadata.json",
-                payload: btoa(JSON.stringify(notebookMetadata, null, 2)),
-                payloadType: "InlineBase64",
-              },
-            ],
-          },
-        });
+        // Overwrite existing notebook with the same name, otherwise create it.
+        const existingNotebook = existingByName.get(notebookConfig.name.toLowerCase());
 
-        deployed.push(notebookConfig.name);
-        ids.push(notebook.id);
+        if (existingNotebook) {
+          await itemClient.updateItemDefinitionWithPolling(workspaceId, existingNotebook.id, {
+            definition: notebookDefinition,
+          });
+
+          await itemClient.updateItem(workspaceId, existingNotebook.id, {
+            description: notebookConfig.description,
+          });
+
+          if (existingNotebook.folderId !== notebooksFolder.id) {
+            await itemClient.moveItem(workspaceId, existingNotebook.id, {
+              targetFolderId: notebooksFolder.id,
+            });
+          }
+
+          deployed.push(notebookConfig.name);
+          ids.push(existingNotebook.id);
+        } else {
+          const notebook = await itemClient.createItem(workspaceId, {
+            displayName: notebookConfig.name,
+            type: "Notebook",
+            description: notebookConfig.description,
+            folderId: notebooksFolder.id,
+            definition: notebookDefinition,
+          });
+
+          deployed.push(notebookConfig.name);
+          ids.push(notebook.id);
+        }
       }
+
+      if (pipelineOnly && createPipeline) {
+        setCurrentlyDeploying(pipelineName.trim() || DEFAULT_PIPELINE_NAME);
+        setCurrentOperation("pipeline");
+      }
+
+      const createdPipeline = (pipelineOnly && createPipeline)
+        ? await createNotebookOrchestrationPipeline(itemClient, ids, deployed)
+        : undefined;
+      setCreatedPipelineId(createdPipeline?.id);
+      setCreatedPipelineDisplayName(createdPipeline?.displayName);
 
       setDeployedNotebooks(deployed);
       setDeployedIds(ids);
@@ -326,10 +643,14 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
         // Handle specific HTTP status codes with user-friendly messages
         switch (err.statusCode) {
           case 409:
-            errorMessage = `A notebook named "${currentlyDeploying}" already exists in this workspace. Please delete the existing notebook or choose a different workspace.`;
+            errorMessage = currentOperation === "pipeline"
+              ? `Pipeline creation conflict for "${currentlyDeploying || pipelineName}". Please choose a different name or remove the existing pipeline.`
+              : `Notebook overwrite failed for "${currentlyDeploying || "selected notebook"}". Please check your workspace permissions and try again.`;
             break;
           case 400:
-            errorMessage = `Invalid notebook configuration for "${currentlyDeploying}": ${err.message}`;
+            errorMessage = currentOperation === "pipeline"
+              ? `Invalid pipeline configuration for "${currentlyDeploying || pipelineName}": ${err.message}. Verify Data Factory is enabled in the workspace and try a simpler pipeline name.`
+              : `Invalid notebook configuration for "${currentlyDeploying || "selected notebook"}": ${err.message}`;
             break;
           case 403:
             errorMessage = `You don't have permission to create notebooks in this workspace. Please check your workspace access.`;
@@ -346,7 +667,9 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
             errorMessage = `Fabric service error: ${err.message}. Please try again in a few moments.`;
             break;
           default:
-            errorMessage = `Failed to create notebook "${currentlyDeploying}": ${err.message} (HTTP ${err.statusCode})`;
+            errorMessage = currentOperation === "pipeline"
+              ? `Failed to create pipeline "${currentlyDeploying || pipelineName}": ${err.message} (HTTP ${err.statusCode})`
+              : `Failed to create notebook "${currentlyDeploying || "selected notebook"}": ${err.message} (HTTP ${err.statusCode})`;
         }
       } else {
         errorMessage = err instanceof Error ? err.message : String(err);
@@ -356,6 +679,145 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
       setCurrentStep("error");
     } finally {
       setCurrentlyDeploying(null);
+      setCurrentOperation(null);
+    }
+  };
+
+  const handleConfigureExistingNotebooks = async () => {
+    if (selectedExistingIds.length === 0) {
+      setError("Please select at least one notebook");
+      return;
+    }
+
+    setCurrentStep("deploying");
+    setError(null);
+
+    const configuredNames: string[] = [];
+    const configuredIds: string[] = [];
+
+    try {
+      const itemClient = new ItemClient(workloadClient);
+      await validateHostingArtifacts(itemClient);
+
+      for (const notebookId of selectedExistingIds) {
+        const notebook = availableNotebooks.find((n) => n.id === notebookId);
+        const notebookName = notebook?.name || notebookId;
+        setCurrentlyDeploying(notebookName);
+        setCurrentOperation("notebook");
+
+        const definitionResponse = await itemClient.getItemDefinitionWithPolling(workspaceId, notebookId, "ipynb");
+        const parts = definitionResponse.definition?.parts || [];
+
+        const notebookContentPart = parts.find((part) => part.path.toLowerCase().endsWith(".ipynb"));
+        if (!notebookContentPart) {
+          throw new Error(`Notebook definition for "${notebookName}" does not contain an .ipynb part.`);
+        }
+
+        const notebookContentRaw =
+          notebookContentPart.payloadType === "InlineBase64"
+            ? decodeBase64Utf8(notebookContentPart.payload)
+            : notebookContentPart.payload;
+
+        const notebookJson = JSON.parse(notebookContentRaw);
+        applyNotebookBindings(notebookJson);
+
+        const notebookMetadata = buildNotebookMetadata();
+        const preservedParts = parts.filter(
+          (part) =>
+            part.path !== notebookContentPart.path &&
+            part.path !== "notebookMetadata.json"
+        );
+
+        await itemClient.updateItemDefinitionWithPolling(workspaceId, notebookId, {
+          definition: {
+            format: "ipynb",
+            parts: [
+              ...preservedParts,
+              {
+                path: notebookContentPart.path,
+                payload: encodeBase64Utf8(JSON.stringify(notebookJson)),
+                payloadType: "InlineBase64",
+              },
+              {
+                path: "notebookMetadata.json",
+                payload: encodeBase64Utf8(JSON.stringify(notebookMetadata, null, 2)),
+                payloadType: "InlineBase64",
+              },
+            ],
+          },
+        });
+
+        configuredNames.push(notebookName);
+        configuredIds.push(notebookId);
+      }
+
+      setSelectedExistingNotebooks(configuredNames);
+      setSelectedExistingIds(configuredIds);
+
+      if (pipelineOnly && createPipeline) {
+        setCurrentlyDeploying(pipelineName.trim() || DEFAULT_PIPELINE_NAME);
+        setCurrentOperation("pipeline");
+      }
+
+      const createdPipeline = (pipelineOnly && createPipeline)
+        ? await createNotebookOrchestrationPipeline(itemClient, configuredIds, configuredNames)
+        : undefined;
+      setCreatedPipelineId(createdPipeline?.id);
+      setCreatedPipelineDisplayName(createdPipeline?.displayName);
+
+      setCurrentStep("success");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Failed to configure selected notebook metadata: ${errorMessage}`);
+      setCurrentStep("error");
+    } finally {
+      setCurrentlyDeploying(null);
+      setCurrentOperation(null);
+    }
+  };
+
+  const handleCreateOrUpdatePipeline = async () => {
+    if (selectedExistingIds.length === 0) {
+      setError("Please select at least one notebook");
+      return;
+    }
+
+    setCurrentStep("deploying");
+    setError(null);
+
+    try {
+      const itemClient = new ItemClient(workloadClient);
+      const selectedNames = availableNotebooks
+        .filter((n) => selectedExistingIds.includes(n.id))
+        .map((n) => n.name);
+
+      setSelectedExistingNotebooks(selectedNames);
+      setCurrentOperation("pipeline");
+      setCurrentlyDeploying(pipelineName.trim() || DEFAULT_PIPELINE_NAME);
+
+      const createdPipeline = await createNotebookOrchestrationPipeline(itemClient, selectedExistingIds, selectedNames);
+      if (!createdPipeline) {
+        throw new Error("Pipeline creation was not enabled.");
+      }
+
+      setCreatedPipelineId(createdPipeline.id);
+      setCreatedPipelineDisplayName(createdPipeline.displayName);
+      setCurrentStep("success");
+    } catch (err) {
+      let errorMessage: string;
+      if (err instanceof FabricPlatformError) {
+        errorMessage =
+          err.statusCode === 400
+            ? `Failed to create pipeline "${currentlyDeploying || pipelineName}": ${err.message} (HTTP 400). Verify Data Factory is enabled in the workspace and try a simpler pipeline name.`
+            : `Failed to create pipeline "${currentlyDeploying || pipelineName}": ${err.message} (HTTP ${err.statusCode})`;
+      } else {
+        errorMessage = err instanceof Error ? err.message : String(err);
+      }
+      setError(errorMessage);
+      setCurrentStep("error");
+    } finally {
+      setCurrentOperation(null);
+      setCurrentlyDeploying(null);
     }
   };
 
@@ -363,6 +825,8 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
     onComplete({
       deployedNotebooks: setupMode === "existing" ? selectedExistingNotebooks : deployedNotebooks,
       notebookIds: setupMode === "existing" ? selectedExistingIds : deployedIds,
+      pipelineId: createdPipelineId,
+      pipelineDisplayName: createdPipelineDisplayName,
     });
     handleClose();
   };
@@ -372,6 +836,9 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
     setError(null);
     setDeployedNotebooks([]);
     setDeployedIds([]);
+    setCreatedPipelineId(undefined);
+    setCreatedPipelineDisplayName(undefined);
+    setCurrentOperation(null);
     setSelectedExistingNotebooks([]);
     setSelectedExistingIds([]);
   };
@@ -383,6 +850,11 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
         <DialogContent>
           <Text size={400} weight="semibold">
             How would you like to set up notebooks for lineage extraction?
+          </Text>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+            {pipelineOnly
+              ? "Select existing notebooks and create an orchestration pipeline."
+              : "In the next step you'll configure notebook deployment in the selected workspace."}
           </Text>
           <RadioGroup value={setupMode} onChange={(_, data) => setSetupMode(data.value as SetupMode)}>
             <Radio value="existing" label="Use existing notebooks" />
@@ -411,7 +883,7 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
     if (setupMode === "existing") {
       return (
         <>
-          <DialogTitle>Select Existing Notebooks</DialogTitle>
+          <DialogTitle>{pipelineOnly ? "Create/Update Pipeline" : "Select Existing Notebooks"}</DialogTitle>
           <DialogBody className={styles.content}>
             <DialogContent>
               {loadingNotebooks ? (
@@ -422,7 +894,9 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
               ) : (
                 <>
                   <Text>
-                    Select the notebooks from your workspace to use for lineage extraction.
+                    {pipelineOnly
+                      ? "Select existing notebooks to include in the orchestration pipeline."
+                      : "Select the notebooks from your workspace to use for lineage extraction."}
                   </Text>
 
                   <div className={styles.notebookList}>
@@ -445,6 +919,25 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
                       {workspaceId}
                     </MessageBarBody>
                   </MessageBar>
+
+                  {pipelineOnly && (
+                    <>
+                      <Divider />
+
+                      <Text size={300} weight="semibold">
+                        Pipeline Orchestration
+                      </Text>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                        Create a Data Pipeline that references the selected notebooks for orchestrated runs.
+                      </Text>
+                      <Field label="Pipeline name">
+                        <Input
+                          value={pipelineName}
+                          onChange={(_, data) => setPipelineName(data.value)}
+                        />
+                      </Field>
+                    </>
+                  )}
                 </>
               )}
             </DialogContent>
@@ -453,12 +946,12 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
             <Button appearance="secondary" onClick={handleClose}>
               Cancel
             </Button>
-            <Button 
-              appearance="primary" 
-              onClick={() => setCurrentStep("success")} 
+            <Button
+              appearance="primary"
+              onClick={pipelineOnly ? handleCreateOrUpdatePipeline : handleConfigureExistingNotebooks}
               disabled={selectedExistingIds.length === 0 || loadingNotebooks}
             >
-              Select Notebooks
+              {pipelineOnly ? "Create/Update Pipeline" : "Configure & Select"}
             </Button>
           </DialogActions>
         </>
@@ -471,6 +964,11 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
         <DialogTitle>Deploy Extraction Notebooks</DialogTitle>
         <DialogBody className={styles.content}>
           <DialogContent>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+              Deployment workspace:
+            </Text>
+            <Text>{workspaceId}</Text>
+
             <Text>
               Select the notebooks to deploy to workspace. Each notebook will be configured with the
               selected lakehouse as default and linked to the Spark environment.
@@ -497,6 +995,7 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
               <MessageBarBody>
                 <Text weight="semibold">Configuration:</Text>
                 <ul style={{ marginTop: tokens.spacingVerticalS, marginLeft: tokens.spacingHorizontalL }}>
+                  <li>Deployment Workspace: {workspaceId}</li>
                   <li>Default Lakehouse: {lakehouseName}</li>
                   {environmentName && <li>Spark Environment: {environmentName}</li>}
                 </ul>
@@ -518,14 +1017,18 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
 
   const renderDeploying = () => (
     <>
-      <DialogTitle>Deploying Notebooks</DialogTitle>
+      <DialogTitle>{currentOperation === "pipeline" ? "Creating Pipeline" : "Deploying Notebooks"}</DialogTitle>
       <DialogBody className={styles.content}>
         <DialogContent>
           <div className={styles.centerContent}>
             <Spinner size="extra-large" />
             {currentlyDeploying && (
               <>
-                <Text size={400}>Deploying "{currentlyDeploying}"...</Text>
+                <Text size={400}>
+                  {currentOperation === "pipeline"
+                    ? `Creating pipeline "${currentlyDeploying}"...`
+                    : `Deploying "${currentlyDeploying}"...`}
+                </Text>
                 <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
                   {deployedNotebooks.length} of {selectedNotebooks.size} completed
                 </Text>
@@ -561,6 +1064,13 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
                   </Text>
                 ))}
               </div>
+              {createdPipelineDisplayName && (
+                <MessageBar intent="success">
+                  <MessageBarBody>
+                    Orchestration pipeline created: <strong>{createdPipelineDisplayName}</strong>
+                  </MessageBarBody>
+                </MessageBar>
+              )}
               {setupMode === "new" && (
                 <MessageBar intent="success">
                   <MessageBarBody>
@@ -623,6 +1133,10 @@ export const LineageNotebookSetupWizard: React.FC<Props> = ({
   );
 
   const renderStep = () => {
+    if (pipelineOnly && currentStep === "select-mode") {
+      return renderSelectNotebooks();
+    }
+
     switch (currentStep) {
       case "select-mode":
         return renderSelectMode();

@@ -124,6 +124,7 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
           setItem(loadedItem);
           setDefinition(loadedDefinition);
           setSaveStatus(loadedItem.definition ? SaveStatus.Saved : SaveStatus.NotSaved);
+          setCurrentViewState(loadedItem.definition ? VIEW.HOME : VIEW.EMPTY);
         }
       } catch (error) {
         console.error("Failed to load LineageWorkbench item:", error);
@@ -133,7 +134,7 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
     }
 
     loadData();
-  }, [pageContext.itemObjectId, workloadClient]);
+  }, [pageContext.itemObjectId]);
 
   // ── Navigation helpers ────────────────────────────────────────────────────
   const navigateTo = useCallback((view: LineageWorkbenchView) => {
@@ -157,15 +158,12 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
 
   const handleRefreshLineage = () => {
     setDefinition((prev) => {
-      const snap = prev.lineage?.graphSnapshot;
-      if (!snap) {
-        return prev;
-      }
       return {
         ...prev,
         lineage: {
           ...prev.lineage,
-          graphSnapshot: { ...snap, generatedAtUtc: new Date().toISOString() },
+          // Signal the lineage view to reload from lakehouse immediately.
+          refreshNonce: Date.now(),
         },
       };
     });
@@ -264,8 +262,10 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
       name: VIEW.REQUIREMENTS,
       component: (
         <LineageWorkbenchItemRequirementsView
+          workloadClient={workloadClient}
           lineage={definition.lineage}
           onLineageChange={handleLineageChange}
+          onSave={handleSave}
         />
       ),
     },
@@ -278,15 +278,6 @@ export function LineageWorkbenchItemEditor(props: PageProps) {
     }
     return VIEW.HOME;
   };
-
-  // Sync view tracker with ItemEditor's own view state - only on initial load
-  useEffect(() => {
-    if (!isLoading && item && viewSetter) {
-      const view = getInitialView();
-      setCurrentViewState(view as LineageWorkbenchView);
-      viewSetter(view);
-    }
-  }, [isLoading, viewSetter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <ItemEditor

@@ -248,11 +248,27 @@ function KanbanCard({
   const colIndex = KANBAN_COLUMNS.findIndex((c) => c.id === req.status);
   const nextColumn = KANBAN_COLUMNS[colIndex + 1];
 
+  const openEditor = () => onEdit(req);
+
+  const stopCardClickPropagation = (e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+  };
+
   return (
     <div
       className="req-kanban-card"
       draggable
       onDragStart={() => onDragStart(req.id)}
+      role="button"
+      tabIndex={0}
+      aria-label={t("RequirementBoard_OpenRequirement", "Open requirement {{title}}", { title: req.title })}
+      onClick={openEditor}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openEditor();
+        }
+      }}
     >
       <div className="req-card-header">
         <Badge color={priorityColor} appearance="tint" size="small">
@@ -268,7 +284,10 @@ function KanbanCard({
                 icon={<ArrowRight24Regular />}
                 size="small"
                 appearance="subtle"
-                onClick={() => onMoveStatus(req.id, nextColumn.id)}
+                onClick={(e: React.MouseEvent<HTMLElement>) => {
+                  stopCardClickPropagation(e);
+                  onMoveStatus(req.id, nextColumn.id);
+                }}
               />
             </Tooltip>
           )}
@@ -277,7 +296,10 @@ function KanbanCard({
               icon={<Edit24Regular />}
               size="small"
               appearance="subtle"
-              onClick={() => onEdit(req)}
+              onClick={(e: React.MouseEvent<HTMLElement>) => {
+                stopCardClickPropagation(e);
+                onEdit(req);
+              }}
             />
           </Tooltip>
           <Tooltip content={t("RequirementBoard_Delete", "Delete")} relationship="label">
@@ -285,7 +307,10 @@ function KanbanCard({
               icon={<Delete24Regular />}
               size="small"
               appearance="subtle"
-              onClick={() => onDelete(req.id)}
+              onClick={(e: React.MouseEvent<HTMLElement>) => {
+                stopCardClickPropagation(e);
+                onDelete(req.id);
+              }}
             />
           </Tooltip>
         </div>
@@ -325,7 +350,10 @@ function KanbanCard({
               size="small"
               appearance="subtle"
               iconPosition="before"
-              onClick={() => onShowInLineage(req.linkedNodeIds, linkedLineageViewerItemId)}
+              onClick={(e: React.MouseEvent<HTMLElement>) => {
+                stopCardClickPropagation(e);
+                onShowInLineage(req.linkedNodeIds, linkedLineageViewerItemId);
+              }}
             >
               {t("RequirementBoard_ShowInLineage_Short", "Show in Lineage")}
             </Button>

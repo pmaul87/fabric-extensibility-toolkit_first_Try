@@ -207,6 +207,9 @@ export class ItemClient extends FabricPlatformClient {
     request: UpdateItemDefinitionRequest
   ): Promise<void> {
     const response = await this.updateItemDefinition(workspaceId, itemId, request);
+    if (!response || typeof response.operationId !== 'string' || !response.operationId.trim()) {
+      return;
+    }
     
     // Poll until completion
     const operationsClient = new LongRunningOperationsClient(this.workloadClient);    

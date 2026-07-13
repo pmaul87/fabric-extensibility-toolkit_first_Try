@@ -19,10 +19,28 @@ const FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1";
 
 // New simplified view-based architecture
 const LINEAGE_REQUIRED_TABLES = ["v_nodes", "v_edges"];
+const LINEAGE_NODE_VIEW_ALIASES = [
+  "v_nodes",
+  "vw_nodes",
+  "view_nodes",
+  "lineage_nodes",
+  "nodes",
+];
+const LINEAGE_EDGE_VIEW_ALIASES = [
+  "v_edges",
+  "vw_edges",
+  "view_edges",
+  "lineage_edges",
+  "edges",
+];
 const LINEAGE_OPTIONAL_TABLES = [
+  // Node/edge view aliases (for compatibility with customized lakehouse view names)
+  ...LINEAGE_NODE_VIEW_ALIASES,
+  ...LINEAGE_EDGE_VIEW_ALIASES,
   // Dimension tables with detailed metadata (support both t_dataset_* and t_datamodel_* naming)
   "t_dataset_reports",
   "t_report_reports",  // Alternative naming convention
+  "t_report_metadata", // New bronze naming
   "t_dataset_pages",
   "t_report_pages",  // Alternative naming convention
   "t_dataset_visuals",
@@ -35,8 +53,12 @@ const LINEAGE_OPTIONAL_TABLES = [
   "t_dataset_relationships",
   "t_dataset_relations",  // Alternative naming for relationships table
   "t_dataset_lakehouses",
+  "t_lakehouse_metadata", // New bronze naming
   "t_dataset_warehouses",
+  "t_warehouse_metadata", // New bronze naming
+  "t_dataset_datasources", // New edge datasource extraction output
   "t_dataset_column_lineage",  // Column transformation query steps
+  "t_column_lineage",  // Legacy / notebook output name for query steps
   "t_datamodel_reports",
   "t_datamodel_pages",
   "t_datamodel_visuals",
@@ -220,6 +242,16 @@ async function fetchLakehouseMetadata(token, workspaceId, lakehouseId, manualSql
       }
     }
 
+    let lakehouseItemFallback = null;
+    try {
+      lakehouseItemFallback = await fabricGet(token, `/items/${lakehouseId}`);
+      if (lakehouseItemFallback?.displayName || lakehouseItemFallback?.name) {
+        lakehouseName = lakehouseItemFallback.displayName || lakehouseItemFallback.name;
+      }
+    } catch (itemError) {
+      console.warn("[LakehouseAnalyzerService] Failed to fetch lakehouse item fallback:", itemError?.message || itemError);
+    }
+
     console.log("[LakehouseAnalyzerService] Fetching lakehouses in workspace:", resolvedWorkspaceId);
     const lakehouses = await fabricGetAllPages(token, `/workspaces/${resolvedWorkspaceId}/lakehouses`);
     console.log("[LakehouseAnalyzerService] Found", lakehouses.length, "lakehouses in workspace");
@@ -233,7 +265,21 @@ async function fetchLakehouseMetadata(token, workspaceId, lakehouseId, manualSql
       diagnostics.push(
         "Could not find the selected Lakehouse in workspace metadata while handling a schema-enabled fallback."
       );
-      return { sqlEndpoint, defaultSchema, lakehouseName, diagnostics };
+      if (!lakehouseName && lakehouseItemFallback) {
+        lakehouseName = lakehouseItemFallback.displayName || lakehouseItemFallback.name;
+      }
+
+      if (resolvedWorkspaceId && lakehouseName) {
+        const server = `${resolvedWorkspaceId}.datawarehouse.fabric.microsoft.com`;
+        sqlEndpoint = `Server=${server};Initial Catalog=${lakehouseName}`;
+        diagnostics.push(
+          `Constructed fallback SQL endpoint from lakehouse item metadata: Server=${server}, Database=${lakehouseName}`
+        );
+      }
+
+      if (!sqlEndpoint) {
+        return { sqlEndpoint, defaultSchema, lakehouseName, diagnostics };
+      }
     }
 
     lakehouseName = lakehouse.displayName || lakehouse.name;
@@ -292,6 +338,89 @@ async function fetchLakehouseMetadata(token, workspaceId, lakehouseId, manualSql
 
 function escapeSqlIdentifier(identifier) {
   return `[${String(identifier).replace(/]/g, "]]" )}]`;
+}
+
+function getNodeIdFromEdgeReference(reference, nodeIdSet, nodeIdsBySuffix) {
+  const ref = typeof reference === "string" ? reference.trim() : "";
+  if (!ref) {
+    return undefined;
+  }
+
+  if (nodeIdSet.has(ref)) {
+    return ref;
+  }
+
+  const suffix = ref.includes(":") ? ref.substring(ref.indexOf(":") + 1) : ref;
+  const candidates = nodeIdsBySuffix.get(suffix) || [];
+  if (candidates.length === 0) {
+    return undefined;
+  }
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  // Prefer semantic model object node types when multiple candidates share the same key.
+  return (
+    candidates.find((id) => id.startsWith("column:")) ||
+    candidates.find((id) => id.startsWith("measure:")) ||
+    candidates.find((id) => id.startsWith("table:")) ||
+    candidates[0]
+  );
+}
+
+function normalizeLineageGraphNodesAndEdges(nodes, edges) {
+  const nodeIdSet = new Set();
+  const nodeIdsBySuffix = new Map();
+
+  for (const node of nodes) {
+    const nodeId = node?.node_id || node?.nodeId;
+    if (!nodeId || typeof nodeId !== "string") {
+      continue;
+    }
+    nodeIdSet.add(nodeId);
+
+    const suffix = nodeId.includes(":") ? nodeId.substring(nodeId.indexOf(":") + 1) : nodeId;
+    const existing = nodeIdsBySuffix.get(suffix) || [];
+    existing.push(nodeId);
+    nodeIdsBySuffix.set(suffix, existing);
+  }
+
+  const normalizedNodes = [];
+  for (const node of nodes) {
+    const rawParent = node?.parent_node || node?.parentNodeId;
+    const resolvedParent = getNodeIdFromEdgeReference(rawParent, nodeIdSet, nodeIdsBySuffix);
+
+    normalizedNodes.push({
+      ...node,
+      parent_node: resolvedParent || rawParent || null,
+      parentNodeId: resolvedParent || rawParent || null,
+    });
+  }
+
+  const normalizedEdges = [];
+  for (const edge of edges) {
+    const rawFrom = edge?.from_node || edge?.fromNodeId || edge?.referenced_node_id;
+    const rawTo = edge?.to_node || edge?.toNodeId || edge?.node_id;
+
+    const resolvedFrom = getNodeIdFromEdgeReference(rawFrom, nodeIdSet, nodeIdsBySuffix);
+    const resolvedTo = getNodeIdFromEdgeReference(rawTo, nodeIdSet, nodeIdsBySuffix);
+
+    if (!resolvedFrom || !resolvedTo) {
+      continue;
+    }
+
+    normalizedEdges.push({
+      ...edge,
+      from_node: resolvedFrom,
+      to_node: resolvedTo,
+      fromNodeId: resolvedFrom,
+      toNodeId: resolvedTo,
+      referenced_node_id: edge?.referenced_node_id || resolvedFrom,
+      node_id: edge?.node_id || resolvedTo,
+    });
+  }
+
+  return { nodes: normalizedNodes, edges: normalizedEdges };
 }
 
 async function resolveTableSchema(pool, tableName) {
@@ -848,13 +977,6 @@ class LakehouseAnalyzerService {
     );
     diagnostics.push(...queryDiagnostics);
 
-    const nodes = Array.isArray(output.v_nodes) ? output.v_nodes : [];
-    const edges = Array.isArray(output.v_edges) ? output.v_edges : [];
-
-    if (nodes.length === 0 && edges.length === 0) {
-      diagnostics.push("v_nodes and v_edges returned no rows.");
-    }
-
     // Helper function to find first non-empty array (empty arrays from missing tables should be skipped)
     const firstNonEmpty = (...arrays) => {
       for (const arr of arrays) {
@@ -865,9 +987,19 @@ class LakehouseAnalyzerService {
       return [];
     };
 
+    const nodes = firstNonEmpty(...LINEAGE_NODE_VIEW_ALIASES.map((name) => output[name]));
+    const rawEdges = firstNonEmpty(...LINEAGE_EDGE_VIEW_ALIASES.map((name) => output[name]));
+    const normalizedGraph = normalizeLineageGraphNodesAndEdges(nodes, rawEdges);
+    const normalizedNodes = normalizedGraph.nodes;
+    const edges = normalizedGraph.edges;
+
+    if (normalizedNodes.length === 0 && edges.length === 0) {
+      diagnostics.push("Node/edge views returned no rows.");
+    }
+
     const dimensions = {
       // New dimension tables (support both t_dataset_*, t_report_* and t_datamodel_* naming)
-      reports: firstNonEmpty(output.t_report_reports, output.t_dataset_reports, output.t_datamodel_reports, output.lineage_reports),
+      reports: firstNonEmpty(output.t_report_metadata, output.t_report_reports, output.t_dataset_reports, output.t_datamodel_reports, output.lineage_reports),
       pages: firstNonEmpty(output.t_report_pages, output.t_dataset_pages, output.t_datamodel_pages, output.lineage_report_pages),
       visuals: firstNonEmpty(output.t_report_visuals, output.t_dataset_visuals, output.t_datamodel_visuals, output.lineage_report_visuals),
       semanticModels: firstNonEmpty(output.t_dataset_semantic_models, output.t_datamodel_semantic_models, output.lineage_semantic_models),
@@ -875,9 +1007,10 @@ class LakehouseAnalyzerService {
       columns: firstNonEmpty(output.t_dataset_columns, output.t_datamodel_columns, output.lineage_semantic_model_columns),
       measures: firstNonEmpty(output.t_dataset_measures, output.t_dataset_measure, output.t_datamodel_measures, output.lineage_semantic_model_measures),
       relationships: firstNonEmpty(output.t_dataset_relationships, output.t_dataset_relations, output.t_datamodel_relationships, output.lineage_semantic_model_relationships),
-      lakehouses: firstNonEmpty(output.t_dataset_lakehouses, output.t_datamodel_lakehouses, output.lineage_lakehouses),
-      warehouses: firstNonEmpty(output.t_dataset_warehouses, output.t_datamodel_warehouses, output.warehouses),
-      columnLineage: firstNonEmpty(output.t_dataset_column_lineage),
+      lakehouses: firstNonEmpty(output.t_lakehouse_metadata, output.t_dataset_lakehouses, output.t_datamodel_lakehouses, output.lineage_lakehouses),
+      warehouses: firstNonEmpty(output.t_warehouse_metadata, output.t_dataset_warehouses, output.t_datamodel_warehouses, output.warehouses),
+      datasources: firstNonEmpty(output.t_dataset_datasources),
+      columnLineage: firstNonEmpty(output.t_dataset_column_lineage, output.t_column_lineage),
       // Legacy aliases (for backward compatibility with old saved data)
       reportPages: firstNonEmpty(output.t_report_pages, output.t_dataset_pages, output.t_datamodel_pages, output.lineage_report_pages),
       reportVisuals: firstNonEmpty(output.t_report_visuals, output.t_dataset_visuals, output.t_datamodel_visuals, output.lineage_report_visuals),
@@ -930,7 +1063,7 @@ class LakehouseAnalyzerService {
     console.log("[LakehouseAnalyzer] ===== END TABLE MAPPING =====");
 
     console.log("[LakehouseAnalyzer] Dimensions summary:", {
-      nodes: nodes.length,
+      nodes: normalizedNodes.length,
       edges: edges.length,
       // New property names
       reports: dimensions.reports.length,
@@ -950,8 +1083,8 @@ class LakehouseAnalyzerService {
     });
 
     // Log sample data for debugging
-    if (nodes.length > 0) {
-      console.log("[LakehouseAnalyzer] Sample node:", nodes[0]);
+    if (normalizedNodes.length > 0) {
+      console.log("[LakehouseAnalyzer] Sample node:", normalizedNodes[0]);
     }
     if (edges.length > 0) {
       console.log("[LakehouseAnalyzer] Sample edge:", edges[0]);
@@ -993,13 +1126,13 @@ class LakehouseAnalyzerService {
       createdAt: new Date().toISOString(),
       metadata: {
         source: "delta_tables",
-        nodeCount: nodes.length,
+        nodeCount: normalizedNodes.length,
         edgeCount: edges.length,
         lakehouseId,
         workspaceId,
         diagnostics,
       },
-      nodes,
+      nodes: normalizedNodes,
       edges,
       dimensions,
     };

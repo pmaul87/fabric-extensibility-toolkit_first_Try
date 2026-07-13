@@ -12,6 +12,7 @@ import {
   Radio,
   RadioGroup,
   Text,
+  Textarea,
   Spinner,
   MessageBar,
   MessageBarBody,
@@ -23,6 +24,29 @@ import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { callDatahubOpen } from "../../controller/DataHubController";
 import { ItemClient } from "../../clients/ItemClient";
 import { FabricPlatformError } from "../../clients/FabricPlatformClient";
+
+function encodeBase64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function buildEnvironmentYaml(environmentName: string): string {
+  return [
+    `name: ${environmentName}`,
+    "channels:",
+    "  - defaults",
+    "dependencies:",
+    "  - python=3.11",
+    "  - pip:",
+    "      - semantic-link-labs==0.15.2",
+    "      - semantic-link==0.14.1",
+    "",
+  ].join("\n");
+}
 import { useTranslation } from "react-i18next";
 
 const useStyles = makeStyles({
@@ -56,6 +80,33 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase200,
     color: tokens.colorNeutralForeground2,
   },
+  publishBox: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalS,
+    width: "100%",
+    padding: tokens.spacingVerticalM,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  instructionList: {
+    margin: 0,
+    paddingLeft: tokens.spacingHorizontalL,
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalXS,
+  },
+  ymlBox: {
+    fontFamily: tokens.fontFamilyMonospace,
+    fontSize: tokens.fontSizeBase200,
+  },
+  ymlHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: tokens.spacingHorizontalM,
+  },
 });
 
 export interface EnvironmentSetupResult {
@@ -85,20 +136,23 @@ export const LineageEnvironmentSetupWizard: React.FC<Props> = ({
 }) => {
   const styles = useStyles();
   const { t } = useTranslation();
+  const defaultEnvironmentName = "LineageWorkbench_Env";
 
   const [currentStep, setCurrentStep] = useState<WizardStep>("select-mode");
   const [setupMode, setSetupMode] = useState<SetupMode>("existing");
-  const [newEnvironmentName, setNewEnvironmentName] = useState<string>("LineageExtractor");
+  const [newEnvironmentName, setNewEnvironmentName] = useState<string>(defaultEnvironmentName);
   const [selectedEnvironment, setSelectedEnvironment] = useState<EnvironmentSetupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   const handleClose = () => {
     // Reset state
     setCurrentStep("select-mode");
     setSetupMode("existing");
-    setNewEnvironmentName("LineageExtractor");
+    setNewEnvironmentName(defaultEnvironmentName);
     setSelectedEnvironment(null);
     setError(null);
+    setCopyFeedback(null);
     onClose();
   };
 
@@ -152,32 +206,25 @@ export const LineageEnvironmentSetupWizard: React.FC<Props> = ({
 
     try {
       const itemClient = new ItemClient(workloadClient);
+      const environmentDefinition = {
+        parts: [
+          {
+            path: "environment.yml",
+            payload: encodeBase64Utf8(buildEnvironmentYaml(newEnvironmentName.trim())),
+            payloadType: "InlineBase64" as const,
+          },
+        ],
+      };
 
-      // Create the environment with semantic-link libraries
+      // Create the environment shell first, then publish the definition so the libraries are installed.
       const environment = await itemClient.createItem(workspaceId, {
         displayName: newEnvironmentName.trim(),
         type: "Environment",
         description: "Spark environment for lineage extraction with semantic-link libraries",
-        definition: {
-          parts: [
-            {
-              path: "environment.yml",
-              payload: btoa(
-                JSON.stringify({
-                  name: newEnvironmentName.trim(),
-                  channels: ["defaults"],
-                  dependencies: [
-                    "python=3.11",
-                    {
-                      pip: ["semantic-link", "semantic-link-labs"],
-                    },
-                  ],
-                })
-              ),
-              payloadType: "InlineBase64",
-            },
-          ],
-        },
+      });
+
+      await itemClient.updateItemDefinitionWithPolling(workspaceId, environment.id, {
+        definition: environmentDefinition,
       });
 
       setSelectedEnvironment({
@@ -224,6 +271,18 @@ export const LineageEnvironmentSetupWizard: React.FC<Props> = ({
   const handleTryAgain = () => {
     setCurrentStep("select-mode");
     setError(null);
+  };
+
+  const getPublishYaml = () => buildEnvironmentYaml(selectedEnvironment?.environmentDisplayName || newEnvironmentName.trim());
+
+  const handleCopyYaml = async () => {
+    try {
+      await navigator.clipboard.writeText(getPublishYaml());
+      setCopyFeedback("Copied YML to clipboard");
+      window.setTimeout(() => setCopyFeedback(null), 2000);
+    } catch {
+      setCopyFeedback("Copy failed. Select the text and copy manually.");
+    }
   };
 
   const renderSelectMode = () => (
@@ -307,10 +366,45 @@ export const LineageEnvironmentSetupWizard: React.FC<Props> = ({
             </Text>
             <Text size={300}>
               {selectedEnvironment?.isNew
-                ? "Environment created successfully with semantic-link libraries"
+                ? "Environment created. Publish the YML below so Fabric installs the libraries."
                 : "Environment selected"}
             </Text>
           </div>
+
+          {selectedEnvironment?.isNew && (
+            <div className={styles.publishBox}>
+              <Text weight="semibold">Publish steps</Text>
+              <ol className={styles.instructionList}>
+                <li>Open the environment.</li>
+                <li>Go to External repositories.</li>
+                <li>Open the YML editor.</li>
+                <li>Paste the YML below.</li>
+                <li>Click Save.</li>
+                <li>Click Publish.</li>
+              </ol>
+
+              <div>
+                <div className={styles.ymlHeader}>
+                  <Text weight="semibold">YML</Text>
+                  <Button size="small" appearance="subtle" onClick={handleCopyYaml}>
+                    Copy YML
+                  </Button>
+                </div>
+                {copyFeedback && (
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                    {copyFeedback}
+                  </Text>
+                )}
+                <Textarea
+                  className={styles.ymlBox}
+                  value={getPublishYaml()}
+                  readOnly
+                  resize="vertical"
+                  rows={8}
+                />
+              </div>
+            </div>
+          )}
         </DialogContent>
       </DialogBody>
       <DialogActions>

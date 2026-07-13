@@ -15,6 +15,7 @@ export type LineageEntityType =
   | "lakehouse_table"
   | "lakehouse_column"
   | "warehouse"
+  | "warehouse_table"
   | "unknown";
 
 const asString = (value: unknown): string | undefined => {
@@ -30,6 +31,7 @@ export interface ResolvedNodeFields {
   nodeType: LineageEntityType;
   parentNodeId?: string;
   datasetId?: string;
+  tableName?: string;
 }
 
 export interface ResolvedEdgeFields {
@@ -80,6 +82,9 @@ export function normalizeEntityType(entityType: string | undefined): LineageEnti
       return "lakehouse_column";
     case "warehouse":
       return "warehouse";
+    case "warehouse_table":
+    case "warehousetable":
+      return "warehouse_table";
       
     // Other artifact types
     case "dataflow":
@@ -101,12 +106,15 @@ export function resolveNodeFields(rawNode: RawRecord): ResolvedNodeFields {
     asString(rawNode.type) ??
     asString(rawNode.Type);
 
+  const tableName = asString(rawNode.table_name) ?? asString(rawNode.tableName) ?? asString(rawNode.TableName);
+
   return {
     nodeId: asString(rawNode.node_id) ?? asString(rawNode.nodeId),
     nodeName: asString(rawNode.node_name) ?? asString(rawNode.name) ?? asString(rawNode.displayName) ?? asString(rawNode.display_name),
     nodeType: normalizeEntityType(entityTypeValue),
     parentNodeId: asString(rawNode.parent_node) ?? asString(rawNode.parentNodeId),
     datasetId: asString(rawNode.dataset_id) ?? asString(rawNode.datasetId),
+    tableName,
   };
 }
 
@@ -162,4 +170,26 @@ export function resolveEdgeFields(rawEdge: RawRecord): ResolvedEdgeFields {
 
 export function isSyntheticSemanticModelNode(nodeId: string, entityType: string): boolean {
   return entityType === "semantic_model" && nodeId.startsWith("sm:");
+}
+
+export function getEntityTypeLabel(entityType: string): string {
+  const labels: Record<string, string> = {
+    report: "Reports",
+    page: "Pages",
+    visual: "Visuals",
+    semantic_model: "Semantic Models",
+    measure: "Measures",
+    column: "Semantic Columns",
+    table: "Semantic Tables",
+    lakehouse_table: "Lakehouse Table",
+    warehouse_table: "Warehouse Table",
+    dataflow: "Dataflows",
+    notebook: "Notebooks",
+    lakehouse: "Lakehouses",
+    lakehouse_column: "Lakehouse Column",
+    warehouse: "Warehouses",
+    semantic_object: "Semantic Objects",
+    unknown: "Unknown",
+  };
+  return labels[entityType] ?? entityType;
 }

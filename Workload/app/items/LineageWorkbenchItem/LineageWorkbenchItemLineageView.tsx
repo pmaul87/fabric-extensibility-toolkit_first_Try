@@ -354,6 +354,7 @@ export function LineageWorkbenchItemLineageView({
   const { t } = useTranslation();
   const styles = useStyles();
   const hasHydratedActualGraphRef = useRef(false);
+  const refreshNonce = lineage?.refreshNonce as number | undefined;
 
   // ── Layout state ──────────────────────────────────────────────────────────
   const [tableExpanded, setTableExpanded] = useState(true);
@@ -405,9 +406,10 @@ export function LineageWorkbenchItemLineageView({
   const [searchText, setSearchText] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
+  const [selectionSource, setSelectionSource] = useState<"table" | "graph" | "detail">("table");
   const graphScope = "focused"; // Always use focused mode
-  const [graphNodeLimit, setGraphNodeLimit] = useState<number>(DEFAULT_GRAPH_NODE_LIMIT);
-  const [graphDisplayMode, setGraphDisplayMode] = useState<"highlight" | "filter">("filter");
+  const [graphNodeLimit] = useState<number>(DEFAULT_GRAPH_NODE_LIMIT);
+  const [graphDisplayMode] = useState<"highlight" | "filter">("filter");
   const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("detail-focused");
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
 
@@ -419,12 +421,15 @@ export function LineageWorkbenchItemLineageView({
     if (dataSourceMode !== "actual") return false;
     if (hasHydratedActualGraphRef.current) return false;
     if (!targetLakehouseId) return false;
-    const hasDimensionData = 
-      lineage?.graphSnapshot?.dimensions?.semanticModels?.length > 0 ||
-      lineage?.graphSnapshot?.dimensions?.smTables?.length > 0;
-    if (hasDimensionData) return false;
     return true;
-  }, [dataSourceMode, targetLakehouseId, lineage?.graphSnapshot?.dimensions]);
+  }, [dataSourceMode, targetLakehouseId]);
+
+  // Ribbon refresh should force a fresh lakehouse read.
+  useEffect(() => {
+    if (typeof refreshNonce === "number") {
+      hasHydratedActualGraphRef.current = false;
+    }
+  }, [refreshNonce]);
 
   useEffect((): void | (() => void) => {
     console.log("[LineageView] Data loading effect running:", {
@@ -448,16 +453,6 @@ export function LineageWorkbenchItemLineageView({
       console.log("[LineageView] Skipping load: missing targetLakehouseId");
       return;
     }
-    // Check if we have semantic model dimension data (new format)
-    const hasDimensionData = 
-      lineage?.graphSnapshot?.dimensions?.semanticModels?.length > 0 ||
-      lineage?.graphSnapshot?.dimensions?.smTables?.length > 0;
-    if (hasDimensionData) {
-      console.log("[LineageView] Skipping load: existing dimension data found");
-      hasHydratedActualGraphRef.current = true;
-      return;
-    }
-
     console.log("[LineageView] Starting API call to load graph...");
     let cancelled = false;
     setLoadError(""); // Clear any previous errors
@@ -540,7 +535,7 @@ export function LineageWorkbenchItemLineageView({
     return () => {
       cancelled = true;
     };
-  }, [dataSourceMode, workspaceId, targetLakehouseId, workloadClient, lineage, onLineageChange]);
+  }, [dataSourceMode, workspaceId, targetLakehouseId, workloadClient, refreshNonce, onLineageChange]);
 
   const activeSnapshot = useMemo(() => {
     if (dataSourceMode === "mock") {
@@ -769,7 +764,7 @@ export function LineageWorkbenchItemLineageView({
     // Convert v_nodes to LineageViewerNode with enrichment from dimension tables
     for (const rawNode of rawNodes) {
       // Primary column names from user's v_nodes schema: node_id, parent_node, node_name, dataset_id, node_type
-      const { nodeId, nodeName, nodeType, parentNodeId: parentNode, datasetId } = resolveNodeFields(rawNode);
+      const { nodeId, nodeName, nodeType, parentNodeId: parentNode, datasetId, tableName } = resolveNodeFields(rawNode);
       
       // Construct UID adaptively based on available fields
       // For columns, use node_id directly (matches node_id format: table_name|column_name|dataset_id)
@@ -796,6 +791,7 @@ export function LineageWorkbenchItemLineageView({
         entityType: nodeType as LineageViewerNode["entityType"],
         parentNodeId: parentNode || undefined,
         datasetId: datasetId || undefined,  // Include dataset_id from v_nodes
+        tableName: tableName || undefined,
         isGroupNode: false,  // Will be determined by checking if any nodes have this as parent
       };
 
@@ -847,19 +843,35 @@ export function LineageWorkbenchItemLineageView({
             if (detailRecord) {
               enrichedNode.reportId = detailRecord.report_id || detailRecord.reportId;
               enrichedNode.pageId = detailRecord.page_name || detailRecord.pageName;
-              enrichedNode.visualType = detailRecord.type || detailRecord.visual_type || detailRecord.visualType;
-              // Try multiple field name variations
-              enrichedNode.displayName = 
-                detailRecord.title || 
-                detailRecord.visual_title || 
-                detailRecord.visualTitle || 
-                detailRecord.display_name || 
-                detailRecord.displayName || 
-                detailRecord.visual_name || 
-                detailRecord.visualName || 
-                detailRecord.name || 
-                nodeName || 
-                nodeId;
+              enrichedNode.visualId =
+                detailRecord.visual_name ||
+                detailRecord.visualName ||
+                detailRecord.name ||
+                enrichedNode.visualId;
+              enrichedNode.visualType =
+                detailRecord.display_type ||
+                detailRecord.type ||
+                detailRecord.visual_type ||
+                detailRecord.visualType;
+
+              const visualTitle =
+                detailRecord.title ||
+                detailRecord.visual_title ||
+                detailRecord.visualTitle ||
+                detailRecord.display_name ||
+                detailRecord.displayName;
+              const visualName =
+                detailRecord.visual_name ||
+                detailRecord.visualName ||
+                detailRecord.name ||
+                nodeName;
+              const visualTypeLabel = enrichedNode.visualType || "Visual";
+
+              enrichedNode.displayName = visualTitle
+                ? `${visualTypeLabel}: ${visualTitle}`
+                : visualName
+                  ? `${visualTypeLabel}: ${visualName}`
+                  : nodeId;
               wasEnriched = true;
             }
             break;
@@ -898,6 +910,7 @@ export function LineageWorkbenchItemLineageView({
           case "column":
             detailRecord = columnsByUid.get(dataUid);
             if (detailRecord) {
+              enrichedNode.tableName = detailRecord.table_name || detailRecord.tableName || enrichedNode.tableName;
               enrichedNode.displayName = 
                 detailRecord.column_name || 
                 detailRecord.columnName || 
@@ -1548,6 +1561,34 @@ export function LineageWorkbenchItemLineageView({
           </div>
         ) : (
           <>
+            {/* ── Layout selection controls (always visible) ── */}
+            <div style={{ 
+              padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+              borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+              backgroundColor: tokens.colorNeutralBackground2,
+              display: "flex", 
+              gap: tokens.spacingHorizontalS, 
+              alignItems: "center" 
+            }}>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                {t("LineageWorkbench_ExploreLayout", "Layout")}:
+              </Text>
+              <RadioGroup
+                layout="horizontal"
+                value={exploreLayout}
+                onChange={(_, data) => {
+                  const value = String(data.value);
+                  const next: ExploreLayoutMode =
+                    value === "side-by-side" || value === "stacked" ? value : "detail-focused";
+                  setExploreLayout(next);
+                }}
+              >
+                <Radio value="detail-focused" label={t("LineageWorkbench_ExploreLayout_DetailFocused", "Detail focused")} />
+                <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side-by-Side")} />
+                <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
+              </RadioGroup>
+            </div>
+
             {exploreLayout === "stacked" ? (
               <>
                 {/* Table panel */}
@@ -1627,6 +1668,7 @@ export function LineageWorkbenchItemLineageView({
                       edges={filteredEdges}
                       selectedNodeId={selectedNodeId}
                       onNodeSelect={(id) => {
+                        setSelectionSource("table");
                         setSelectedNodeId(id);
                         if (!detailExpanded) setDetailExpanded(true);
                       }}
@@ -1648,55 +1690,6 @@ export function LineageWorkbenchItemLineageView({
                   fillHeight={graphFills}
                   customHeight={graphExpanded && !graphFills ? graphHeight : undefined}
                 >
-                  {/* Graph controls */}
-                  <div style={{ 
-                    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
-                    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-                    display: "flex",
-                    gap: tokens.spacingHorizontalL,
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    backgroundColor: tokens.colorNeutralBackground2,
-                  }}>
-                    <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
-                      <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                        {t("LineageWorkbench_GraphDisplayMode", "Display mode")}:
-                      </Text>
-                      <RadioGroup
-                        layout="horizontal"
-                        value={graphDisplayMode}
-                        onChange={(_, data) => {
-                          setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
-                        }}
-                      >
-                        <Radio
-                          value="highlight"
-                          label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight")}
-                        />
-                        <Radio
-                          value="filter"
-                          label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter")}
-                        />
-                      </RadioGroup>
-                    </div>
-                    
-                    <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
-                      <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                        {t("LineageWorkbench_GraphNodeLimit", "Max nodes")}:
-                      </Text>
-                      <Select
-                        value={String(graphNodeLimit)}
-                        onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
-                        size="small"
-                        style={{ minWidth: "80px" }}
-                      >
-                        {[80, 120, 200, 350, 500].map((limit) => (
-                          <option key={limit} value={String(limit)}>{limit}</option>
-                        ))}
-                      </Select>
-                    </div>
-                  </div>
-
                   {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (
                     <div className={styles.graphHint}>
                       <Text className={styles.graphHintText}>
@@ -1750,6 +1743,7 @@ export function LineageWorkbenchItemLineageView({
                         });
                       }}
                       onNodeClick={(id) => {
+                        setSelectionSource("graph");
                         setSelectedNodeId(id);
                         if (!detailExpanded) setDetailExpanded(true);
                       }}
@@ -1774,33 +1768,6 @@ export function LineageWorkbenchItemLineageView({
                 }}
                 fillHeight
               >
-                {/* Layout controls */}
-                <div style={{ 
-                  padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
-                  borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-                  backgroundColor: tokens.colorNeutralBackground2,
-                  display: "flex", 
-                  gap: tokens.spacingHorizontalS, 
-                  alignItems: "center" 
-                }}>
-                  <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                    {t("LineageWorkbench_ExploreLayout", "Layout")}:
-                  </Text>
-                  <RadioGroup
-                    layout="horizontal"
-                    value={exploreLayout}
-                    onChange={(_, data) => {
-                      const value = String(data.value);
-                      const next: ExploreLayoutMode =
-                        value === "side-by-side" || value === "stacked" ? value : "detail-focused";
-                      setExploreLayout(next);
-                    }}
-                  >
-                    <Radio value="detail-focused" label={t("LineageWorkbench_ExploreLayout_DetailFocused", "Detail focused")} />
-                    <Radio value="side-by-side" label={t("LineageWorkbench_ExploreLayout_SideBySide", "Side-by-Side")} />
-                    <Radio value="stacked" label={t("LineageWorkbench_ExploreLayout_Stacked", "Stacked")} />
-                  </RadioGroup>
-                </div>
                 {dataSourceMode === "actual" && !targetLakehouseId && (
                   <div className={styles.graphHint}>
                     <MessageBar intent="warning">
@@ -1885,6 +1852,7 @@ export function LineageWorkbenchItemLineageView({
                           edges={filteredEdges}
                           selectedNodeId={selectedNodeId}
                           onNodeSelect={(id) => {
+                            setSelectionSource("table");
                             setSelectedNodeId(id);
                           }}
                         />
@@ -1903,10 +1871,12 @@ export function LineageWorkbenchItemLineageView({
                         edges={edges}
                         dimensions={activeSnapshot?.dimensions}
                         selectedNodeId={selectedNodeId}
+                        selectionSource={selectionSource}
                         requirementsCount={lineage?.requirements?.length ?? 0}
                         onOpenRequirementsBoard={onOpenRequirementsBoard}
                         onCreateRequirement={handleCreateRequirement}
-                        onNodeSelect={(nodeId) => {
+                        onNodeSelect={(nodeId, source) => {
+                          setSelectionSource(source ?? "detail");
                           setSelectedNodeId(nodeId);
                         }}
                       />
@@ -1928,55 +1898,6 @@ export function LineageWorkbenchItemLineageView({
                     fillHeight={graphFills}
                     customHeight={graphExpanded && !graphFills ? graphHeight : undefined}
                   >
-                    {/* Graph controls */}
-                    <div style={{ 
-                      padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
-                      borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-                      display: "flex",
-                      gap: tokens.spacingHorizontalL,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      backgroundColor: tokens.colorNeutralBackground2,
-                    }}>
-                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
-                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                          {t("LineageWorkbench_GraphDisplayMode", "Display mode")}:
-                        </Text>
-                        <RadioGroup
-                          layout="horizontal"
-                          value={graphDisplayMode}
-                          onChange={(_, data) => {
-                            setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
-                          }}
-                        >
-                          <Radio
-                            value="highlight"
-                            label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight")}
-                          />
-                          <Radio
-                            value="filter"
-                            label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter")}
-                          />
-                        </RadioGroup>
-                      </div>
-                      
-                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
-                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                          {t("LineageWorkbench_GraphNodeLimit", "Max nodes")}:
-                        </Text>
-                        <Select
-                          value={String(graphNodeLimit)}
-                          onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
-                          size="small"
-                          style={{ minWidth: "80px" }}
-                        >
-                          {[80, 120, 200, 350, 500].map((limit) => (
-                            <option key={limit} value={String(limit)}>{limit}</option>
-                          ))}
-                        </Select>
-                      </div>
-                    </div>
-
                     {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (
                       <div className={styles.graphHint}>
                         <Text className={styles.graphHintText}>
@@ -2030,6 +1951,7 @@ export function LineageWorkbenchItemLineageView({
                           });
                         }}
                         onNodeClick={(id) => {
+                          setSelectionSource("graph");
                           setSelectedNodeId(id);
                         }}
                       />
@@ -2111,6 +2033,7 @@ export function LineageWorkbenchItemLineageView({
                         edges={filteredEdges}
                         selectedNodeId={selectedNodeId}
                         onNodeSelect={(id) => {
+                          setSelectionSource("table");
                           setSelectedNodeId(id);
                           if (!detailExpanded) setDetailExpanded(true);
                         }}
@@ -2124,55 +2047,6 @@ export function LineageWorkbenchItemLineageView({
                     <div className={styles.splitPaneHeader}>
                       <span>{t("LineageWorkbench_Panel_Graph", "Graph")}</span>
                       <span>{`${graphNodes.length}/${filtered.length}`}</span>
-                    </div>
-
-                    {/* Graph controls */}
-                    <div style={{ 
-                      padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`, 
-                      borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-                      display: "flex",
-                      gap: tokens.spacingHorizontalL,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      backgroundColor: tokens.colorNeutralBackground2,
-                    }}>
-                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
-                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                          {t("LineageWorkbench_GraphDisplayMode", "Display mode")}:
-                        </Text>
-                        <RadioGroup
-                          layout="horizontal"
-                          value={graphDisplayMode}
-                          onChange={(_, data) => {
-                            setGraphDisplayMode(data.value === "filter" ? "filter" : "highlight");
-                          }}
-                        >
-                          <Radio
-                            value="highlight"
-                            label={t("LineageWorkbench_GraphDisplayMode_Highlight", "Highlight")}
-                          />
-                          <Radio
-                            value="filter"
-                            label={t("LineageWorkbench_GraphDisplayMode_Filter", "Filter")}
-                          />
-                        </RadioGroup>
-                      </div>
-                      
-                      <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" }}>
-                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
-                          {t("LineageWorkbench_GraphNodeLimit", "Max nodes")}:
-                        </Text>
-                        <Select
-                          value={String(graphNodeLimit)}
-                          onChange={(_, data) => setGraphNodeLimit(Number(data.value) || DEFAULT_GRAPH_NODE_LIMIT)}
-                          size="small"
-                          style={{ minWidth: "80px" }}
-                        >
-                          {[80, 120, 200, 350, 500].map((limit) => (
-                            <option key={limit} value={String(limit)}>{limit}</option>
-                          ))}
-                        </Select>
-                      </div>
                     </div>
 
                     {(hiddenNodeCount > 0 || hiddenEdgeCount > 0) && (
@@ -2228,6 +2102,7 @@ export function LineageWorkbenchItemLineageView({
                           });
                         }}
                         onNodeClick={(id) => {
+                          setSelectionSource("graph");
                           setSelectedNodeId(id);
                           if (!detailExpanded) setDetailExpanded(true);
                         }}
@@ -2264,10 +2139,12 @@ export function LineageWorkbenchItemLineageView({
                 edges={edges}
                 dimensions={activeSnapshot?.dimensions}
                 selectedNodeId={selectedNodeId}
+                selectionSource={selectionSource}
                 requirementsCount={lineage?.requirements?.length ?? 0}
                 onOpenRequirementsBoard={onOpenRequirementsBoard}
                 onCreateRequirement={handleCreateRequirement}
-                onNodeSelect={(nodeId) => {
+                onNodeSelect={(nodeId, source) => {
+                  setSelectionSource(source ?? "detail");
                   setSelectedNodeId(nodeId);
                   setGraphExpanded(true);
                 }}

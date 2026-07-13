@@ -2,7 +2,7 @@
  * FabricNotebookClient - Triggers and monitors Fabric Notebook execution via the Jobs API.
  *
  * Used by LineageWorkbenchItemExtractionView to run the extraction notebooks
- * (Extract_Datasets_and_Reports, Extract_Datasources_from_SemanticModels, etc.)
+ * (bronze, silver, edge) on-demand from the Workbench UI.
  * on-demand from the Workbench UI.
  *
  * API Reference:
@@ -14,6 +14,7 @@
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { FabricPlatformClient, FabricPlatformError } from "./FabricPlatformClient";
 import { SCOPE_PAIRS } from "./FabricPlatformScopes";
+import { SparkLivyClient } from "./SparkLivyClient";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +38,19 @@ export interface NotebookJobInstance {
   failureReason?: { errorCode: string; message: string } | null;
   startTimeUtc?: string;
   endTimeUtc?: string;
+  progress?: number;
+  completed?: number;
+  total?: number;
+  details?: Record<string, unknown>;
+}
+
+export interface NotebookExecutionProgress {
+  notebookName: string;
+  status: NotebookJobStatus;
+  jobInstanceId: string;
+  completedCells?: number;
+  totalCells?: number;
+  progressPercent?: number;
 }
 
 export interface FabricNotebookItem {
@@ -76,8 +90,227 @@ export interface ExtractionJobParameters {
  *   const status = await client.pollJobStatus(workspaceId, notebookId, jobInstanceId);
  */
 export class FabricNotebookClient extends FabricPlatformClient {
+  private readonly sparkLivyClient: SparkLivyClient;
+
   constructor(workloadClient: WorkloadClientAPI) {
     super(workloadClient, SCOPE_PAIRS.ITEM_READWRITE);
+    this.sparkLivyClient = new SparkLivyClient(workloadClient);
+  }
+
+  private findSessionId(details: Record<string, unknown>): string | undefined {
+    const queue: Array<{ key: string; value: unknown }> = Object.entries(details).map(([key, value]) => ({ key, value }));
+    const visited = new Set<unknown>();
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) {
+        continue;
+      }
+
+      const { key, value } = current;
+      if (value === null || value === undefined) {
+        continue;
+      }
+
+      if (typeof value === "string" || typeof value === "number") {
+        if (/(sessionid|session_id|livysession|sparksession)/i.test(key)) {
+          const text = String(value).trim();
+          if (text) {
+            return text;
+          }
+        }
+        continue;
+      }
+
+      if (typeof value !== "object" || visited.has(value)) {
+        continue;
+      }
+
+      visited.add(value);
+
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => {
+          queue.push({ key: `${key}[${index}]`, value: entry });
+        });
+        continue;
+      }
+
+      for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
+        queue.push({ key: childKey, value: childValue });
+      }
+    }
+
+    return undefined;
+  }
+
+  private summarizeDetails(details: Record<string, unknown> | undefined): string {
+    if (!details || Object.keys(details).length === 0) {
+      return "Job details were empty.";
+    }
+
+    const topLevelKeys = Object.keys(details).slice(0, 12);
+    const compact = JSON.stringify(details);
+    const compactPreview = compact.length > 1000 ? `${compact.slice(0, 1000)}...` : compact;
+    return `Job detail keys: ${topLevelKeys.join(", ")} :: detailsPreview=${compactPreview}`;
+  }
+
+  private summarizeStatementFailure(statement: Record<string, unknown>): string {
+    const statementId = statement.id !== undefined ? `statement ${String(statement.id)}` : "statement";
+    const state = typeof statement.state === "string" ? statement.state : "unknown";
+
+    const output = (statement.output || {}) as Record<string, unknown>;
+    const outputStatus = typeof output.status === "string" ? output.status : undefined;
+    const outputData = (output.data || {}) as Record<string, unknown>;
+
+    let detail = "";
+    if (typeof outputData.evalue === "string" && outputData.evalue.trim()) {
+      detail = outputData.evalue.trim();
+    } else if (typeof outputData["text/plain"] === "string" && outputData["text/plain"].trim()) {
+      detail = outputData["text/plain"].trim();
+    } else if (Array.isArray(outputData.traceback) && outputData.traceback.length > 0) {
+      const firstLine = String(outputData.traceback[0] || "").trim();
+      detail = firstLine;
+    } else if (typeof output.status === "string") {
+      detail = output.status;
+    }
+
+    const prefix = outputStatus ? `${statementId} (${state}, output=${outputStatus})` : `${statementId} (${state})`;
+    if (!detail) {
+      return prefix;
+    }
+
+    const normalized = detail.replace(/\s+/g, " ").trim();
+    return `${prefix}: ${normalized.length > 600 ? `${normalized.slice(0, 600)}...` : normalized}`;
+  }
+
+  private async tryGetLivyFailureDiagnostics(
+    workspaceId: string,
+    targetLakehouseId: string | undefined,
+    details: Record<string, unknown> | undefined
+  ): Promise<string> {
+    if (!targetLakehouseId || !details) {
+      if (!targetLakehouseId) {
+        return "Livy diagnostics skipped: targetLakehouseId was not provided.";
+      }
+      return "Livy diagnostics skipped: no job details were returned by the notebook jobs API.";
+    }
+
+    const sessionId = this.findSessionId(details);
+    if (!sessionId) {
+      return `Livy diagnostics skipped: no session ID found in job details. ${this.summarizeDetails(details)}`;
+    }
+
+    try {
+      const statements = await this.sparkLivyClient.listStatements(workspaceId, targetLakehouseId, sessionId);
+      if (!Array.isArray(statements) || statements.length === 0) {
+        return `Livy session ${sessionId} had no statements available for diagnostics.`;
+      }
+
+      const failed = statements.find((statement) => {
+        const state = (statement.state || "").toString().toLowerCase();
+        const statementOutput = (statement.output || {}) as Record<string, unknown>;
+        const outputStatus = (statementOutput.status || "").toString().toLowerCase();
+        return (
+          state.includes("error") ||
+          state.includes("fail") ||
+          state.includes("cancel") ||
+          outputStatus.includes("error")
+        );
+      });
+
+      const lastStatement = statements[statements.length - 1];
+      const chosen = (failed || lastStatement) as unknown as Record<string, unknown>;
+      return `Livy diagnostics (session ${sessionId}): ${this.summarizeStatementFailure(chosen)}`;
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      return `Could not retrieve Livy diagnostics for session ${sessionId}: ${reason}`;
+    }
+  }
+
+  private formatNotebookFailure(instance: NotebookJobInstance): string {
+    const details = (instance.details || {}) as Record<string, unknown>;
+    const messageParts: string[] = [];
+
+    if (instance.failureReason?.errorCode) {
+      messageParts.push(`errorCode=${instance.failureReason.errorCode}`);
+    }
+
+    if (instance.failureReason?.message) {
+      messageParts.push(instance.failureReason.message);
+    }
+
+    if (instance.failureReason?.errorCode === "System_Cancelled_Session_Statements_Failed") {
+      messageParts.push(
+        "Hint: this usually indicates a statement crash inside the notebook kernel. " +
+          "Most common causes are missing semantic-link libraries in the selected Spark environment or invalid table/lakehouse context."
+      );
+    }
+
+    const candidateValues: string[] = [];
+    const visited = new Set<unknown>();
+
+    const walk = (value: unknown, depth: number) => {
+      if (value === null || value === undefined || depth > 4 || visited.has(value)) {
+        return;
+      }
+
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed) {
+          candidateValues.push(trimmed);
+        }
+        return;
+      }
+
+      if (typeof value !== "object") {
+        return;
+      }
+
+      visited.add(value);
+
+      if (Array.isArray(value)) {
+        value.forEach((entry) => walk(entry, depth + 1));
+        return;
+      }
+
+      const objectValue = value as Record<string, unknown>;
+      for (const [key, entry] of Object.entries(objectValue)) {
+        if (
+          /(error|message|exception|stack|trace|statement|reason|detail|cause)/i.test(key) ||
+          depth <= 1
+        ) {
+          walk(entry, depth + 1);
+        }
+      }
+    };
+
+    walk(details, 0);
+
+    const normalized = new Set<string>();
+    for (const text of candidateValues) {
+      const cleaned = text.replace(/\s+/g, " ").trim();
+      if (!cleaned) {
+        continue;
+      }
+      if (cleaned.length > 800) {
+        normalized.add(`${cleaned.slice(0, 800)}...`);
+      } else {
+        normalized.add(cleaned);
+      }
+      if (normalized.size >= 5) {
+        break;
+      }
+    }
+
+    if (normalized.size > 0) {
+      messageParts.push(Array.from(normalized).join(" | "));
+    }
+
+    if (messageParts.length === 0) {
+      messageParts.push(instance.status);
+    }
+
+    return messageParts.join(" :: ");
   }
 
   // -------------------------------------------------------------------------
@@ -86,7 +319,7 @@ export class FabricNotebookClient extends FabricPlatformClient {
 
   /**
    * List all Notebook items in a workspace.
-   * Use this to map display names (e.g. "Extract_Datasets_and_Reports") to item IDs
+  * Use this to map display names to item IDs
    * so the extraction view can present a selection UI.
    */
   async listNotebooks(workspaceId: string): Promise<FabricNotebookItem[]> {
@@ -238,7 +471,7 @@ export class FabricNotebookClient extends FabricPlatformClient {
     workspaceId: string,
     notebookId: string,
     jobInstanceId: string,
-    onProgress?: (status: NotebookJobStatus) => void,
+    onProgress?: (instance: NotebookJobInstance) => void,
     pollIntervalMs = 5_000,
     timeoutMs = 30 * 60 * 1_000
   ): Promise<NotebookJobInstance> {
@@ -253,12 +486,13 @@ export class FabricNotebookClient extends FabricPlatformClient {
 
     while (Date.now() < deadline) {
       const instance = await this.pollJobStatus(workspaceId, notebookId, jobInstanceId);
-      onProgress?.(instance.status);
+      onProgress?.(instance);
 
       if (terminalStates.includes(instance.status)) {
         if (instance.status !== "Completed") {
-          const reason = instance.failureReason?.message ?? instance.status;
-          throw new Error(`Notebook job ended with status "${instance.status}": ${reason}`);
+          const reason = this.formatNotebookFailure(instance);
+          const detailsSummary = this.summarizeDetails(instance.details);
+          throw new Error(`Notebook job ended with status "${instance.status}": ${reason} :: ${detailsSummary}`);
         }
         return instance;
       }
@@ -275,9 +509,49 @@ export class FabricNotebookClient extends FabricPlatformClient {
 
   /** Display names of the extraction notebooks (must be uploaded to Fabric first) */
   static readonly EXTRACTION_NOTEBOOKS = [
-    "Extract_Datasets_and_Reports",
-    "Extract_Datasources_from_SemanticModels",
+    "1_LineageWorkbench_Extract_Raw_Metadata",
+    "2_LineageWorkbench_Build_Node_View",
+    "3_LineageWorkbench_BuildEdges",
+    "4_LineageWorkbench_Map_M_Datasources",
   ] as const;
+
+  private extractCellProgress(instance: NotebookJobInstance): {
+    completedCells?: number;
+    totalCells?: number;
+    progressPercent?: number;
+  } {
+    const details = (instance.details || {}) as Record<string, unknown>;
+
+    const readNumber = (value: unknown): number | undefined => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === "string") {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : undefined;
+      }
+      return undefined;
+    };
+
+    const completedCells =
+      readNumber(instance.completed) ??
+      readNumber(details.completedCells) ??
+      readNumber(details.completedCellCount) ??
+      readNumber(details.cellsCompleted);
+
+    const totalCells =
+      readNumber(instance.total) ??
+      readNumber(details.totalCells) ??
+      readNumber(details.totalCellCount) ??
+      readNumber(details.cellsTotal);
+
+    let progressPercent = readNumber(instance.progress) ?? readNumber(details.progressPercent);
+    if (progressPercent === undefined && completedCells !== undefined && totalCells && totalCells > 0) {
+      progressPercent = Math.min(100, Math.max(0, (completedCells / totalCells) * 100));
+    }
+
+    return { completedCells, totalCells, progressPercent };
+  }
 
   /**
    * Run all configured extraction notebooks in sequence.
@@ -292,7 +566,8 @@ export class FabricNotebookClient extends FabricPlatformClient {
     workspaceId: string,
     parameters: ExtractionJobParameters,
     onNotebookStart?: (name: string) => void,
-    onNotebookDone?: (name: string) => void
+    onNotebookDone?: (name: string) => void,
+    onNotebookProgress?: (progress: NotebookExecutionProgress) => void
   ): Promise<void> {
     for (const name of FabricNotebookClient.EXTRACTION_NOTEBOOKS) {
       const notebook = await this.findNotebookByName(workspaceId, name);
@@ -304,13 +579,52 @@ export class FabricNotebookClient extends FabricPlatformClient {
       }
 
       onNotebookStart?.(name);
-      const { jobInstanceId } = await this.triggerNotebook(
-        workspaceId,
-        notebook.id,
-        parameters
-      );
-      await this.waitForCompletion(workspaceId, notebook.id, jobInstanceId);
-      onNotebookDone?.(name);
+      let currentJobInstanceId: string | undefined;
+      try {
+        const { jobInstanceId } = await this.triggerNotebook(
+          workspaceId,
+          notebook.id,
+          parameters
+        );
+        currentJobInstanceId = jobInstanceId;
+        await this.waitForCompletion(
+          workspaceId,
+          notebook.id,
+          jobInstanceId,
+          (instance) => {
+            const cellProgress = this.extractCellProgress(instance);
+            onNotebookProgress?.({
+              notebookName: name,
+              status: instance.status,
+              jobInstanceId,
+              completedCells: cellProgress.completedCells,
+              totalCells: cellProgress.totalCells,
+              progressPercent: cellProgress.progressPercent,
+            });
+          }
+        );
+        onNotebookDone?.(name);
+      } catch (err) {
+        let reason = err instanceof Error ? err.message : String(err);
+
+        if (currentJobInstanceId) {
+          try {
+            const latestInstance = await this.pollJobStatus(workspaceId, notebook.id, currentJobInstanceId);
+            const livyDiagnostics = await this.tryGetLivyFailureDiagnostics(
+              workspaceId,
+              parameters.targetLakehouseId,
+              latestInstance.details
+            );
+            reason = `${reason} :: ${livyDiagnostics}`;
+          } catch {
+            // Keep the original failure reason if diagnostics retrieval fails.
+          }
+        } else {
+          reason = `${reason} :: Livy diagnostics skipped: no job instance ID captured.`;
+        }
+
+        throw new Error(`Notebook "${name}" failed: ${reason}`);
+      }
     }
   }
 }

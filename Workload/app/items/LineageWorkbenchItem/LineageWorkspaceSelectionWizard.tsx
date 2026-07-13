@@ -17,8 +17,9 @@ import {
 } from "@fluentui/react-components";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { WorkspaceClient } from "../../clients/WorkspaceClient";
+import { CapacityClient } from "../../clients/CapacityClient";
 import { FabricPlatformError } from "../../clients/FabricPlatformClient";
-import { Workspace } from "../../clients/FabricPlatformTypes";
+import { Capacity, Workspace } from "../../clients/FabricPlatformTypes";
 
 const useStyles = makeStyles({
   content: {
@@ -64,11 +65,19 @@ const useStyles = makeStyles({
   workspaceName: {
     fontWeight: tokens.fontWeightSemibold,
   },
+  workspaceMeta: {
+    color: tokens.colorNeutralForeground3,
+  },
+  workspaceWarning: {
+    color: tokens.colorStatusDangerForeground1,
+  },
 });
 
 export interface WorkspaceSelectionResult {
   workspaceIds: string[];
   workspaceNames: string[];
+  workspaceTypes: string[];
+  reportExtractionWarnings: string[];
 }
 
 interface LineageWorkspaceSelectionWizardProps {
@@ -87,6 +96,7 @@ export function LineageWorkspaceSelectionWizard(props: LineageWorkspaceSelection
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [capacityById, setCapacityById] = useState<Record<string, Capacity>>({});
   const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<Set<string>>(new Set(preSelectedWorkspaceIds));
 
   useEffect(() => {
@@ -101,8 +111,24 @@ export function LineageWorkspaceSelectionWizard(props: LineageWorkspaceSelection
 
     try {
       const client = new WorkspaceClient(workloadClient);
+      const capacityClient = new CapacityClient(workloadClient);
+
       const allWorkspaces = await client.getAllWorkspaces();
       setWorkspaces(allWorkspaces);
+
+      try {
+        const capacities = await capacityClient.getAllCapacities();
+        const nextCapacityById = capacities.reduce<Record<string, Capacity>>((acc, capacity) => {
+          if (capacity.id) {
+            acc[capacity.id] = capacity;
+          }
+          return acc;
+        }, {});
+        setCapacityById(nextCapacityById);
+      } catch {
+        // Capacity metadata is optional enrichment for workspace classification.
+        setCapacityById({});
+      }
     } catch (err) {
       let errorMessage: string;
       if (err instanceof FabricPlatformError) {
@@ -125,6 +151,41 @@ export function LineageWorkspaceSelectionWizard(props: LineageWorkspaceSelection
     }
   };
 
+  const getWorkspaceTypeLabel = (workspace: Workspace): string => {
+    const capacity = workspace.capacityId ? capacityById[workspace.capacityId] : undefined;
+    const sku = capacity?.sku?.trim();
+
+    if (workspace.type === "Personal") {
+      return "Personal workspace";
+    }
+
+    if (!workspace.capacityId) {
+      return "Shared (Pro/PPU)";
+    }
+
+    if (!sku) {
+      return "Capacity-backed";
+    }
+
+    const normalizedSku = sku.toUpperCase();
+    if (normalizedSku.startsWith("F")) {
+      return `Fabric capacity (${normalizedSku})`;
+    }
+    if (normalizedSku.startsWith("P") || normalizedSku.includes("PREMIUM")) {
+      return `Premium capacity (${normalizedSku})`;
+    }
+
+    return `Capacity-backed (${normalizedSku})`;
+  };
+
+  const getWorkspaceReportWarning = (workspace: Workspace): string | null => {
+    // Best-effort signal: no dedicated capacity usually means shared (Pro/PPU).
+    if (workspace.type === "Workspace" && !workspace.capacityId) {
+      return "No dedicated Fabric/Premium capacity detected. If this is Pro-only (not PPU), report data extraction is not supported.";
+    }
+    return null;
+  };
+
   const toggleWorkspace = (workspaceId: string) => {
     const next = new Set(selectedWorkspaceIds);
     if (next.has(workspaceId)) {
@@ -137,13 +198,18 @@ export function LineageWorkspaceSelectionWizard(props: LineageWorkspaceSelection
 
   const handleComplete = () => {
     const selectedIds = Array.from(selectedWorkspaceIds);
-    const selectedNames = workspaces
-      .filter((ws) => selectedWorkspaceIds.has(ws.id))
-      .map((ws) => ws.displayName || ws.id);
+    const selectedWorkspaces = workspaces.filter((ws) => selectedWorkspaceIds.has(ws.id));
+    const selectedNames = selectedWorkspaces.map((ws) => ws.displayName || ws.id);
+    const selectedTypes = selectedWorkspaces.map((ws) => getWorkspaceTypeLabel(ws));
+    const selectedWarnings = selectedWorkspaces
+      .map((ws) => getWorkspaceReportWarning(ws))
+      .filter((warning): warning is string => Boolean(warning));
 
     onComplete({
       workspaceIds: selectedIds,
       workspaceNames: selectedNames,
+      workspaceTypes: selectedTypes,
+      reportExtractionWarnings: selectedWarnings,
     });
     onClose();
   };
@@ -206,12 +272,20 @@ export function LineageWorkspaceSelectionWizard(props: LineageWorkspaceSelection
                         />
                         <div className={styles.workspaceInfo}>
                           <Text className={styles.workspaceName}>{workspace.displayName || workspace.id}</Text>
-                          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                          <Text size={200} className={styles.workspaceMeta}>
                             {workspace.id}
                           </Text>
+                          <Text size={200} className={styles.workspaceMeta}>
+                            Workspace type: {getWorkspaceTypeLabel(workspace)}
+                          </Text>
                           {workspace.description && (
-                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                            <Text size={200} className={styles.workspaceMeta}>
                               {workspace.description}
+                            </Text>
+                          )}
+                          {getWorkspaceReportWarning(workspace) && (
+                            <Text size={200} className={styles.workspaceWarning}>
+                              {getWorkspaceReportWarning(workspace)}
                             </Text>
                           )}
                         </div>

@@ -17,72 +17,52 @@ const sql = require("mssql");
 
 const FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1";
 
-// New simplified view-based architecture
+// Current node/edge tables emitted by the rebuilt notebooks.
 const LINEAGE_REQUIRED_TABLES = ["v_nodes", "v_edges"];
-const LINEAGE_NODE_VIEW_ALIASES = [
-  "v_nodes",
-  "vw_nodes",
-  "view_nodes",
-  "lineage_nodes",
-  "nodes",
-];
-const LINEAGE_EDGE_VIEW_ALIASES = [
-  "v_edges",
-  "vw_edges",
-  "view_edges",
-  "lineage_edges",
-  "edges",
-];
-const LINEAGE_OPTIONAL_TABLES = [
-  // Node/edge view aliases (for compatibility with customized lakehouse view names)
-  ...LINEAGE_NODE_VIEW_ALIASES,
-  ...LINEAGE_EDGE_VIEW_ALIASES,
-  // Dimension tables with detailed metadata (support both t_dataset_* and t_datamodel_* naming)
-  "t_dataset_reports",
-  "t_report_reports",  // Alternative naming convention
-  "t_report_metadata", // New bronze naming
-  "t_dataset_pages",
-  "t_report_pages",  // Alternative naming convention
-  "t_dataset_visuals",
-  "t_report_visuals",  // Alternative naming convention
-  "t_dataset_semantic_models",
-  "t_dataset_tables",
-  "t_dataset_columns",
-  "t_dataset_measures",
-  "t_dataset_measure",
-  "t_dataset_relationships",
-  "t_dataset_relations",  // Alternative naming for relationships table
-  "t_dataset_lakehouses",
-  "t_lakehouse_metadata", // New bronze naming
-  "t_dataset_warehouses",
-  "t_warehouse_metadata", // New bronze naming
-  "t_dataset_datasources", // New edge datasource extraction output
-  "t_dataset_column_lineage",  // Column transformation query steps
-  "t_column_lineage",  // Legacy / notebook output name for query steps
-  "t_datamodel_reports",
-  "t_datamodel_pages",
-  "t_datamodel_visuals",
-  "t_datamodel_semantic_models",
-  "t_datamodel_tables",
-  "t_datamodel_columns",
-  "t_datamodel_measures",
-  "t_datamodel_relationships",
-  "t_datamodel_lakehouses",
-  "t_datamodel_warehouses",
-  // Legacy tables (kept for backward compatibility)
-  "lineage_reports",
-  "lineage_report_pages",
-  "lineage_report_visuals",
-  "lineage_report_semantic_model_objects",
-  "lineage_semantic_models",
-  "lineage_semantic_model_tables",
-  "lineage_semantic_model_columns",
-  "lineage_semantic_model_measures",
-  "lineage_semantic_model_relationships",
-  "lineage_semantic_model_dependencies",
-  "lineage_lakehouses",
-  "lineage_warehouses",
-  "workspace_artifacts",
+const LINEAGE_TABLES = [
+    "t_dataset_reports",
+    "t_report_metadata",
+    "t_dataset_pages",
+    "t_report_pages",
+    "t_dataset_visuals",
+    "t_report_visuals",
+    "t_dataset_semantic_models",
+    "t_dataset_tables",
+    "t_dataset_columns",
+    "t_dataset_measures",
+    "t_dataset_measure",
+    "t_dataset_relationships",
+    "t_dataset_relations",
+    "t_dataset_lakehouses",
+    "t_lakehouse_metadata",
+    "t_dataset_warehouses",
+    "t_warehouse_metadata",
+    "t_dataset_datasources",
+    "t_dataset_column_lineage",
+    "t_column_lineage",
+    "t_datamodel_reports",
+    "t_datamodel_pages",
+    "t_datamodel_visuals",
+    "t_datamodel_semantic_models",
+    "t_datamodel_tables",
+    "t_datamodel_columns",
+    "t_datamodel_measures",
+    "t_datamodel_relationships",
+    "t_datamodel_lakehouses",
+    "t_datamodel_warehouses",
+    "lineage_reports",
+    "lineage_report_pages",
+    "lineage_report_visuals",
+    "lineage_report_semantic_model_objects",
+    "lineage_semantic_models",
+    "lineage_semantic_model_tables",
+    "lineage_semantic_model_columns",
+    "lineage_semantic_model_measures",
+    "lineage_semantic_model_relationships",
+    "lineage_semantic_model_dependencies",
+    "lineage_lakehouses",
+    "lineage_warehouses",
+    "workspace_artifacts",
 ];
 
 // ---------------------------------------------------------------------------
@@ -964,7 +944,7 @@ class LakehouseAnalyzerService {
     console.log("[LakehouseAnalyzerService] Using workspaceId:", resolvedWorkspaceId);
 
     const requestedTables = includeDimensions
-      ? [...LINEAGE_REQUIRED_TABLES, ...LINEAGE_OPTIONAL_TABLES]
+      ? [...LINEAGE_REQUIRED_TABLES, ...LINEAGE_TABLES]
       : [...LINEAGE_REQUIRED_TABLES];
 
     // Use lakehouseName as database (defaultSchema is 'dbo', which is a schema name, not a database name)
@@ -987,8 +967,8 @@ class LakehouseAnalyzerService {
       return [];
     };
 
-    const nodes = firstNonEmpty(...LINEAGE_NODE_VIEW_ALIASES.map((name) => output[name]));
-    const rawEdges = firstNonEmpty(...LINEAGE_EDGE_VIEW_ALIASES.map((name) => output[name]));
+    const nodes = firstNonEmpty(output.v_nodes);
+    const rawEdges = firstNonEmpty(output.v_edges);
     const normalizedGraph = normalizeLineageGraphNodesAndEdges(nodes, rawEdges);
     const normalizedNodes = normalizedGraph.nodes;
     const edges = normalizedGraph.edges;
@@ -998,66 +978,49 @@ class LakehouseAnalyzerService {
     }
 
     const dimensions = {
-      // New dimension tables (support both t_dataset_*, t_report_* and t_datamodel_* naming)
-      reports: firstNonEmpty(output.t_report_metadata, output.t_report_reports, output.t_dataset_reports, output.t_datamodel_reports, output.lineage_reports),
-      pages: firstNonEmpty(output.t_report_pages, output.t_dataset_pages, output.t_datamodel_pages, output.lineage_report_pages),
-      visuals: firstNonEmpty(output.t_report_visuals, output.t_dataset_visuals, output.t_datamodel_visuals, output.lineage_report_visuals),
+      reports: firstNonEmpty(output.t_report_metadata),
+      pages: firstNonEmpty(output.t_report_pages),
+      visuals: firstNonEmpty(output.t_report_visuals),
       semanticModels: firstNonEmpty(output.t_dataset_semantic_models, output.t_datamodel_semantic_models, output.lineage_semantic_models),
-      tables: firstNonEmpty(output.t_dataset_tables, output.t_datamodel_tables, output.lineage_semantic_model_tables),
-      columns: firstNonEmpty(output.t_dataset_columns, output.t_datamodel_columns, output.lineage_semantic_model_columns),
-      measures: firstNonEmpty(output.t_dataset_measures, output.t_dataset_measure, output.t_datamodel_measures, output.lineage_semantic_model_measures),
-      relationships: firstNonEmpty(output.t_dataset_relationships, output.t_dataset_relations, output.t_datamodel_relationships, output.lineage_semantic_model_relationships),
-      lakehouses: firstNonEmpty(output.t_lakehouse_metadata, output.t_dataset_lakehouses, output.t_datamodel_lakehouses, output.lineage_lakehouses),
-      warehouses: firstNonEmpty(output.t_warehouse_metadata, output.t_dataset_warehouses, output.t_datamodel_warehouses, output.warehouses),
+      tables: firstNonEmpty(output.t_dataset_tables),
+      columns: firstNonEmpty(output.t_dataset_columns),
+      measures: firstNonEmpty(output.t_dataset_measures, output.t_dataset_measure),
+      relationships: firstNonEmpty(output.t_dataset_relations, output.t_dataset_relationships),
+      lakehouses: firstNonEmpty(output.t_lakehouse_metadata, output.t_dataset_lakehouses),
+      warehouses: firstNonEmpty(output.t_warehouse_metadata, output.t_dataset_warehouses),
       datasources: firstNonEmpty(output.t_dataset_datasources),
       columnLineage: firstNonEmpty(output.t_dataset_column_lineage, output.t_column_lineage),
-      // Legacy aliases (for backward compatibility with old saved data)
-      reportPages: firstNonEmpty(output.t_report_pages, output.t_dataset_pages, output.t_datamodel_pages, output.lineage_report_pages),
-      reportVisuals: firstNonEmpty(output.t_report_visuals, output.t_dataset_visuals, output.t_datamodel_visuals, output.lineage_report_visuals),
-      smTables: firstNonEmpty(output.t_dataset_tables, output.t_datamodel_tables, output.lineage_semantic_model_tables),
-      smColumns: firstNonEmpty(output.t_dataset_columns, output.t_datamodel_columns, output.lineage_semantic_model_columns),
-      smMeasures: firstNonEmpty(output.t_dataset_measures, output.t_dataset_measure, output.t_datamodel_measures, output.lineage_semantic_model_measures),
-      smRelationships: firstNonEmpty(output.t_dataset_relationships, output.t_dataset_relations, output.t_datamodel_relationships, output.lineage_semantic_model_relationships),
-      smDependencies: firstNonEmpty(output.lineage_semantic_model_dependencies),
       workspaceArtifacts: firstNonEmpty(output.workspace_artifacts),
     };
 
     // Log which table names were actually found
     console.log("[LakehouseAnalyzer] ===== TABLE MAPPING DETAILS =====");
     console.log("[LakehouseAnalyzer] Reports:", {
-      selected: output.t_report_reports ? "t_report_reports" : output.t_dataset_reports ? "t_dataset_reports" : "none",
+      selected: output.t_report_metadata ? "t_report_metadata" : "none",
       count: dimensions.reports.length,
       available: [
-        output.t_report_reports?.length && `t_report_reports(${output.t_report_reports.length})`,
-        output.t_dataset_reports?.length && `t_dataset_reports(${output.t_dataset_reports.length})`,
-        output.t_datamodel_reports?.length && `t_datamodel_reports(${output.t_datamodel_reports.length})`
+        output.t_report_metadata?.length && `t_report_metadata(${output.t_report_metadata.length})`
       ].filter(Boolean).join(", ") || "none"
     });
     console.log("[LakehouseAnalyzer] Pages:", {
-      selected: output.t_report_pages ? "t_report_pages" : output.t_dataset_pages ? "t_dataset_pages" : "none",
+      selected: output.t_report_pages ? "t_report_pages" : "none",
       count: dimensions.pages.length,
       available: [
-        output.t_report_pages?.length && `t_report_pages(${output.t_report_pages.length})`,
-        output.t_dataset_pages?.length && `t_dataset_pages(${output.t_dataset_pages.length})`,
-        output.t_datamodel_pages?.length && `t_datamodel_pages(${output.t_datamodel_pages.length})`
+        output.t_report_pages?.length && `t_report_pages(${output.t_report_pages.length})`
       ].filter(Boolean).join(", ") || "none"
     });
     console.log("[LakehouseAnalyzer] Visuals:", {
-      selected: output.t_report_visuals ? "t_report_visuals" : output.t_dataset_visuals ? "t_dataset_visuals" : output.t_datamodel_visuals ? "t_datamodel_visuals" : "none",
+      selected: output.t_report_visuals ? "t_report_visuals" : "none",
       count: dimensions.visuals.length,
       available: [
-        output.t_report_visuals?.length && `t_report_visuals(${output.t_report_visuals.length})`,
-        output.t_dataset_visuals?.length && `t_dataset_visuals(${output.t_dataset_visuals.length})`,
-        output.t_datamodel_visuals?.length && `t_datamodel_visuals(${output.t_datamodel_visuals.length})`
+        output.t_report_visuals?.length && `t_report_visuals(${output.t_report_visuals.length})`
       ].filter(Boolean).join(", ") || "none"
     });
-    console.log("[LakehouseAnalyzer] *** RELATIONSHIPS (CRITICAL):", {
-      selected: output.t_dataset_relationships ? "t_dataset_relationships" : output.t_dataset_relations ? "t_dataset_relations" : output.t_datamodel_relationships ? "t_datamodel_relationships" : "none",
+    console.log("[LakehouseAnalyzer] Relationships:", {
+      selected: output.t_dataset_relations ? "t_dataset_relations" : "none",
       count: dimensions.relationships.length,
       available: [
-        output.t_dataset_relationships?.length && `t_dataset_relationships(${output.t_dataset_relationships.length})`,
-        output.t_dataset_relations?.length && `t_dataset_relations(${output.t_dataset_relations.length})`,
-        output.t_datamodel_relationships?.length && `t_datamodel_relationships(${output.t_datamodel_relationships.length})`
+        output.t_dataset_relations?.length && `t_dataset_relations(${output.t_dataset_relations.length})`
       ].filter(Boolean).join(", ") || "none"
     });
     console.log("[LakehouseAnalyzer] ===== END TABLE MAPPING =====");
@@ -1076,10 +1039,6 @@ class LakehouseAnalyzerService {
       relationships: dimensions.relationships.length,
       lakehouses: dimensions.lakehouses.length,
       warehouses: dimensions.warehouses.length,
-      // Legacy aliases for verification
-      smTables: dimensions.smTables.length,
-      smColumns: dimensions.smColumns.length,
-      smMeasures: dimensions.smMeasures.length,
     });
 
     // Log sample data for debugging

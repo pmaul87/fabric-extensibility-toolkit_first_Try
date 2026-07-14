@@ -1,12 +1,12 @@
-# Report Scanner Database Persistence (Optional)
+# Optional Persistence for Lineage Workbench Scans
 
-This directory contains the database schema and persistence service for storing Power BI report scan results in a Fabric SQL Database or SQL Warehouse.
+This directory contains the database schema and persistence service for storing scan results from the Lineage Workbench metadata/report-scanning workflow in a Fabric SQL Database or SQL Warehouse.
 
-**Note:** Database persistence is **completely optional**. The Report Scanner works perfectly fine without it - configuration simply enables additional T-SQL querying capabilities.
+**Note:** Database persistence is **completely optional**. The workbench works fine without it - configuration simply enables additional T-SQL querying and history capabilities.
 
 ## Overview
 
-When configured, the Report Scanner automatically persists scan results to a SQL database, and Insight Workbench can mirror saved snapshots into the same store, enabling:
+When configured, the scan workflow automatically persists results to a SQL database, and the workbench can mirror saved snapshots into the same store, enabling:
 - **T-SQL querying** of report metadata across your organization
 - **Historical tracking** of report scans and changes
 - **Field usage analysis** to understand which fields are used across reports
@@ -24,13 +24,13 @@ The schema consists of 7 tables:
 4. **VisualElements** - Data bindings and references within visuals
 5. **Filters** - Filter definitions at report, page, or visual level
 6. **ScanHistory** - Audit trail of all scan operations
-7. **InsightWorkbenchSnapshot** - Section snapshots and raw entity snapshots mirrored from OneLake for SQL querying
+7. **InsightWorkbenchSnapshot** - Section snapshots and raw entity snapshots mirrored from OneLake for SQL querying (legacy table name kept for compatibility)
 
 See [sql/ReportScannerSchema.sql](./sql/ReportScannerSchema.sql) for the complete schema definition.
 
 ## Important: Database Persistence is Optional
 
-**The Report Scanner works without database configuration.** If you don't configure a SQL database:
+**The scan workflow works without database configuration.** If you don't configure a SQL database:
 - ✅ Report scanning still works normally
 - ✅ Results are cached in the browser session
 - ✅ All UI features function correctly
@@ -76,7 +76,7 @@ TENANT_ID=your-tenant-id
 BACKEND_APPID=your-app-id
 BACKEND_CLIENT_SECRET=your-client-secret
 
-# Report Scanner SQL Database Configuration
+# Optional scan persistence SQL database configuration
 SQL_DB_SERVER=yourserver.database.fabric.microsoft.com
 SQL_DB_DATABASE=InsightWorkbenchMetadata
 ```
@@ -145,8 +145,8 @@ If configuration is missing, you'll see:
 
 ### Test a Scan
 
-1. Open Insight Workbench in the browser
-2. Navigate to **Report Scanner**
+1. Open the workbench in the browser
+2. Navigate to the scan/persistence feature area
 3. Select a report
 4. After the scan completes, check the database:
 

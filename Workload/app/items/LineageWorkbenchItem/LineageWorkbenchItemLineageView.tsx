@@ -485,10 +485,6 @@ export function LineageWorkbenchItemLineageView({
           measures: snapshot?.dimensions?.measures?.length || 0,
           relationships: snapshot?.dimensions?.relationships?.length || 0,
           columnLineage: snapshot?.dimensions?.columnLineage?.length || 0,
-          // Legacy property names (fallback)
-          smTables: snapshot?.dimensions?.smTables?.length || 0,
-          smColumns: snapshot?.dimensions?.smColumns?.length || 0,
-          smMeasures: snapshot?.dimensions?.smMeasures?.length || 0,
           // Sample field names for debugging
           sampleSemanticModel: snapshot?.dimensions?.semanticModels?.[0] ? Object.keys(snapshot.dimensions.semanticModels[0]) : "N/A",
           sampleTable: snapshot?.dimensions?.tables?.[0] ? Object.keys(snapshot.dimensions.tables[0]) : "N/A",

@@ -39,18 +39,16 @@ if (environment === 'prod') {
     webpackArgs.push('--mode', 'development', '--progress');
 }
 
-const webpackExecutable = process.platform === 'win32'
-    ? path.join(workloadRoot, 'node_modules', '.bin', 'webpack.cmd')
-    : path.join(workloadRoot, 'node_modules', '.bin', 'webpack');
+const webpackCliEntry = require.resolve('webpack-cli/bin/cli.js', { paths: [workloadRoot] });
 
 const result = spawnSync(
-    webpackExecutable,
-    webpackArgs,
+    process.execPath,
+    [webpackCliEntry, ...webpackArgs],
     {
         cwd: workloadRoot,
         env: process.env,
         stdio: 'inherit',
-        shell: true,
+        shell: false,
     }
 );
 

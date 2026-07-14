@@ -53,6 +53,10 @@ module.exports = {
                     from: './app/web.config',
                     to: './web.config',
                 },
+                {
+                    from: './app/staticwebapp.config.json',
+                    to: './staticwebapp.config.json',
+                },
             ]
         }),
     ],

@@ -1,0 +1,19 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": [
+      "/assets/*",
+      "/*.js",
+      "/*.css",
+      "/*.png",
+      "/*.jpg",
+      "/*.jpeg",
+      "/*.svg",
+      "/*.ico",
+      "/notebooks/*"
+    ]
+  },
+  "globalHeaders": {
+    "content-security-policy": "frame-ancestors 'self' https://*.analysis.windows-int.net https://*.analysis-df.windows.net https://*.powerbi.com https://teams.microsoft.com https://*.fabric.microsoft.com"
+  }
+}

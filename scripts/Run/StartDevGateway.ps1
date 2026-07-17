@@ -1,6 +1,6 @@
 param (
     [boolean]$InteractiveLogin = $true,
-    [switch]$AutoRestart,
+    [boolean]$AutoRestart = $true,
     [int]$RestartDelaySeconds = 5,
     [int]$MaxRestarts = 0
 )

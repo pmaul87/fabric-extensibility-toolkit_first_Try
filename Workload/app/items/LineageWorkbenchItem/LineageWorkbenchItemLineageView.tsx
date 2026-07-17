@@ -5,6 +5,7 @@ import {
   Input,
   MessageBar,
   MessageBarBody,
+  Button,
   Select,
   Text,
   Radio,
@@ -23,9 +24,12 @@ import {
 } from "@fluentui/react-icons";
 
 import { OneLakeLineageStorage } from "../../clients/lineage/OneLakeLineageStorage";
+import { getLineageEngine } from "../../clients/getLineageEngine";
 import { LineageGraphView, LineageViewerNode, LineageViewerEdge } from "./LineageGraphView";
 import { LineageTableView } from "./LineageTableView";
 import { LineageDetailView } from "./LineageDetailView";
+import type { LineageWorkbenchExtractionConfig } from "./LineageWorkbenchItemDefinition";
+import { LineageWorkspaceSelectionWizard, WorkspaceSelectionResult } from "./LineageWorkspaceSelectionWizard";
 import type { Requirement } from "../RequirementBoardItem";
 import { isSyntheticSemanticModelNode, resolveEdgeFields, resolveNodeFields } from "./lineageContracts";
 import { buildGraphProjection, filterEdgesByNodes, filterNodes } from "./lineageGraphProcessing";
@@ -338,6 +342,7 @@ interface LineageWorkbenchItemLineageViewProps {
   workloadClient: WorkloadClientAPI;
   workspaceId?: string;
   targetLakehouseId?: string;
+  extraction?: LineageWorkbenchExtractionConfig;
   lineage: any;
   onLineageChange: (next: any) => void;
   onOpenRequirementsBoard?: () => void;
@@ -347,6 +352,7 @@ export function LineageWorkbenchItemLineageView({
   workloadClient,
   workspaceId,
   targetLakehouseId,
+  extraction,
   lineage,
   onLineageChange,
   onOpenRequirementsBoard,
@@ -355,6 +361,7 @@ export function LineageWorkbenchItemLineageView({
   const styles = useStyles();
   const hasHydratedActualGraphRef = useRef(false);
   const refreshNonce = lineage?.refreshNonce as number | undefined;
+  const [isWorkspaceWizardOpen, setIsWorkspaceWizardOpen] = useState(false);
 
   // ── Layout state ──────────────────────────────────────────────────────────
   const [tableExpanded, setTableExpanded] = useState(true);
@@ -378,9 +385,11 @@ export function LineageWorkbenchItemLineageView({
       detailHeight;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      // Invert delta for detail panel (drag up = bigger, drag down = smaller)
-      const delta = panel === "detail" 
-        ? startY - moveEvent.clientY 
+      // Panels below the handle should grow when dragging upward in detail-focused mode.
+      const invertDelta =
+        panel === "detail" || (panel === "graph" && exploreLayout === "detail-focused");
+      const delta = invertDelta
+        ? startY - moveEvent.clientY
         : moveEvent.clientY - startY;
       const newHeight = Math.max(150, startHeight + delta); // Minimum 150px
       
@@ -412,19 +421,57 @@ export function LineageWorkbenchItemLineageView({
   const [graphDisplayMode] = useState<"highlight" | "filter">("filter");
   const [exploreLayout, setExploreLayout] = useState<ExploreLayoutMode>("detail-focused");
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
+  const configuredLineageEngine = useMemo(() => getLineageEngine(), []);
+  const loadedViaEngine = useMemo(() => {
+    if (lineage?.loadedViaEngine === "v2") return "v2";
+    if (lineage?.loadedViaEngine === "legacy") return "legacy";
+    return undefined;
+  }, [lineage]);
+
+  const selectedWorkspaceIds = useMemo(() => {
+    if (Array.isArray(lineage?.workspaceIds) && lineage.workspaceIds.length > 0) {
+      return lineage.workspaceIds as string[];
+    }
+    if (Array.isArray(extraction?.targetWorkspaces) && extraction.targetWorkspaces.length > 0) {
+      return extraction.targetWorkspaces;
+    }
+    return [] as string[];
+  }, [extraction?.targetWorkspaces, lineage?.workspaceIds]);
+
+  const selectedWorkspaceNames = useMemo(() => {
+    if (Array.isArray(lineage?.workspaceNames) && lineage.workspaceNames.length > 0) {
+      return lineage.workspaceNames as string[];
+    }
+    if (Array.isArray(extraction?.targetWorkspaceNames) && extraction.targetWorkspaceNames.length > 0) {
+      return extraction.targetWorkspaceNames;
+    }
+    return [] as string[];
+  }, [extraction?.targetWorkspaceNames, lineage?.workspaceNames]);
 
   // ── Data source ───────────────────────────────────────────────────────────
   const dataSourceMode = lineage?.dataSourceMode === "mock" ? "mock" : "actual";
+
+  const handleWorkspaceSelectionComplete = (result: WorkspaceSelectionResult) => {
+    onLineageChange({
+      ...(lineage ?? {}),
+      workspaceIds: result.workspaceIds,
+      workspaceNames: result.workspaceNames,
+      workspaceTypes: result.workspaceTypes,
+      workspaceReportExtractionWarnings: result.reportExtractionWarnings,
+      refreshNonce: Date.now(),
+    });
+  };
 
   // Check if we should be loading data (to prevent showing empty state prematurely)
   const shouldLoadData = useMemo(() => {
     if (dataSourceMode !== "actual") return false;
     if (hasHydratedActualGraphRef.current) return false;
+    if (configuredLineageEngine === "v2") return selectedWorkspaceIds.length > 0 || Boolean(workspaceId);
     if (!targetLakehouseId) return false;
     return true;
-  }, [dataSourceMode, targetLakehouseId]);
+  }, [configuredLineageEngine, dataSourceMode, selectedWorkspaceIds.length, targetLakehouseId, workspaceId]);
 
-  // Ribbon refresh should force a fresh lakehouse read.
+  // Ribbon refresh should force a fresh graph reload.
   useEffect(() => {
     if (typeof refreshNonce === "number") {
       hasHydratedActualGraphRef.current = false;
@@ -437,6 +484,7 @@ export function LineageWorkbenchItemLineageView({
       hasHydrated: hasHydratedActualGraphRef.current,
       workspaceId: workspaceId || "MISSING",
       targetLakehouseId: targetLakehouseId || "MISSING",
+        selectedWorkspaceIds,
       hasExistingNodes: !!lineage?.graphSnapshot?.nodes?.length,
       hasExistingEdges: !!lineage?.graphSnapshot?.edges?.length,
     });
@@ -449,8 +497,17 @@ export function LineageWorkbenchItemLineageView({
       console.log("[LineageView] Skipping load: already hydrated");
       return;
     }
-    if (!targetLakehouseId) {
+    if (configuredLineageEngine !== "v2" && !targetLakehouseId) {
       console.log("[LineageView] Skipping load: missing targetLakehouseId");
+      return;
+    }
+    if (configuredLineageEngine === "v2" && selectedWorkspaceIds.length === 0 && !workspaceId) {
+      setLoadError(
+        t(
+          "LineageWorkbench_Error_NoWorkspacesSelected",
+          "Select one or more workspaces in the Lineage view before loading v2 graphs."
+        )
+      );
       return;
     }
     console.log("[LineageView] Starting API call to load graph...");
@@ -460,9 +517,16 @@ export function LineageWorkbenchItemLineageView({
     const loadActualGraph = async (): Promise<void> => {
       try {
         const storage = new OneLakeLineageStorage(workloadClient);
-        storage.initializeForItem(targetLakehouseId, workspaceId);
-        const loadedGraph = await storage.loadLineageGraph(workspaceId);
+        if (configuredLineageEngine !== "v2" && targetLakehouseId) {
+          storage.initializeForItem(targetLakehouseId, workspaceId || selectedWorkspaceIds[0] || targetLakehouseId);
+        }
+        const loadedGraph = await storage.loadLineageGraph(workspaceId, undefined, {
+          inputTableSetId: lineage?.v2InputTableSetId,
+          inputTables: lineage?.v2InputTables,
+          workspaceIds: selectedWorkspaceIds.length > 0 ? selectedWorkspaceIds : (workspaceId ? [workspaceId] : []),
+        });
         const snapshot = loadedGraph?.graphSnapshot ?? loadedGraph;
+        const inputTableSetIdUsed = loadedGraph?.inputTableSetIdUsed;
         if (cancelled || !snapshot) {
           return;
         }
@@ -493,10 +557,13 @@ export function LineageWorkbenchItemLineageView({
         onLineageChange({
           ...(lineage ?? {}),
           dataSourceMode: "actual",
+          loadedViaEngine: configuredLineageEngine,
+          lastLoadedAtUtc: new Date().toISOString(),
+          v2InputTableSetId: inputTableSetIdUsed || lineage?.v2InputTableSetId,
           graphSnapshot: snapshot,
         });
       } catch (error) {
-        console.warn("Unable to hydrate actual lineage graph from lakehouse:", error);
+        console.warn("Unable to hydrate actual lineage graph:", error);
         const errorMsg = error instanceof Error ? error.message : String(error);
         
         // Provide user-friendly error messages
@@ -531,7 +598,7 @@ export function LineageWorkbenchItemLineageView({
     return () => {
       cancelled = true;
     };
-  }, [dataSourceMode, workspaceId, targetLakehouseId, workloadClient, refreshNonce, onLineageChange]);
+  }, [dataSourceMode, workspaceId, targetLakehouseId, workloadClient, refreshNonce, onLineageChange, configuredLineageEngine, selectedWorkspaceIds, t]);
 
   const activeSnapshot = useMemo(() => {
     if (dataSourceMode === "mock") {
@@ -1432,12 +1499,22 @@ export function LineageWorkbenchItemLineageView({
 
   // ── Empty state configuration ─────────────────────────────────────────────
   const emptyStateConfig = useMemo(() => {
-    if (dataSourceMode === "actual" && !targetLakehouseId) {
+    if (dataSourceMode === "actual" && configuredLineageEngine !== "v2" && !targetLakehouseId) {
       return {
         title: t("LineageWorkbench_Lineage_Empty_Title_NoLakehouse", "Lakehouse Not Configured"),
         message: t(
           "LineageWorkbench_Lineage_Empty_Actual_MissingLakehouse",
           "Actual data mode requires a saved OneLake Lakehouse ID. Open Extract, enter the lakehouse item ID, and save the workbench before loading real lineage data."
+        ),
+        icon: "info" as const,
+      };
+    }
+    if (dataSourceMode === "actual" && configuredLineageEngine === "v2" && selectedWorkspaceIds.length === 0) {
+      return {
+        title: t("LineageWorkbench_Lineage_Empty_Title_NoWorkspaces", "No Workspaces Selected"),
+        message: t(
+          "LineageWorkbench_Lineage_Empty_Actual_NoWorkspaces",
+          "Select one or more workspaces in the Lineage view, then refresh to load the v2 graph snapshot."
         ),
         icon: "info" as const,
       };
@@ -1461,7 +1538,7 @@ export function LineageWorkbenchItemLineageView({
       message: t("LineageWorkbench_Lineage_Empty", "No graph nodes available. Run extraction first."),
       icon: "empty" as const,
     };
-  }, [dataSourceMode, targetLakehouseId, isLoadingGraph, t]);
+  }, [configuredLineageEngine, dataSourceMode, isLoadingGraph, selectedWorkspaceIds.length, targetLakehouseId, t]);
 
   // In stacked mode, expanded panels split available space evenly.
   const stackedSharedHeight = exploreLayout === "stacked";
@@ -1488,6 +1565,47 @@ export function LineageWorkbenchItemLineageView({
           <MessageBar intent="error">
             <MessageBarBody>
               {loadError}
+            </MessageBarBody>
+          </MessageBar>
+        )}
+
+        {dataSourceMode === "actual" && (
+          <MessageBar intent={configuredLineageEngine === "v2" ? "success" : "info"}>
+            <MessageBarBody>
+              {t("LineageWorkbench_EngineStatus", "Lineage engine configured")}: <strong>{configuredLineageEngine.toUpperCase()}</strong>
+              {loadedViaEngine && (
+                <>
+                  {" · "}
+                  {t("LineageWorkbench_EngineLoaded", "Last graph loaded via")}: <strong>{loadedViaEngine.toUpperCase()}</strong>
+                </>
+              )}
+              {configuredLineageEngine === "v2" && !lineage?.v2InputTableSetId && !lineage?.v2InputTables && (
+                <>
+                  {" · "}
+                  {t(
+                    "LineageWorkbench_EngineV2InputMissing",
+                    "No v2 input table set configured. The backend requires staged input tables or live collection."
+                  )}
+                </>
+              )}
+              {configuredLineageEngine === "v2" && (
+                <>
+                  {" · "}
+                  <Button appearance="subtle" size="small" onClick={() => setIsWorkspaceWizardOpen(true)}>
+                    {selectedWorkspaceIds.length > 0
+                      ? t("LineageWorkbench_Lineage_ChangeWorkspaces", "Change workspaces")
+                      : t("LineageWorkbench_Lineage_SelectWorkspaces", "Select workspaces")}
+                  </Button>
+                </>
+              )}
+              {configuredLineageEngine === "v2" && selectedWorkspaceIds.length > 0 && (
+                <>
+                  {" · "}
+                  {t("LineageWorkbench_Lineage_Workspaces_Selected", "Workspaces selected")}: <strong>
+                    {selectedWorkspaceNames.length > 0 ? selectedWorkspaceNames.join(", ") : selectedWorkspaceIds.join(", ")}
+                  </strong>
+                </>
+              )}
             </MessageBarBody>
           </MessageBar>
         )}
@@ -1524,7 +1642,7 @@ export function LineageWorkbenchItemLineageView({
                 {t("LineageWorkbench_Loading_Title", "Loading Lineage Graph")}
               </Text>
               <Text style={{ color: tokens.colorNeutralForeground3 }}>
-                {t("LineageWorkbench_Loading_Message", "Fetching semantic models, tables, columns, measures, and relationships from the lakehouse...")}
+                {t("LineageWorkbench_Loading_Message", "Fetching semantic models, tables, columns, measures, and relationships for the selected workspaces...")}
               </Text>
             </div>
           </div>
@@ -2150,6 +2268,15 @@ export function LineageWorkbenchItemLineageView({
           </>
         )}
       </div>
+
+      <LineageWorkspaceSelectionWizard
+        workloadClient={workloadClient}
+        isOpen={isWorkspaceWizardOpen}
+        onClose={() => setIsWorkspaceWizardOpen(false)}
+        onComplete={handleWorkspaceSelectionComplete}
+        currentWorkspaceId={workspaceId || selectedWorkspaceIds[0] || targetLakehouseId || ""}
+        preSelectedWorkspaceIds={selectedWorkspaceIds}
+      />
     </div>
   );
 }

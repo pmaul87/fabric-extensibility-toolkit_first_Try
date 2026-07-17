@@ -17,6 +17,7 @@ import type {
 } from "../services/MetadataService";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { FABRIC_BASE_SCOPES } from "./FabricPlatformScopes";
+import { getBackendApiBaseUrl } from "./getBackendApiBaseUrl";
 
 function formatUnknownError(error: unknown): string {
   if (!error) {
@@ -82,7 +83,7 @@ export class MetadataExplorerClient {
    */
   constructor(workloadClient: WorkloadClientAPI, apiBaseUrl?: string) {
     this.workloadClient = workloadClient;
-    this.apiBaseUrl = apiBaseUrl || `${window.location.protocol}//${window.location.host}`;
+    this.apiBaseUrl = apiBaseUrl || getBackendApiBaseUrl();
   }
 
   private async ensureAuthContext(): Promise<void> {

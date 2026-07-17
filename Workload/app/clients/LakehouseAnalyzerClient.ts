@@ -12,6 +12,7 @@ import type {
 } from "../services/LakehouseAnalyzerService";
 import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { FABRIC_BASE_SCOPES } from "./FabricPlatformScopes";
+import { getBackendApiBaseUrl } from "./getBackendApiBaseUrl";
 
 function formatUnknownError(error: unknown): string {
   if (!error) return "unknown error";
@@ -41,7 +42,7 @@ export class LakehouseAnalyzerClient {
 
   constructor(workloadClient: WorkloadClientAPI, apiBaseUrl?: string) {
     this.workloadClient = workloadClient;
-    this.apiBaseUrl = apiBaseUrl || `${window.location.protocol}//${window.location.host}`;
+    this.apiBaseUrl = apiBaseUrl || getBackendApiBaseUrl();
   }
 
   private log(message: string, details?: Record<string, unknown>): void {

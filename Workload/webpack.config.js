@@ -30,6 +30,8 @@ module.exports = {
             "process.env.WORKLOAD_VERSION": JSON.stringify(process.env.WORKLOAD_VERSION),
             "process.env.LOG_LEVEL": JSON.stringify(process.env.LOG_LEVEL),
             "process.env.ENABLE_PLAYGROUND": JSON.stringify(process.env.ENABLE_PLAYGROUND || 'false'),
+            "process.env.BACKEND_URL": JSON.stringify(process.env.BACKEND_URL || ''),
+            "process.env.LINEAGE_ENGINE": JSON.stringify(process.env.LINEAGE_ENGINE || 'v2'),
         }),
         new Webpack.ProvidePlugin({
             process: 'process/browser.js',

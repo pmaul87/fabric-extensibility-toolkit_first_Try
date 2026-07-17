@@ -2,6 +2,8 @@ import { WorkloadClientAPI } from "@ms-fabric/workload-client";
 import { OneLakeStorageClient } from "../OneLakeStorageClient";
 import { OneLakeStorageClientItemWrapper } from "../OneLakeStorageClientItemWrapper";
 import { FABRIC_BASE_SCOPES } from "../FabricPlatformScopes";
+import { getLineageV2BackendApiBaseUrl } from "../getLineageV2BackendApiBaseUrl";
+import { getLineageEngine } from "../getLineageEngine";
 
 /**
  * Format unknown error for logging
@@ -74,6 +76,12 @@ export interface ExtractionLog {
   }>;
 }
 
+export interface V2LineageLoadOptions {
+  inputTableSetId?: string;
+  inputTables?: Record<string, Array<Record<string, unknown>>>;
+  workspaceIds?: string[];
+}
+
 /**
  * OneLake storage client for lineage data
  * Uses itemWrapper pattern for lakehouse-scoped operations
@@ -86,6 +94,7 @@ export class OneLakeLineageStorage {
   private workspaceId?: string;
   private authContextPromise: Promise<void> | null = null;
   private readonly apiBaseUrl: string;
+  private readonly lineageEngine: "legacy" | "v2";
 
   // Storage path constants
   private readonly BASE_PATH = "Files/lineage";
@@ -96,7 +105,8 @@ export class OneLakeLineageStorage {
   constructor(workloadClient: WorkloadClientAPI) {
     this.workloadClient = workloadClient;
     this.oneLakeClient = new OneLakeStorageClient(workloadClient);
-    this.apiBaseUrl = `${window.location.protocol}//${window.location.host}`;
+    this.apiBaseUrl = getLineageV2BackendApiBaseUrl();
+    this.lineageEngine = getLineageEngine();
   }
 
   /**
@@ -168,7 +178,15 @@ export class OneLakeLineageStorage {
    * @param workspaceId Optional workspace ID (backend will resolve from lakehouse if not provided)
    * @param sqlEndpoint Optional manual SQL endpoint override (if auto-detection fails)
    */
-  async loadLineageGraph(workspaceId?: string, sqlEndpoint?: string): Promise<any> {
+  async loadLineageGraph(
+    workspaceId?: string,
+    sqlEndpoint?: string,
+    v2Options?: V2LineageLoadOptions
+  ): Promise<any> {
+    if (this.lineageEngine === "v2") {
+      return this.loadLineageGraphV2(workspaceId, v2Options);
+    }
+
     this.ensureInitialized();
 
     if (!this.lakehouseId) {
@@ -211,6 +229,129 @@ export class OneLakeLineageStorage {
     }
 
     return payload.graph;
+  }
+
+  private async loadLineageGraphV2(workspaceId?: string, options?: V2LineageLoadOptions): Promise<any> {
+    const resolvedWorkspaceIds = (options?.workspaceIds && options.workspaceIds.length > 0)
+      ? options.workspaceIds
+      : workspaceId
+        ? [workspaceId]
+        : [];
+
+    if (resolvedWorkspaceIds.length === 0) {
+      throw new Error("Workspace IDs are missing. V2 engine requires at least one selected workspace.");
+    }
+
+    let inputTableSetId = options?.inputTableSetId;
+    const hasInlineInputTables = !!options?.inputTables && Object.keys(options.inputTables).length > 0;
+
+    if (!inputTableSetId && hasInlineInputTables) {
+      const stageResponse = await fetch(`${this.apiBaseUrl}/api/v2/lineage/input-tables`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inputTables: options?.inputTables,
+        }),
+      });
+
+      const stagePayload = await this.readJsonResponse<{ inputTableSetId?: string }>(
+        stageResponse,
+        "/api/v2/lineage/input-tables"
+      );
+
+      if (!stagePayload.inputTableSetId) {
+        throw new Error("V2 input table staging did not return inputTableSetId.");
+      }
+
+      inputTableSetId = stagePayload.inputTableSetId;
+    }
+
+    if (!inputTableSetId) {
+      console.warn(
+        "[LineageWorkbench] V2 extraction started without staged input tables. " +
+          "The backend now requires staged input tables or live collection input."
+      );
+    }
+
+    const startResponse = await fetch(`${this.apiBaseUrl}/api/v2/lineage/extractions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workspaceIds: resolvedWorkspaceIds,
+        artifactTypes: ["report", "semantic_model", "table", "column", "measure"],
+        options: {
+          graphScope: "focused",
+          graphNodeLimit: 500,
+          inputTableSetId,
+        },
+      }),
+    });
+
+    const startPayload = await this.readJsonResponse<{ runId?: string }>(
+      startResponse,
+      "/api/v2/lineage/extractions"
+    );
+
+    if (!startPayload.runId) {
+      throw new Error("V2 extraction API did not return a runId.");
+    }
+
+    await this.waitForV2RunCompletion(startPayload.runId);
+
+    const resultResponse = await fetch(
+      `${this.apiBaseUrl}/api/v2/lineage/extractions/${encodeURIComponent(startPayload.runId)}/result`,
+      { method: "GET" }
+    );
+
+    const resultPayload = await this.readJsonResponse<{ graphSnapshot?: any }>(
+      resultResponse,
+      "/api/v2/lineage/extractions/:id/result"
+    );
+
+    if (!resultPayload.graphSnapshot) {
+      throw new Error("V2 extraction result did not include graphSnapshot.");
+    }
+
+    return {
+      graphSnapshot: resultPayload.graphSnapshot,
+      inputTableSetIdUsed: inputTableSetId,
+    };
+  }
+
+  private async waitForV2RunCompletion(runId: string): Promise<void> {
+    const deadline = Date.now() + 60_000;
+
+    while (Date.now() < deadline) {
+      const statusResponse = await fetch(
+        `${this.apiBaseUrl}/api/v2/lineage/extractions/${encodeURIComponent(runId)}`,
+        { method: "GET" }
+      );
+
+      const statusPayload = await this.readJsonResponse<{
+        status?: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        errorMessage?: string;
+      }>(statusResponse, "/api/v2/lineage/extractions/:id");
+
+      if (statusPayload.status === "succeeded") {
+        return;
+      }
+
+      if (statusPayload.status === "failed") {
+        throw new Error(statusPayload.errorMessage || "V2 extraction run failed.");
+      }
+
+      if (statusPayload.status === "cancelled") {
+        throw new Error("V2 extraction run was cancelled.");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    throw new Error("Timed out waiting for v2 extraction result.");
   }
 
   /**
